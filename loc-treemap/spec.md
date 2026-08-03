@@ -173,11 +173,12 @@ A minimum-area floor is therefore polish, not rescue, and it is cheap:
 | floor F | subsystems floored | total area inflation |
 |---|---|---|
 | none | 0 | — |
-| **167** | **3** | **0.08%** |
+| **173.45** (derived, see below) | **3** | **0.09%** |
 | 250 | 10 | 0.5% |
 | 1000 | 30 | 14.5% |
 
-Scheme: `weight_i = max(loc_i, F)`, area ∝ weight.
+Scheme: `weight_i = max(loc_i, F)`, area ∝ weight. The floored three are
+`xo-symboltable` (109), `xo-printable2` (130) and `xo-pywebsock` (159).
 
 **F is derived, not hardcoded.** The floor is expressed as "minimum tile = one
 label box (≈64×18 px)" and solved as
@@ -306,6 +307,7 @@ xo-loc [options] [SUBSYSTEM...]
   --min-loc=N                   Below this, report but do not draw (default: 20)
   --width=N --height=N          Canvas size; the min-tile floor derives from these
   --root=DIR                    Source root (default: auto-discover)
+  --scc=PATH                    scc binary (default: scc; used by tests)
   --list                        List subsystems and exit
   -h, --help
 ```
@@ -324,7 +326,7 @@ vendored path list is only consulted when `--include-vendored` is given.
   excluded 369 generated files (10,968 LOC)
   excluded vendored: xo-imgui/include/imgui/ (63,732 LOC)
   2 subsystems empty, not drawn: xo-hashable2, xo-equable2
-  min-area floor applied to 3 subsystems (+0.08% area)
+  min-area floor applied to 3 subsystems (+0.09% area)
   ```
 
 - Unmapped languages are named in a warning rather than silently bucketed.
