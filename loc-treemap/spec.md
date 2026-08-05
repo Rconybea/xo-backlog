@@ -12,7 +12,7 @@ bindir), same CLI ergonomics.
 
 Unlike `xo-deps`, this tool has **no checked-in snapshot data**: it runs the
 counter live on each invocation. That sidesteps the subsystem-edges staleness /
-xo-cmake-hash-churn problem entirely (see `.scratch/subsystem-edges/issues/01,02`).
+xo-cmake-hash-churn problem entirely (see `.xo-backlog/subsystem-edges/issues/01,02`).
 A rarely-changing `.in` script on xo-cmake's hash path is acceptable; data churn
 is not.
 

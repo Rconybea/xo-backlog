@@ -108,4 +108,4 @@ fails in a confusing way.
 `subsystem-edges` is hand-maintained deliberately — the generated
 `.build/xo-subsystem-edges.txt` under-reports when config-time switches are off,
 so it must only ever be refreshed from a fully-enabled build. Do not add a
-workflow step that regenerates it. See `.scratch/subsystem-edges/issues/`.
+workflow step that regenerates it. See `.xo-backlog/subsystem-edges/issues/`.
