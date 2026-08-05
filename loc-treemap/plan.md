@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3 **stdlib only** (`json`, `argparse`, `subprocess`, `csv`, `collections`, `unittest`). External runtime dependency: `scc` ≥ 3.5.0. Build glue: CMake `configure_file`, mirroring `xo-deps.in`.
 
-Spec: [`.scratch/loc-treemap/spec.md`](spec.md)
+Spec: [`.xo-backlog/loc-treemap/spec.md`](spec.md)
 
 ## Global Constraints
 
@@ -39,9 +39,13 @@ Spec: [`.scratch/loc-treemap/spec.md`](spec.md)
 | 08 | [SVG renderer](issues/08-svg-renderer.md) | `--format=svg` |
 | 09 | [HTML renderer](issues/09-html-renderer.md) | `--format=html`, hover + click-zoom |
 | 10 | [install + docs](issues/10-install-and-docs.md) | `configure_file` + install + README |
+| 11 | [nix runs the utests](issues/11-nix-run-xo-cmake-utests.md) | follow-up: `pkgs/xo-cmake.nix` executes zero tests |
 
 Tickets 02–05 are pure functions with no I/O and can be implemented in any order.
 Ticket 07 is the first point at which the tool runs end to end.
+
+Ticket 11 was raised by the code review after 01–10 were done; it is a packaging
+follow-up, not part of the original plan.
 
 ## Deferred / follow-up
 

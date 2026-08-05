@@ -237,3 +237,39 @@ git commit -m "xo-loc: derived min-area floor + two-level nesting [FEATURE]"
 ```
 
 ## Comments
+
+### Amendment: the nesting rule is a FRACTION test, not an area test
+
+`tile_area >= k * A_MIN` shipped, then failed on the real tree. It constrains
+only the *average* sub-tile, so a lopsided subsystem passes the gate and still
+produces splinters: `xo-reader2` is Code 90% / Docs 0.3%, and the first real
+render carried **56 sub-tiles below `A_MIN`** (smallest 7 px²) with aspect
+ratios up to **89:1**.
+
+This is not fixable in `squarify`. Exact tiling of a rectangle admits only a
+guillotine cut, so a kind holding fraction `f` of a parent of long/short ratio
+`a` is forced to a strip of aspect `1/(a*f)` — measured on `xo-imgui`
+(Code 97.9% / Build 2.1%, parent 271.5x288.1): `1/(1.061*0.0212) = 44.5`,
+exactly the observed 44.5:1. Cutting the other dimension gives 50:1, so the
+algorithm was already choosing the better cut. Only *not splitting* helps.
+
+Replaced by two gates that answer different questions:
+
+- **significance** — `MIN_KIND_FRACTION = 0.125`. A kind must be 1/8 of its own
+  subsystem. 2% build material says the build is not a real contributor at any
+  subsystem size; 30% matters even in a small one. An absolute floor cannot say
+  that, because it scales with the subsystem.
+- **legibility** — the laid-out rect must clear `A_MIN` *and* `MAX_KIND_ASPECT
+  = 8.0`. Checked after layout, not predicted from weights, and iterated to a
+  fixpoint since dropping one kind grows the survivors.
+
+The aspect gate is not redundant: the `1/(a*f)` bound covers the *minor* tile
+of a squarish parent, but the major tile runs at `a*(1-f)`, so a slivery parent
+defeats the fraction test on its own. `xo-symboltable` (70/30, both
+significant) sits in a 404.82x14.27 = 28.4:1 parent, and renders flat.
+
+Result on the real tree: worst aspect **6.6:1** (was 89.3), **0** sub-tiles
+below `A_MIN` (was 56), 14 of 62 subsystems subdivided, 1.34% of drawn LOC
+folded into surviving siblings — and reported, per the spec's honesty rule.
+Folding is only reported for *subdivided* tiles; a flat tile hides nothing,
+since it covers the whole subsystem and its tooltip enumerates every kind.
