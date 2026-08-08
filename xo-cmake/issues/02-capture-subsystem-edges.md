@@ -1,6 +1,6 @@
 # 02 — `reconfigure --capture-subsystem-edges`, with a provisioning check
 
-Status: open
+Status: fixed 2026-08-08
 Type: feature
 
 Refreshing `xo-cmake/etc/xo/subsystem-edges` is currently a three-step manual
@@ -98,7 +98,63 @@ migrations. The hand passes:
 Copying the generated file fixed both classes at once. The generated file has no
 blind spot: it records whatever `xo_dependency()` actually ran.
 
-## Questions to settle
+## Resolution (2026-08-08) — the filename carries the answer
+
+Implemented, but **not** by any of the three approaches sketched above. All of
+them put a "which switches matter" list in the shell script, where it can fall
+out of step with the cmake. Instead, **cmake encodes completeness in the
+basename**:
+
+| generated file | meaning |
+|---|---|
+| `<build>/subsystem-edges` | every guard gating a `xo_dependency()` was on — publishable |
+| `<build>/subsystem-partial-edges` | at least one was off — edges are missing |
+
+That collapses the shell side to a file-existence test with no list to
+maintain, and — the part none of the sketched options achieved — it makes a
+**manual `cp` self-guarding too**, since
+`cp .build/subsystem-partial-edges .../subsystem-edges` is visibly wrong to
+anyone reading it. The feature is a convenience on top; the safety is in the
+name.
+
+Changes:
+
+- `xo_cxx.cmake` — `xo_emit_dependency_edges(outdir outvar)` chooses the
+  basename and reports the path it wrote. The list of gating switches lives
+  here, beside a comment telling a future author to extend it when adding a
+  guard. The status line says `complete` or `PARTIAL -- off: ...`.
+- `CMakeLists.txt` — passes a directory, uses `${XO_SUBSYSTEM_EDGES_FILE}` to
+  feed `xo-gen-clang-format`.
+- `xo-deps.in` — discovery prefers `subsystem-edges`, falls back to
+  `subsystem-partial-edges` **with a stderr warning**: a partial graph is fine
+  for a local query but a missing edge looks identical to a genuine absence,
+  which is exactly the failure `--why` exists to prevent.
+- `xo-reconfigure.in` — `--capture-subsystem-edges`: refuses when only the
+  partial file exists (naming the disabled switches), refuses outside the
+  umbrella, prints the diff before copying, and reminds that `xo-build` reads
+  the *installed* copy. Honours `--dry-run`.
+
+Verified both directions:
+
+```
+fully-provisioned  -> .build/subsystem-edges           (189 edges), capture succeeds
+EXAMPLES=0 VULKAN=0 -> .build/subsystem-partial-edges  (181 edges), capture refuses
+```
+
+The 8-edge gap is the concrete cost of publishing from a partial configure.
+
+### Decisions taken on the open questions
+
+- **Reinstall xo-cmake automatically?** No — it prints the reminder instead. A
+  capture flag that silently triggers a build is surprising.
+- **`--force`?** Omitted. Under this scheme force would mean "publish the file
+  named partial", which is exactly the corruption the naming prevents, and
+  anyone who genuinely wants it can `cp`.
+- **Standalone builds?** Refused: capture checks that
+  `xo-cmake/etc/xo/subsystem-edges` exists under `@CMAKE_SOURCE_DIR@`, so a
+  satellite build declines with an explanatory message.
+
+## Original questions (kept for the reasoning)
 
 - **Should it also reinstall xo-cmake?** Convenient, but a capture flag that
   silently triggers a build is surprising. A printed reminder may be better —
