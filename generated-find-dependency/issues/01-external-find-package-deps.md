@@ -45,7 +45,18 @@ Discovery mechanisms in use outside `xo_dependency()`:
 
 - `find_package(LLVM ...)` — xo-jit
 - `find_package(Vulkan ...)`, `find_package(Threads ...)` — xo-imgui and others
+- `xo_external_target_dependency()` — calls `find_package` and links, but never
+  appends to the target's `xo_deps`, so the generated block cannot see it
 - `xo_external_pkgconfig_dependency()` — 3 call sites (SDL2, in xo-imgui)
+
+**A concrete instance with a known fix:** `xo-interpreter` exports
+`replxx::replxx` and `Threads::Threads` in `INTERFACE_LINK_LIBRARIES` while its
+config resolves neither — see
+`.xo-backlog/xo-interpreter/issues/01-nix-package-and-cmake-export.md`. Worth
+reading alongside this ticket: it is latent only because nothing depends on
+xo-interpreter yet, and it shows the failure is *harder* than the `-lfoo` case,
+since a name containing `::` makes CMake raise a hard error at generate time
+rather than degrading to a link flag.
 
 Note the mechanisms are not equivalent, and the fix should not assume they are.
 A `find_package` CONFIG dependency (Eigen3, Libwebsockets) exports an imported
