@@ -1,7 +1,68 @@
 # 01 — xo-tokenizer/utest is disabled; one real bug is keeping it out
 
-Status: open
+Status: resolved (2026-08-06)
 Type: bug
+
+## Resolution
+
+Not one bug -- **seven**, plus one wrong guess by the estimate below. `utest.tokenizer`
+is re-enabled and green: 401 assertions / 8 test cases, 20 consecutive clean runs,
+and clean under `-DNDEBUG` (so no latent out-of-bounds access hides behind the
+assertions). Full umbrella is 33/34, only `utest.jit` outstanding.
+
+Six library defects, four of them the same shape -- pointer arithmetic on a span
+without a bounds check:
+
+| Site | Defect |
+|---|---|
+| `tokenizer.hpp` 2-char punct | end-of-input guard `#ifdef OBSOLETE`'d out on the false premise that input always ends in whitespace; `ix` advanced to `hi+1` |
+| `input_state.hpp` `skip_leading_whitespace` | `is_whitespace(*ix) && (ix != hi)` -- deref *before* the bounds check |
+| `input_state.hpp` `capture_current_line` | `if (*eol == '\n')` deref at `input.hi()` when the input has no newline |
+| `tokenizer.hpp` `scan` | `capture_current_line()`'s `input_error` return discarded at its only call site, so a null `current_line_` reached a deref |
+| `tokenizer.hpp` `scan` | `current_line_` never advanced past a newline, so a token on line 2 tripped `advance_until`'s assertion |
+| `tokenizer_error.hpp` | `tk_start()` returned `current_pos()` -- the token's *end*, not its start |
+
+Two unimplemented behaviours, resolved by design decision (RC):
+
+- **`scan_result::consumed` was never populated on a token result** -- measured 0
+  for all 71 testcases. `assemble_token` returned `current_line().prefix(0)`
+  (always empty) under a "caller holds the whole line" policy, so `consume_all_`
+  in the test table had never been exercised. Now a token-bearing result reports
+  `[tk_start - whitespace, tk_end)` -- the whitespace skipped ahead of the token
+  plus the token itself. This reproduces the table's subtle `{"> ", .., true}` vs
+  `{"0 ", .., false}` distinction exactly.
+- **Unterminated string literals** were diagnosed generically by `scan`
+  ("unterminated string literal"), pre-empting `assemble_token`, which can say
+  *why* -- dangling escape vs missing terminator. `scan` now defers. The naked
+  newline/CR case stays in `scan`: `assemble_token` never sees across a line.
+
+Two test bugs:
+
+- `tkz.scan(in_span, in_span.empty())` passed `eof=false` for every non-empty
+  input, so `capture_current_line` correctly returned `incomplete` and no token
+  could ever be produced. Every assertion in `tokenizer2` sits behind
+  `if (tk.is_valid())`, so **the whole case had been passing vacuously**.
+- (none other -- the `consume_all_` expectations turned out to be correct, and
+  it was the library that was missing the feature)
+
+### Correction to the analysis below
+
+The estimate "It is one failing test case, not a broken suite" was right about
+the *symptom* and wrong about the cause: fixing each defect exposed the next.
+The framing that mattered came from RC -- an input span is a block of text that
+may cross several lines, and `current_line_` is error-reporting context ("used
+only to report errors", `input_state.hpp`), NOT a scanning boundary. An earlier
+attempt here bounded `scan` on the line and had to be reverted; the correct
+change is that `current_line_` *advances* to track the line holding the scan
+position, which is what `tokenizer.hpp`'s own comment had always claimed
+happened but nothing implemented.
+
+`input_state` gained one method, `add_whitespace()`, so a whitespace run
+straddling a newline still counts as a single gap between tokens.
+
+---
+
+## Original analysis
 
 `xo-tokenizer/CMakeLists.txt:23` reads
 
