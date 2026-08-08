@@ -1,6 +1,6 @@
 # 01 — xo-expression/xo-reader: pilot the ppindentinfo -> PpSink conversion here
 
-Status: fixed 2026-08-08 (one follow-up outstanding: xo-jit)
+Status: fixed 2026-08-08
 Type: task
 
 `xo-expression` still depends on `xo-indentlog`. It was previously described as
@@ -281,8 +281,22 @@ for the facet cluster to reuse:
   `xo-reader/utest` is disabled in its CMakeLists, so xo-reader still has no
   active tests.
 
-**Outstanding:** step 5 of the commit sequence — retire the transitional
-xo-indentlog dep from **xo-jit**. (xo-interpreter's was retired 2026-08-08.)
+**Complete 2026-08-08.** Both transitional deps retired: xo-interpreter
+(`4bb06884`) and xo-jit (`0e0585ed`). With those gone, the only
+xo-indentlog consumers left tree-wide are the six facet-cluster subsystems:
+xo-printable2, xo-object2, xo-stringtable2, xo-gc, xo-expression2, xo-tokenizer2.
+
+Two notes for whoever migrates those:
+
+- **Downstream fallout is the norm, not the exception.** Every subsystem in this
+  sequence broke at least one *consumer* that had been freeloading on the
+  propagated dependency — xo-expression broke xo-interpreter and xo-jit;
+  xo-jit broke xo-pyjit. The pattern is a header naming `xtag`/`scope`
+  unqualified and relying on its includer. Budget for it.
+- **`xo-jit` still carries four unbuilt source variants**
+  (`activation_record.{new,orig}.cpp`, `MachPipeline.{new,orig}.cpp`) that the
+  mechanical pass converted but no compiler checks. Referenced by nothing;
+  left in place deliberately pending a decision.
 
 ## Notes
 
