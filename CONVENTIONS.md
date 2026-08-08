@@ -128,6 +128,63 @@ distinguishes them from a real "no".
 X" is only checkable if the reader can see the whole set; `--users-of=Y
 --format=names` is that set, and it is 11 subsystems, not "everything".
 
+## Verifying a change in this tree
+
+The recipe below was re-derived from scratch several times on 2026-08-08, and
+got it wrong twice — once by omitting examples, once by discarding a build
+failure. Written down so the next pass starts from the working version.
+
+```bash
+# 61 buildable subsystems: xo-equable2 and xo-hashable2 are empty placeholder
+# subrepos (README + .gitrepo, no CMakeLists) and abort `xo-build --all`
+SUBS=$(xo-build --list | tr ' ' '\n' | grep '^xo-' \
+       | while read s; do [ -f "$s/CMakeLists.txt" ] && echo "$s"; done)
+
+xo-build -q --configure --with-utests --with-examples --build --install $SUBS
+```
+
+Four things that recipe encodes:
+
+- **`--with-examples`.** Utests alone miss a whole class of breakage: examples
+  are compiled by nix but not by a default umbrella build, so a broken example
+  passes locally and fails in CI. That is how the xo-tokenizer `tokenrepl`
+  regression escaped, and how the pre-existing xo-imgui guard bug stayed hidden.
+- **`-q`.** Quiet on success, loud on failure — 61 lines instead of 3060, and
+  unlike `>/dev/null 2>&1` it cannot hide an error. **Never redirect a build to
+  /dev/null**: it discards the diagnostics too, so a failing build looks
+  identical to a passing one, and any `ctest` that follows silently runs the
+  *previous* binary. That cost a long debugging detour on 2026-08-08 —
+  symptoms looked like a library bug; the cause was a compile error in a test
+  file that had been redirected away.
+- **`--install`.** Subsystems find each other through installed configs; a
+  build without install validates less than it appears to.
+- **The subsystem list, not `--all`.** `--all` aborts on the two placeholders.
+
+### Then the checks that actually catch things
+
+```bash
+# tests: expect 34 passing, 1 failing (xo-jit / machpipeline.fptr, ticketed)
+for s in $SUBS; do ctest --test-dir $s/.build; done
+
+# nix: the ONLY check that exercises an installed package config as a real
+# consumer would.  Caught -lindentlog, the xo-tokenizer example, and
+# xo-reader's empty propagatedBuildInputs -- none of which the umbrella saw.
+nix-build ci.nix -A <subsystem> --no-out-link
+
+# "is this dependency really gone": ask the preprocessor, not grep.  NB match
+# 'xo/indentlog/' WITH the slash -- bare 'indentlog' also matches indentlog2.
+find <sub>/.build -name '*.o.d' | xargs grep -lE 'xo/indentlog/'
+
+# exported config must resolve every name it exports
+grep -n find_dependency          <prefix>/lib/cmake/<n>/<n>Config.cmake
+grep -n INTERFACE_LINK_LIBRARIES <prefix>/lib/cmake/<n>/<n>Targets.cmake
+```
+
+**Stale build artifacts lie.** `.o.d` files survive source renames, so a
+`grep -l` over them can report a dependency from a file that no longer exists
+(`GlobalEnv.cpp` after the rename to `GlobalSymtab.cpp`). If a result looks
+impossible, `rm -rf <sub>/.build` and rebuild before believing it.
+
 ## Ticket shape
 
 No rigid template — existing tickets vary usefully. But most should have:
