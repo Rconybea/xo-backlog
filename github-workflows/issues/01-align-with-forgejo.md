@@ -96,7 +96,8 @@ fails in a confusing way.
 - `xo-*/.github/workflows/*.yml` — 28 files, 24 subrepos
 - `.forgejo/workflows/ci-cmake.yaml` — the structural model
 - `xo-cmake/bin/xo-build.in:266` — where the installed edges are read
-- `xo-cmake/etc/xo/subsystem-edges` — the graph, hand-maintained on purpose
+- `xo-cmake/etc/xo/subsystem-edges` — the graph; refreshed by copying the
+  generated file from a fully-provisioned build (see Notes)
 
 **Done when:**
 - no `.github` workflow hand-enumerates a dependency clone list
@@ -105,7 +106,38 @@ fails in a confusing way.
 
 ## Notes
 
-`subsystem-edges` is hand-maintained deliberately — the generated
-`.build/xo-subsystem-edges.txt` under-reports when config-time switches are off,
-so it must only ever be refreshed from a fully-enabled build. Do not add a
-workflow step that regenerates it. See `.xo-backlog/subsystem-edges/issues/`.
+`subsystem-edges` is **refreshed by copying** the generated
+`.build/xo-subsystem-edges.txt` over it — not by hand-editing:
+
+```bash
+cmake -B .build -S .                       # from a fully-enabled build dir
+cp .build/xo-subsystem-edges.txt xo-cmake/etc/xo/subsystem-edges
+xo-build --configure --build --install xo-cmake   # xo-build reads the INSTALLED copy
+```
+
+The constraint is that the source build directory must be **fully provisioned**,
+because a `xo_dependency()` call inside a config-time guard emits no edge when
+that guard is off. Measured 2026-08-08, three switches gate dependency
+declarations:
+
+| guard | `xo_dependency`-family calls under it |
+|---|---|
+| `XO_ENABLE_EXAMPLES` | 88 |
+| `ENABLE_TESTING` | 45 |
+| `XO_ENABLE_VULKAN` | 6 |
+| (unguarded) | 195 |
+
+`XO_ENABLE_DOCS`, `XO_ENABLE_ASM` and `XO_ENABLE_OPENGL` currently gate none —
+though OPENGL nests inside EXAMPLES and structurally could.
+
+**An earlier version of this note said "hand-maintained on purpose … do not
+regenerate".** That over-stated it: the danger is regenerating from a *partial*
+configure, not regenerating as such. Hand-editing is in fact the more error-prone
+path — a hand pass on 2026-08-08 missed two test/example-only edges
+(`xo-indentlog2 xo-expression`, `xo-indentlog2 xo-reader`) that the generated
+file had, because the editor was thinking about library deps only.
+
+Still do **not** add a workflow step that regenerates it: CI builds are not
+reliably fully-provisioned, and a silently-truncated graph is worse than a stale
+one. See `.xo-backlog/xo-cmake/issues/02-capture-subsystem-edges.md` for making
+the copy a first-class, self-checking operation.

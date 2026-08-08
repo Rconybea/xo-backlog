@@ -40,10 +40,11 @@ when xo-interpreter was added rather than a decision.
 
 ```
 xo_interpreterTargets.cmake:
-  INTERFACE_LINK_LIBRARIES "xo_object;xo_expression;xo_reader;indentlog;replxx::replxx;Threads::Threads;subsys"
+  INTERFACE_LINK_LIBRARIES "xo_object;xo_expression;xo_reader;xo_ppsink;xo_indentlog2;replxx::replxx;Threads::Threads;subsys"
 
 xo_interpreterConfig.cmake:
-  find_dependency(xo_object) / xo_expression / xo_reader / indentlog / subsys
+  find_dependency(xo_object) / xo_expression / xo_reader / xo_ppsink
+                / xo_indentlog2 / subsys
 ```
 
 `replxx::replxx` and `Threads::Threads` are exported but never resolved. The
@@ -59,7 +60,7 @@ endmacro()
 It calls `find_package` and links, but **never appends to the target's
 `xo_deps` property** — so `@XO_FIND_DEPENDENCY_BLOCK@` cannot see it. Same for
 the raw `target_link_libraries(${SELF_LIB} PUBLIC Threads::Threads)` at
-`src/interpreter/CMakeLists.txt:30`.
+`src/interpreter/CMakeLists.txt:28`.
 
 This is the general problem in
 `.xo-backlog/generated-find-dependency/issues/01-external-find-package-deps.md`;
@@ -98,7 +99,8 @@ Dependencies to declare, from `src/interpreter/CMakeLists.txt`:
 | dep | kind |
 |---|---|
 | `xo_object`, `xo_expression`, `xo_reader` | xo, PUBLIC |
-| `indentlog` | xo, PUBLIC — **transitional**, see below |
+| `xo_ppsink` | xo, PUBLIC — `xo::pp::log_level` is in the public API |
+| `xo_indentlog2` | xo, PUBLIC — `Schematika.cpp` renders via `PrettySink` |
 | `subsys` | xo, header-only |
 | `replxx` | external |
 | `Threads` | external (`find_package(Threads REQUIRED)`, line 16) |
@@ -107,18 +109,20 @@ Also build `example/replxx/` (`xo_interpreter_replxx`), an executable — worth
 having in the package since nix builds examples by default and that is how the
 `xo-tokenizer` example regression was caught.
 
-**Sequencing note:** the `indentlog` dep is transitional, added so xo-expression
-could drop its PUBLIC propagation. It retires when xo-interpreter migrates to
-xo-ppsink. Whoever writes the nix package should expect to change that line
-again shortly — not a reason to wait, but worth knowing.
+**Updated 2026-08-08:** xo-interpreter has since migrated to xo-ppsink, so the
+transitional `indentlog` dep is gone and the list above is current. The
+migration was verified only by the umbrella build — **precisely because there is
+no nix package**, its installed config has still never been exercised by a
+consumer.
 
 **Files:**
 - `pkgs/xo-interpreter.nix` — to create; template `pkgs/xo-interpreter2.nix`
 - `ci.nix` — add the attribute
 - `xo-interpreter/cmake/xo_interpreterConfig.cmake.in` — add the two
   `find_dependency` lines above the generated block
-- `xo-interpreter/src/interpreter/CMakeLists.txt:16,29,30` — where the external
-  deps are declared
+- `xo-interpreter/src/interpreter/CMakeLists.txt:16,27,28` — where the external
+  deps are declared (`find_package(Threads)`, `xo_external_target_dependency`,
+  raw `target_link_libraries`)
 
 **Done when:**
 - `nix-build ci.nix -A xo-interpreter` succeeds, with examples
