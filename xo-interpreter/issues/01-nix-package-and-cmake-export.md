@@ -1,6 +1,6 @@
 # 01 — xo-interpreter has no nix package, and its cmake export is incomplete
 
-Status: open
+Status: fixed 2026-08-08
 Type: bug
 
 Two related gaps, both surfaced while adding a transitional xo-indentlog
@@ -128,6 +128,51 @@ consumer.
 - `nix-build ci.nix -A xo-interpreter` succeeds, with examples
 - the installed `xo_interpreterConfig.cmake` resolves every name in
   `xo_interpreterTargets.cmake`'s `INTERFACE_LINK_LIBRARIES`
+
+## Resolution (2026-08-08)
+
+Both gaps closed:
+
+- **`pkgs/xo-interpreter.nix`** created (template: `pkgs/xo-interpreter2.nix`),
+  registered in `xo.nix` and `ci.nix`, with `buildExamples = true` so
+  `example/replxx/` is compiled. `replxx` is in `propagatedBuildInputs`, not
+  native-only: `replxx::replxx` is PUBLIC on the library target.
+- **`xo_interpreterConfig.cmake.in`** gained `find_dependency(replxx)` and
+  `find_dependency(Threads)` above the generated block, following the
+  xo-kalmanfilter precedent.
+
+Verified: `nix-build ci.nix -A xo-interpreter` succeeds, `utest.interpreter`
+runs and passes inside the nix build, `xo_interpreter_replxx` links, and every
+name in `INTERFACE_LINK_LIBRARIES` now has a matching `find_dependency`.
+
+### It immediately earned its keep
+
+Packaging xo-interpreter made it xo-reader's **first nix consumer**, and the
+first build failed:
+
+```
+Could not find a package configuration file provided by "xo_tokenizer"
+```
+
+`pkgs/xo-reader.nix` had `propagatedBuildInputs = [ ]`, with all five xo deps in
+`nativeBuildInputs` — enough for xo-reader's own build, but propagating nothing,
+while `xo_readerConfig.cmake` does `find_dependency(xo_expression)` and
+`find_dependency(xo_tokenizer)`. Fixed by moving the PUBLIC deps to
+`propagatedBuildInputs`.
+
+This is exactly the class of defect the ticket predicted nix coverage would
+catch, found within minutes of the package existing.
+
+**Two related cases left alone**, both with the same `propagatedBuildInputs = [ ]`
+shape:
+
+- `pkgs/xo-tokenizer.nix` — its config `find_dependency(xo_ppsink)` currently
+  resolves only because *xo-reader* propagates xo-ppsink. Works by luck; breaks
+  for any consumer that does not.
+- `pkgs/xo-flatstring.nix` — its hand-written config declares
+  `reflect subsys Eigen3 webutil printjson callback` while its CMakeLists
+  declares **no** xo deps at all. Stale; belongs to
+  `.xo-backlog/generated-find-dependency/issues/02-handwritten-config-drift.md`.
 
 ## Notes
 
