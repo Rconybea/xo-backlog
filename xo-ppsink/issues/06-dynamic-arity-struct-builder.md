@@ -1,6 +1,6 @@
 # 06 — a struct builder for a runtime number of fields
 
-Status: open (designed; not implemented)
+Status: fixed 2026-08-08
 Type: feature
 
 `pretty_struct(name, fields...)` is variadic, so its arity is fixed at compile
@@ -112,7 +112,7 @@ token-stream error; `.xo-backlog/xo-ppsink/issues/03-nested-struct-layout.md`
 was a rendering error the token stream looked fine for. Neither subsumes the
 other.
 
-**`xo-ppsink/utest/struct_builder.test.cpp`** (new)
+**`xo-ppsink/utest/struct_scope.test.cpp`** (new)
 - builder with a fixed field list emits the **same token stream** as
   `pretty_struct` with the same fields — proves the wrapper refactor is
   behaviour-preserving
@@ -121,7 +121,7 @@ other.
 - `force_break=true` emits `newline` where `false` emits `split`
 - a generated name (`tostr("[", i, "]")`) survives — no dangling view
 
-**`xo-indentlog2/utest/struct_builder.test.cpp`** (new)
+**`xo-indentlog2/utest/struct_scope.test.cpp`** (new)
 - `force_break=true` breaks at a margin **wide enough to fit** — the assertion
   that only exists here, since `newline()`'s "forces every enclosing group to
   break" contract is invisible in the token stream
@@ -140,16 +140,17 @@ call.
   `.xo-backlog/xo-ppsink/issues/05-sink-side-concat.md`. This ticket should use
   plain `tostr` and let 05 improve it later.
 
-## Open questions
+## Open questions — answered by the implementation
 
-- **Naming.** `struct_open` / `.field()` / RAII close? Or an explicit
-  `.close()` with the dtor as a safety net? RAII-only is tighter but makes the
-  emission point implicit at a scope end.
-- **Does the builder need `present`?** `field()` already carries the flag;
-  the builder can simply forward it. Probably free.
-- **Move/copy.** The builder holds a `PpSink &` and must not be copied; whether
-  it should be movable (to return one from a helper) is unclear — start
-  non-copyable, non-movable.
+- **Naming.** `sink.struct_open(name, force_break)` returning a `struct_scope`;
+  RAII close, no explicit `.close()`. Two members: `.field(name, value, present)`
+  and `.item(f)` for an already-built field-like.
+- **Does the builder need `present`?** Yes and it was free — `.field()` takes
+  the flag and `.item()` consults `present()` when the type has one, matching
+  `pretty_struct`.
+- **Move/copy.** Non-copyable, non-movable (it holds a `PpSink &` and owns an
+  emission bracket). `struct_open` returns one by value via guaranteed copy
+  elision, so `auto st = sink.struct_open(...)` works without a move.
 
 **Inferred, not measured:** that this shape also fits the facet stack's
 container-shaped types (233 files). Plausible — the same `<Name :field…>` idiom
@@ -162,9 +163,32 @@ established until someone does.
 - `xo-ppsink/include/xo/ppsink/PpSink.hpp:112` — the `pretty_struct` declaration
 - `xo-ppsink/utest/`, `xo-indentlog2/utest/` — the two test layers
 
-**Done when:**
-- the builder exists, `pretty_struct` is implemented in terms of it, and its
-  existing tests still pass unchanged
-- both new test files pass
-- the three design targets above are expressible without hand-rolling
-  `begin`/`split`/`end`
+**Done when:** — all met, commit `716199ed`
+- [x] the builder exists (`pretty_struct.hpp`, `class struct_scope`),
+      `pretty_struct` is implemented in terms of it, and its existing tests
+      still pass **unchanged** — the behaviour-preservation check for the
+      refactor
+- [x] both new test files pass (`xo-ppsink/utest/struct_scope.test.cpp`,
+      `xo-indentlog2/utest/struct_scope.test.cpp`)
+- [x] the three design targets use `struct_open` with no hand-rolled
+      `begin`/`split`/`end` — `Sequence.cpp:85`,
+      `exprstatestack.cpp:93` and `envframestack.cpp:115`, the latter two with
+      `force_break`
+
+## Resolution (2026-08-08)
+
+Implemented as designed. Two notes for anyone reading the code:
+
+- **The tests were mutation-checked.** Both files passed on first run against
+  expectations that had been *predicted*, which is when a suite is most likely
+  to be vacuous — so four mutations were applied to the implementation (indent
+  double-count, `force_break` ignored, `">"` outside the group, separator
+  dropped) and each confirmed to turn something red. The first attempt reported
+  a false pass because the mutation regex silently failed to match; see
+  `.xo-backlog/CONVENTIONS.md` on tools that quietly no-op.
+- **The call-site conversion landed too**, though this ticket scoped it out.
+  It went with the pilot
+  (`.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md`).
+
+Still deferred, as scoped: sink-side concatenation for the `tostr("[", i, "]")`
+labels — `.xo-backlog/xo-ppsink/issues/05-sink-side-concat.md`.

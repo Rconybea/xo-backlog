@@ -1,6 +1,6 @@
 # 01 — xo-expression/xo-reader: pilot the ppindentinfo -> PpSink conversion here
 
-Status: open (decided 2026-08-08: pilot here; implementation not started)
+Status: fixed 2026-08-08 (one follow-up outstanding: xo-jit)
 Type: task
 
 `xo-expression` still depends on `xo-indentlog`. It was previously described as
@@ -167,7 +167,7 @@ single-pass. Everything else is substitution.
 
 ## Design settled 2026-08-08
 
-Grilled out in full; the decisions below are fixed. Implementation not started.
+Grilled out in full; the decisions below are what was implemented.
 
 1. **The protocol becomes** `virtual void pretty(xo::pp::PpSink & sink) const = 0;`
    — renamed from `pretty_print`, return dropped (see above for why it has no
@@ -242,9 +242,47 @@ silently picking a branch.
 - `xo-expression/include/xo/expression/{pretty_expression,pretty_localenv,pretty_variable}.hpp`
 - `xo-reader/` — 20 files implementing the same protocol
 
-**Done when:**
-- if piloting: xo-expression and xo-reader are off indentlog, verified by
-  `grep -l indentlog <build>/**/*.o.d` returning nothing
+**Done when:** — met, commit `089afc5e`
+- [x] xo-expression and xo-reader are off indentlog. Verified on the axis that
+      matters (source greps miss transitive includes):
+
+```bash
+for s in xo-expression xo-reader; do
+    find $s/.build -name '*.o.d' | xargs grep -lE 'xo/indentlog/'
+done
+# => nothing.  NB match 'xo/indentlog/' with the slash: plain 'indentlog'
+#    also matches indentlog2 and reports a false positive.
+```
+
+## Outcome (2026-08-08)
+
+Landed across the planned commit sequence. What the pilot actually taught,
+for the facet cluster to reuse:
+
+- **The conversion is mostly substitution.** ~2/3 of implementations were
+  one-line `pretty_struct` delegations; the eight hand-written two-pass bodies
+  were the real work, and three of those turned out not to be hard at all.
+- **The baseline diff was the right check.** No *content* differences across
+  10 programs x 3 margins — every field present and identical. All 20 diffs
+  were two known ppsink layout conventions (PrettyVector bracket spacing, and
+  the `value_offset` +1 vs legacy +2). Without the before/after capture those
+  would have been indistinguishable from a dropped field.
+- **`rp<T>` needed a Prettifier.** `xo-refcnt/include/xo/refcnt/Refcounted_pp.hpp`
+  was written for this: without it every `field("rhs", rhs_)` silently falls
+  through to `operator<<` and flattens the subtree with no line breaking. The
+  facet cluster will need the same for its handle types.
+- **Two subsystems outside the migration had latent incomplete migrations**
+  (`xo-object/Primitive.hpp`, `xo-jit/activation_record.hpp`) that only
+  surfaced once xo-expression stopped propagating indentlog — headers naming
+  `xtag` unqualified and relying on the includer.
+- **Three pre-existing bugs found**, none caused by the conversion:
+  `Sequence::display()` never incremented its index (fixed);
+  `Sequence` cannot be empty (`.xo-backlog/xo-expression/issues/02`); and
+  `xo-reader/utest` is disabled in its CMakeLists, so xo-reader still has no
+  active tests.
+
+**Outstanding:** step 5 of the commit sequence — retire the transitional
+xo-indentlog dep from **xo-jit**. (xo-interpreter's was retired 2026-08-08.)
 
 ## Notes
 
