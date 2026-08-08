@@ -1,6 +1,6 @@
 # 05 — a `tostr` replacement that concatenates *into* the sink
 
-Status: open (idea; not designed)
+Status: fixed 2026-08-08
 Type: task
 
 `tostr(args...)` builds a `std::string`. When the only consumer is a sink, that
@@ -112,9 +112,67 @@ idiom, not because the current 5 are costing anything measurable.
   where a name overload lands
 - the 5 loop sites listed above — the first real consumers
 
-**Done when:**
-- a sink-destined concat exists and the 5 loop sites use it
-- `tostr` is left alone for the ~71 sites that genuinely want a `std::string`
+**Done when:** — met
+- [x] a sink-destined concat exists (`xo-ppsink/include/xo/ppsink/concat.hpp`)
+      and all 5 loop sites use it
+- [x] `tostr` left alone for the sites that genuinely want a `std::string`
+
+## Resolution (2026-08-08)
+
+`concat(args...)` returns a `concat_impl` holding **pointers** to its
+arguments, with a `Prettifier` that folds `sink.pp` over them. Nothing is
+buffered: the pieces render where the result is wanted.
+
+Three differences from legacy `xo::concat`, all deliberate:
+
+1. variadic, not binary
+2. by reference, not by value — the whole point
+3. **not atomic.** Legacy declared `concat_impl` a pretty-printing leaf
+   ("don't want structure visible"). Here each argument goes through
+   `sink.pp()`, so a structured argument would emit its structure. Fine for the
+   short flat labels this exists for; documented in the header as a caveat.
+
+### It needed two small API changes to be usable where it matters
+
+`concat` alone was not enough — the motivating case is a *field name*, and
+`field()` took `std::string_view`:
+
+- `field_impl<Value>` → `field_impl<Name, Value>`, holding the name by pointer
+  and rendering it with `sink.pp()` rather than `sink.put()`. Contained:
+  `field_impl` is named nowhere outside `pretty_struct.hpp`, and all ~140
+  `field("literal", v)` call sites keep working by deduction.
+- `Prettifier<tag_impl>` likewise renders its name with `pp()`, so
+  `xtag(concat(...), v)` works too — which is what let `Sequence::display()`
+  drop its `std::string`.
+
+For a string-like name `pp()` takes the same string-like leaf `put()` did, so
+output is unchanged — confirmed by the existing `pretty_struct`/`struct_scope`
+tests, which pin exact token streams and passed untouched.
+
+### Converted sites
+
+| | |
+|---|---|
+| `exprstatestack.cpp:99`, `envframestack.cpp:121` | `tostr(...)` → `concat(...)` as a `struct_open` field name |
+| `Sequence.cpp:90` | same, in `pretty()` |
+| `Sequence.cpp` `display()` | `xtag(concat("[", i, "]"), x)` — no intermediate string |
+
+The remaining `tostr("[", ...)` hits tree-wide are in `xo-indentlog/utest`
+(legacy, staying) and in concat's own test, which asserts the two agree.
+
+### Tests
+
+`xo-ppsink/utest/concat.test.cpp` — text, agreement with `tostr`, nesting,
+string/string_view arguments, prvalue arguments, and two claims that needed
+pinning specifically:
+
+- **emits no structure of its own** (checked against the token stream via
+  MarkSink; FlatSink cannot show this) — required if a concat is to stand in a
+  field name, which must remain one unbreakable token
+- **does not copy its arguments** (copy-counting type)
+
+Both were mutation-checked: emitting a `split` between arguments, and switching
+the tuple to hold values instead of pointers, each turn the suite red.
 
 ## Notes
 
