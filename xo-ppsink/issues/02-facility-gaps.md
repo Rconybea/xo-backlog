@@ -26,9 +26,14 @@ not a migration blocker.
 different kind of thing from the rest. Decide whether ppsink wants it *at all*
 before porting — its three call sites may read better rewritten without it.
 It was deliberately left out of `pretty_struct` v1. All three consumers are
-inside the facet cluster (expression2, reader2), which is gated on the
+inside the facet cluster, which is gated on the
 `IPrintable::pretty(ppindentinfo)` question regardless, so this is not on any
-critical path.
+critical path. Verified 2026-08-08:
+
+```bash
+xo-deps --why=xo-expression2:xo-printable2  # xo-expression2 -> xo-printable2
+xo-deps --why=xo-reader2:xo-printable2      # xo-reader2 -> xo-expression2 -> xo-printable2
+```
 
 ### `print/printer.hpp` was never a gap (retired 2026-08-08)
 
@@ -89,9 +94,31 @@ wrapper.
 - **`ppindentinfo.hpp`** — the legacy two-pass `upto()` fit protocol. ppsink's
   model is single-pass (`Prettifier<T>::print(PpSink&, const T&)`), so there is
   nothing to port. Those sites are ppdetail specializations to *rewrite*, and
-  they are the bulk of the remaining migration — ~293 files, concentrated in the
-  facet cluster (printable2 → object2/stringtable2 → gc → expression2/procedure2
-  → interpreter2/reader2). See `.xo-backlog/xo-printable2/` when that opens.
+  they are the bulk of the remaining migration.
+
+  **Re-measured 2026-08-08** (the earlier "~293 files, concentrated in the facet
+  cluster" was carried, not checked):
+
+  ```bash
+  # 298 files tree-wide, excluding xo-indentlog itself
+  grep -rl "ppdetail\|ppindentinfo" xo-*/ --include=*.hpp --include=*.cpp \
+    | grep -v '\.build' | grep -v '^xo-indentlog/'
+  # split by whether they are downstream of xo-printable2
+  xo-deps --users-of=xo-printable2 --format=names -q
+  ```
+
+  298 files: **233 inside** the printable2 blast radius (reader2 92,
+  expression2 46, interpreter2 34, object2 29, procedure2 11, stringtable2 8,
+  tokenizer2 7, printable2 6), **65 outside** it — and the outside group is not
+  noise: xo-expression 28 and xo-reader 24 account for 52 of the 65. Those two
+  carry a *separate* two-pass protocol
+  (`GeneralizedExpression::pretty_print(ppindentinfo)`) and are independent of
+  the facet-cluster decision. See
+  `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md`.
+
+  So "the remaining migration is the facet cluster" is **false** — it is the
+  facet cluster (233) plus an independent expression/reader stack (52). See
+  `.xo-backlog/CONVENTIONS.md` rule 2.
 - **`ppdetail_atomic.hpp`** — legacy's "declare this type a leaf". ppsink's
   primary `Prettifier` template is empty, so an unspecialized type already falls
   through to the string-like leaf and then `operator<<`. No equivalent needed.
