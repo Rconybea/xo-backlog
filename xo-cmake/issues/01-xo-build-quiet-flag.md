@@ -1,6 +1,6 @@
 # 01 — investigate `-q|--quiet` for xo-build
 
-Status: open (investigation)
+Status: fixed 2026-08-08
 Type: feature
 
 `xo-build` has **no verbosity control** (`xo-build --help` lists none), and its
@@ -56,7 +56,58 @@ quieting them is a decision about xo-cmake's diagnostics, not just a cmake flag.
 Worth checking how many of those `message(STATUS ...)` calls are genuinely
 diagnostic vs vestigial before adding a gate.
 
-## Questions to settle
+## Resolution (2026-08-08) — buffer, don't filter
+
+`-q | --quiet` implemented in `xo-cmake/bin/xo-build.in`.
+
+**It buffers rather than filters.** The three noise sources sketched below would
+each need a different cmake lever, and any error shape a filter fails to match
+disappears silently — the same class of defect as a mutation harness that
+no-ops. Instead `run_phase` captures each phase's output, discards it only on
+success, and on failure prints the phase, the subsystem, the exit code and
+everything that was buffered:
+
+```
+xo-build: build FAILED for [xo-ppsink] (exit 2); output follows:
+...
+/home/roland/.../concat.test.cpp:142:15: error: static assertion failed: DELIBERATE BREAKAGE
+```
+
+So the contract is exactly *quiet on success, loud on failure*, and unlike
+`>/dev/null 2>&1` it cannot hide an error.
+
+**One line per subsystem**, so a long `--all` run still shows progress:
+
+```
+xo-build: xo-ppsink ok (configure build install)
+```
+
+Measured on the full tree, configure+build+install with utests and examples:
+
+| | lines |
+|---|---|
+| before | 3060 |
+| with `-q` | **61** — one per subsystem |
+
+Single subsystem: 111 lines → 1.
+
+**`--utest` follows the existing precedent** rather than inventing another: the
+first ctest pass is buffered, and on failure the `--rerun-failed
+--output-on-failure` re-run (already present at what was `:556`) goes straight
+to the terminal, so the failing assertion is still the thing you see.
+
+`-n | --dry-run` is unaffected — it still prints the commands it would run.
+
+### Decisions on the questions below
+
+- **Suppress stdout, or everything below warnings?** Neither: buffer
+  everything, print it iff the phase fails. Sidesteps needing cmake to
+  separate the streams.
+- **Per-subsystem summary?** Yes, and it is what makes `-q` usable on `--all`.
+- **Re-print on failure?** Yes — that is the whole design.
+- **`--utest` interaction?** Matches the existing quiet-until-failure pattern.
+
+## Original questions (kept for the reasoning)
 
 - **Does `-q` mean "suppress stdout" or "suppress everything below warnings"?**
   The second is more useful and harder — cmake does not cleanly separate them.
