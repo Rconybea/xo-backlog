@@ -1,7 +1,60 @@
 # 01 — `toppstr()`: render through a PrettySink and return the string
 
-Status: open
+Status: fixed 2026-08-09
 Type: feature
+
+## Resolution (2026-08-09)
+
+`xo-indentlog2/include/xo/indentlog2/print/toppstr.hpp`, tested in
+`xo-indentlog2/utest/toppstr.test.cpp`. 575 assertions pass.
+
+```cpp
+toppstr(args...)        // default config
+toppstr(cfg, args...)   // explicit margins / arena size
+```
+
+The second is constrained `requires (!std::same_as<std::remove_cvref_t<T0>, PpConfig>)`
+so a leading config selects that overload instead of being rendered as a value.
+Mirrors legacy `toppstr2(ppconfig, args...)`.
+
+`toppstr-wide-margin-matches-tostr` pins the relationship to ppsink's `tostr`:
+at a margin wide enough that nothing breaks, the two agree exactly. They differ
+only in whether breaking is *possible* — now asserted rather than asserted in
+prose.
+
+### Two latent defects found on the way
+
+- **`PpConfig.hpp` had no include guard.** No `#pragma once`, no `#ifndef` —
+  the only header in `xo-indentlog2/include/xo/indentlog2/print/` missing one.
+  It worked because nothing had ever included it twice in one translation unit.
+  `toppstr.hpp` did, and the redefinition surfaced at once. Fixed at source.
+- **`ArenaConfig::size_` defaults to 0**, and a PrettySink given a zero-sized
+  logbuf **aborts**. That is why all 23 hand-rolled copies had to supply a size,
+  and why all 23 chose 64k. `c_toppstr_default_logbuf_z` now owns that default,
+  so a bare `toppstr(x)` works — which it did not, on first attempt, and the
+  symptom was SIGABRT rather than anything pointing at the arena.
+
+### Migration of the 23 copies: deferred deliberately
+
+The original "Done when" asked for xo-alloc, xo-object and indentlog2's own
+copies to be migrated, so the function would be proven against existing
+expectations. **Superseded by RC (2026-08-09): the xo-printable2 stack will
+exercise it heavily**, which is stronger proof than three retrofits. Existing
+copies migrate opportunistically, when their file is touched for another
+reason.
+
+### Follow-on: make the test schedule generative
+
+`Testcase_Toppstr` currently carries `(margin, expect_break)` and renders a
+fixed `s_value`. **Expand it to carry the value being rendered too**, so the
+schedule varies input *and* margin rather than margin alone.
+
+That is worth doing for its own sake — one rendered value is thin coverage for
+a function whose whole job is deciding where to break — but the point is to
+foreshadow generative testing: once the case carries its input, generating
+inputs is a change to how `s_testcase_v` is built, not a rewrite of the test.
+
+Blocked on nothing; not done here only to keep this change small.
 
 xo-indentlog2 has no "render this value with line breaking, give me a string"
 entry point. `PrettySink` is the sink that actually breaks lines — ppsink's own
@@ -83,10 +136,12 @@ But the duplication predates that work and is worth removing on its own.
 - the 23 call sites, which can migrate opportunistically rather than all at once
 
 **Done when:**
-- `toppstr(x, margin)` exists in xo-indentlog2 and is tested
-- the arena-name hazard is unreachable through it
-- at least the copies in xo-alloc, xo-object and xo-indentlog2's own utests are
-  migrated, so the function is proven against existing expectations
+- ~~`toppstr(x, margin)` exists in xo-indentlog2 and is tested~~ done
+- ~~the arena-name hazard is unreachable through it~~ done — pinned by
+  `toppstr-is-repeatable`, which renders the same input repeatedly and requires
+  an identical result, since the symptom of a collision is wrong indentation in
+  whichever renders second rather than an error
+- ~~copies migrated~~ superseded; see above
 
 ## Notes
 
