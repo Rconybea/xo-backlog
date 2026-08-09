@@ -43,9 +43,21 @@ carrying both signatures for a while.
 
 ## Blast radius
 
-Subsystems naming PrintJson: **xo-websock (5 files), xo-kalmanfilter (3),
-xo-reflect, xo-reactor, xo-process, xo-pywebsock, xo-pyreactor, xo-pyprocess,
-xo-pyprintjson** — plus xo-printjson itself (7).
+Subsystems naming PrintJson, re-measured 2026-08-09 — **xo-websock 5,
+xo-kalmanfilter 3, then one file each in xo-reflect, xo-reactor, xo-pywebsock,
+xo-pyreactor, xo-pyprintjson, xo-pyprocess** — plus xo-printjson itself, **5
+files, not 7**:
+
+```bash
+grep -rl 'PrintJson' --include=*.hpp --include=*.cpp xo-*/ \
+  | grep -v '/\.build/' | awk -F/ '{print $1}' | sort | uniq -c | sort -rn
+```
+
+The 9 `print_json` implementations are confirmed at 9
+(`grep -rn ': public JsonPrinter'`): six in `PrintJson.cpp`, two in
+xo-kalmanfilter's `EigenUtil.cpp`, and `AsStringJsonPrinter` in
+`JsonPrinter.hpp`. NB they declare `virtual void print_json(...)` without the
+`override` keyword, so a grep for `override` finds none of them.
 
 The awkward consumer is **`xo-reactor/include/xo/reactor/EventStore.hpp:67`**,
 where an `HttpEndpointDescr`'s endpoint fn calls `http_snapshot(pjson, p_os)`
@@ -100,11 +112,47 @@ before the base class flips.
 
 ## Notes
 
-Also blocked-adjacent: `xo-printjson` still uses legacy `iso8601` as an ostream
-value (`PrintJson.cpp:384`), which has no ppsink equivalent of that shape. See
-`.xo-backlog/xo-ppsink/issues/02-facility-gaps.md`. Closing that gap is a
-prerequisite for xo-printjson's own indentlog migration, and this ticket would
-subsume it.
+### Corrected 2026-08-09: the iso8601 blocker does not exist
+
+This ticket previously read:
+
+> Also blocked-adjacent: `xo-printjson` still uses legacy `iso8601` as an
+> ostream value (`PrintJson.cpp:384`), which has no ppsink equivalent of that
+> shape. [...] Closing that gap is a prerequisite for xo-printjson's own
+> indentlog migration, and this ticket would subsume it.
+
+Wrong on all three counts. Measured 2026-08-09:
+
+```bash
+# the ppsink equivalent exists, and is exactly the value-wrapper shape claimed
+# to be missing
+grep -n 'class iso8601\|Prettifier<iso8601>\|put_iso8601' \
+     xo-ppsink/include/xo/ppsink/pp_time.hpp
+#   :37  void put_iso8601(PpSink &, xo::time::utc_nanos);
+#   :54  class iso8601 { ... };
+#   :65  struct Prettifier<iso8601> { ... };
+
+# and xo-printjson ALREADY uses it -- xo::pp::, not legacy
+grep -n 'using xo::pp::iso8601' xo-printjson/src/printjson/PrintJson.cpp   # :29
+
+# the indentlog migration it was said to block is already done
+find xo-printjson/.build -name '*.o.d' | xargs grep -lE 'xo/indentlog/' | wc -l   # 0
+```
+
+`PrintJson.cpp:390` reaches it through `pp_time_ostream.hpp`
+(`os << iso8601(..)`), which is the correct adapter for code that currently
+holds an ostream — not a legacy holdover. When this ticket converts that call
+site to a PpSink, `Prettifier<iso8601>` is already waiting; the adapter simply
+stops being needed.
+
+So **this ticket has no dependency on `xo-ppsink/issues/02`.** Its one remaining
+facility, `print/cond.hpp`, has nothing to do with printjson.
+
+Why the wrong reading was plausible: `xo::pp::iso8601` and legacy
+`xo::print::iso8601` differ only in namespace at the call site, and
+`pp_time_ostream.hpp` makes ppsink's version usable from ostream code — so a
+grep for `iso8601` beside an `ostream *` looks exactly like an unmigrated call
+site. Checking which namespace it resolves to takes one line and was not done.
 
 Measure flat output before and after. Two separate incidents on this migration
 came from predicting rendering rather than observing it.
