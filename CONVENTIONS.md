@@ -156,14 +156,19 @@ Four things that recipe encodes:
   *previous* binary. That cost a long debugging detour on 2026-08-08 —
   symptoms looked like a library bug; the cause was a compile error in a test
   file that had been redirected away.
-- **Pass the list to `xo-build`; do not loop over it.** It takes a subsystem
-  list and already prints one status line per subsystem — that is what `-q`
-  added (`.xo-backlog/xo-cmake/issues/01`). A shell loop only duplicates that
-  line, and the duplication is what tempts you into `>/dev/null` to tidy it up,
-  which is how the rule above gets broken by someone who already knows it.
-  That exact sequence happened on 2026-08-08; see
-  `.xo-backlog/xo-cmake/issues/03`. `ctest` below is the exception, and only
-  because `--utest` cannot yet survey past a failure.
+- **Pass the list to `xo-build`; do not loop over it, and do not call `ctest`
+  directly.** It takes a subsystem list, prints one status line per subsystem
+  (`-q`, `.xo-backlog/xo-cmake/issues/01`) and surveys past failures (`-k`,
+  issue 03). A shell loop only duplicates the status line, and that duplication
+  is what tempts you into `>/dev/null` to tidy it up — which is how the rule
+  above gets broken by someone who already knows it. That exact sequence
+  happened on 2026-08-08, and issue 03 records it.
+- **`34 ok` is not `60 ok`.** `ctest` exits 0 when a project defines no tests,
+  so 26 of the 61 subsystems would otherwise count as passes having run
+  nothing. `xo-build` reports those as `ok (utest:no-tests)` and totals them
+  separately. If some future harness reports a suspiciously round pass count,
+  suspect this first — the same defect hit the nix packages
+  (`.xo-backlog/nix-packaging`).
 - **`--install`.** Subsystems find each other through installed configs; a
   build without install validates less than it appears to.
 - **The subsystem list, not `--all`.** `--all` aborts on the two placeholders.
@@ -171,14 +176,12 @@ Four things that recipe encodes:
 ### Then the checks that actually catch things
 
 ```bash
-# tests: expect 34 passing, 1 failing (xo-jit / machpipeline.fptr, ticketed)
+# tests.  -k keeps going past a failure, which a sweep needs: xo-jit fails
+# permanently (machpipeline.fptr, ticketed), and without -k everything after it
+# would go untested while still looking like it ran.
 #
-# NB the loop is NOT the pattern to copy -- `xo-build -q --utest $SUBS` does
-# this properly (one status line per subsystem, loud on failure) EXCEPT that it
-# stops at the first failing subsystem, and xo-jit fails permanently, so a
-# sweep would silently leave everything after it untested.  See
-# .xo-backlog/xo-cmake/issues/03; when that lands, delete this loop.
-for s in $SUBS; do ctest --test-dir $s/.build; done
+# Expect: 34 ok, 26 with no tests, 1 failed -- 61 subsystems in total.
+xo-build -q -k --utest $SUBS
 
 # nix: the ONLY check that exercises an installed package config as a real
 # consumer would.  Caught -lindentlog, the xo-tokenizer example, and

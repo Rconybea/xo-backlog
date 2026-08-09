@@ -1,7 +1,76 @@
 # 03 — `xo-build --utest` fails fast, so a sweep cannot use it
 
-Status: diagnosed
+Status: fixed 2026-08-09
 Type: feature
+
+## Resolution (2026-08-09)
+
+`-k | --keep-going` implemented in `xo-cmake/bin/xo-build.in`, as designed
+below. Verified on this tree:
+
+```bash
+xo-build -q -k --utest xo-jit xo-ppsink
+#   xo-jit FAILED, xo-ppsink still ran ("ok (utest)"), rc=1, 0 skipped
+#   -- before, xo-ppsink never ran at all
+
+# with xo-alloc deliberately broken:
+xo-build -q -k --build xo-alloc xo-object xo-ppsink
+#   FAILED   xo-alloc (build)
+#   skipped  xo-object (depends on xo-alloc)     <- downstream, pruned
+#   xo-ppsink ok (build)                         <- independent, still built
+#   rc=1, and the actual compiler error still printed in full
+
+xo-build -q --build xo-alloc xo-object xo-ppsink   # no -k: unchanged
+#   stops at xo-alloc, no summary, rc=2
+```
+
+The whole-tree sweep is now one command with no shell loop, and
+`.xo-backlog/CONVENTIONS.md` has been updated to it.
+
+### Also fixed: zero tests no longer counts as a pass
+
+Surfaced by the first green sweep, which claimed **60 passed** where the old
+loop said 34. `ctest` exits 0 on "No tests were found!!!", so 26 of the 61
+subsystems were being counted as passes having run nothing — this ticket's own
+complaint ("a partial run looks like a full one") reappearing in the number the
+ticket exists to make trustworthy.
+
+Now reported as a third outcome:
+
+```
+xo-build: xo-ppsink    ok (utest)
+xo-build: xo-allocutil ok (utest:no-tests)
+xo-build: 1 failed, 0 skipped, 26 with no tests
+```
+
+34 + 26 + 1 = 61, and the 34 reconciles with the old loop-based count.
+
+Detected with `ctest -N` ("Total Tests: N"), which runs nothing. That is
+ctest's own structured summary rather than an error-message shape, so it is not
+the output-filtering ticket 01 argues against. **An unparseable count falls
+through and runs the tests** — doing the work is the safe direction; claiming
+"no tests" wrongly is not.
+
+Same defect as `.xo-backlog/nix-packaging` (packages built without
+`-DENABLE_TESTING` ran zero tests and looked green). Worth treating a
+suspiciously round pass count as a symptom.
+
+### Two bugs found while testing, both on the SUCCESS path
+
+Recorded because neither would have appeared in the failure-path tests this
+ticket's design implies, and a `-k` implementation is naturally exercised on
+failure:
+
+- **A stray `continue` in the no-tests branch** would have skipped that
+  subsystem's remaining phases (`--install`) and its summary line. Having no
+  tests is not a failure. Now an `if/else`. The neighbouring `continue` on test
+  *failure* is deliberate and stays — do not install a subsystem whose tests
+  just failed.
+- **`[[ cond ]] && exit 1` as the script's last statement** returns 1 when the
+  condition is FALSE, so a clean `-k` run exited non-zero:
+  `xo-build -q -k --utest xo-allocutil` reported `0 failed, 0 skipped` and then
+  failed. That would have broken CI on a green tree. Now an explicit `if`, plus
+  a terminal `exit 0`.
 
 `xo-build --utest` accepts several subsystems and reports one line each, but it
 **stops at the first failing one**. That makes it unusable for the whole-tree
