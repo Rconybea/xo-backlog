@@ -156,6 +156,14 @@ Four things that recipe encodes:
   *previous* binary. That cost a long debugging detour on 2026-08-08 —
   symptoms looked like a library bug; the cause was a compile error in a test
   file that had been redirected away.
+- **Pass the list to `xo-build`; do not loop over it.** It takes a subsystem
+  list and already prints one status line per subsystem — that is what `-q`
+  added (`.xo-backlog/xo-cmake/issues/01`). A shell loop only duplicates that
+  line, and the duplication is what tempts you into `>/dev/null` to tidy it up,
+  which is how the rule above gets broken by someone who already knows it.
+  That exact sequence happened on 2026-08-08; see
+  `.xo-backlog/xo-cmake/issues/03`. `ctest` below is the exception, and only
+  because `--utest` cannot yet survey past a failure.
 - **`--install`.** Subsystems find each other through installed configs; a
   build without install validates less than it appears to.
 - **The subsystem list, not `--all`.** `--all` aborts on the two placeholders.
@@ -164,6 +172,12 @@ Four things that recipe encodes:
 
 ```bash
 # tests: expect 34 passing, 1 failing (xo-jit / machpipeline.fptr, ticketed)
+#
+# NB the loop is NOT the pattern to copy -- `xo-build -q --utest $SUBS` does
+# this properly (one status line per subsystem, loud on failure) EXCEPT that it
+# stops at the first failing subsystem, and xo-jit fails permanently, so a
+# sweep would silently leave everything after it untested.  See
+# .xo-backlog/xo-cmake/issues/03; when that lands, delete this loop.
 for s in $SUBS; do ctest --test-dir $s/.build; done
 
 # nix: the ONLY check that exercises an installed package config as a real
