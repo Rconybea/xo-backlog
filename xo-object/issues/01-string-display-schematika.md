@@ -43,16 +43,47 @@ Does `String::display()` owe a **round-trippable Schematika literal**, or is it
 a diagnostic rendering that merely needs to be unambiguous?
 
 - If round-trippable: the escape set is Schematika's, not ppsink's. It must match
-  what xo-reader accepts -- check the tokenizer's string-literal handling
-  (`xo-tokenizer`, and see its escape diagnostics: "expecting one of n|r|\"|\\
-  following escape \\"). Note that set is currently **narrower** than what ppsink
-  emits: xo-reader appears to accept `\n \r \" \\` and *not* `\xNN`, so today's
-  output does not round-trip.
+  what xo-reader accepts -- see the corrected measurement below.
 - If diagnostic: leave it on `quot`, and `.xo-backlog/xo-ppsink/issues/04`
   (short escapes for tab) is the whole fix.
 
-The narrowness of the reader's escape set is the strongest argument that these
-are two different jobs and `String` should own its own rendering.
+### Corrected 2026-08-08: the reader accepts `\t` too
+
+This ticket previously read:
+
+> xo-reader appears to accept `\n \r \" \\` and *not* `\xNN`
+
+**That set was wrong, and it was wrong in the way `CONVENTIONS.md` warns about:
+it was read off the tokenizer's own error message rather than its code.** The
+message under-reports what the switch actually handles:
+
+```bash
+# five cases, including 't'
+sed -n '514,541p' xo-tokenizer/include/xo/tokenizer/tokenizer.hpp | grep -E '^\s+case'
+#   case '\\':  case 'n':  case 't':  case 'r':  case '"':
+
+# but the default branch's diagnostic omits t (tokenizer.hpp:538)
+#   "expecting one of n|r|\"|\\ following escape \\"
+```
+
+Already pinned by an existing test — `xo-tokenizer/utest/tokenizer.test.cpp:191`
+feeds `"tab to the right [\t]..."` and expects a real tab in the token.
+
+Why the wrong reading was plausible: the diagnostic is the only place the
+accepted set is written down as a *set*, so it reads like the specification. It
+is instead a hand-maintained string that drifted from the switch beside it.
+
+**Consequence for this ticket.** As of `xo-ppsink/issues/04`, ppsink emits short
+forms for `\\ " \n \r \t \b \f`. The reader accepts `\\ n t r "`. So every
+escape the reader knows is now emitted in a form it can read back — a string
+containing only tab, newline, CR, quote and backslash **does** round-trip today,
+where before this change tab went out as `\x09` and the reader rejected it.
+
+What still does not round-trip: `\b`, `\f`, and every remaining control
+character (`\xNN`). So the round-trip-vs-diagnostic question is still open, but
+the gap is now narrow and specific rather than "the reader is much narrower".
+
+The tokenizer's stale diagnostic is a separate small bug: it should name `t`.
 
 ## Interaction with other tickets
 
