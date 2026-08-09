@@ -520,6 +520,8 @@ what each conversion *taught*, which a count cannot carry.
 | `DFloat` | leaf, but the two stacks format doubles by different code (`ppstate::write` vs `Prettifier<double>`); six values pinned, not one |
 | `DList` | deliberate divergence: legacy printed `(...)`, ppsink prints the elements structurally. Pinned in `xo-gc/utest/Object2.test.cpp` |
 | `DRuntimeError` | first `pretty_struct`; the divergence below |
+| `DArray` | first variable-arity sequence; `begin(1)` to align elements, see below |
+| `DDictionary` | keyed sequence; `DArray`'s framing plus a per-entry group so the value folds after the key, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -556,6 +558,175 @@ printer has structure. **Use a default-constructed `ppconfig` with
 `right_margin_` set** (`indent_width_ = 2`, matching `xo::pp::PpConfig`).
 `xo-object2`'s test now does; `xo-stringtable2`'s still says `ugly()` and should
 be changed if anything structured is ever added there.
+
+### The first sequence printer: what `DArray` settled (2026-08-09)
+
+`DArray` is the first printer whose arity is not fixed, so the margin decides
+both *whether* it breaks and *how many* elements share a line. Its ppsink form
+is `sink.put("[").begin(1)` / `split(1)` between elements /
+`sink.end().put("]")` — structurally `DList`, which landed earlier, with `[` `]`
+for `(` `)`, plus the `begin` offset below.
+
+Rendered through both protocols and observed
+(`xo-object2/utest/printable_render.test.cpp`, `s_array_v`):
+
+- **fits** (`[]`, `[1]`, `[1 2 3]` at margin 80) — identical.
+- **breaks** (`{100,200,300}` at margin 8, and again at 4) — both stacks align
+  elements 2..n under element 0, and reach that alignment differently:
+
+```
+legacy      ppsink
+[ 100       [100
+  200        200
+  300]       300]
+```
+
+**Legacy pads; ppsink offsets.** Legacy writes a space after the bracket
+(`pps->indent(std::max(pps->indent_width(), 1u) - 1)`, "indent, but credit
+initial `[`") so element 0 starts *at* the continuation indent of 2. ppsink's
+`begin(1)` credits the bracket in the indent itself, so element 0 follows `[`
+immediately and the continuation indent is 1 to match. Same alignment, one
+column narrower, and no padding whitespace in output that is otherwise
+whitespace-free.
+
+RC's call, 2026-08-09. **It makes `DArray` deliberately unlike
+`Prettifier<vector<T>>`**, which indents a broken sequence by a full nesting
+level — `"[1,\n  2,\n  3]"`, pinned in
+`xo-indentlog2/utest/PrettyVector.test.cpp`. Worth stating plainly because the
+first attempt here went the other way *on* that consistency argument: plain
+`begin()` reproduces the vector convention and drops the alignment legacy had.
+Alignment won. Anything reconciling the two later should change the vector
+prettifier, not `DArray`.
+
+Note `split(0)` is not the knob for this. `split(spaces, offset)` uses `spaces`
+only when the group *fits*, so `split(0)` would render `[123]` on one line while
+leaving the break indent untouched. `split(1, -1)` would also align, but sets
+the offset once per separator instead of once per group.
+
+Margin 4 renders the same as margin 8 — an element wider than the margin has no
+further recourse — which is worth pinning precisely because it is the case where
+a line-breaker might instead degenerate.
+
+**A flat sequence cannot check the thing most likely to be wrong.** Every case
+above passes whether the offset composes with the enclosing indent or replaces
+it, because there is only one level. So `DArray-render-nested` renders
+`[[100 200] [300]]` at margins 80 / 12 / 6: at 12 the outer breaks and the inner
+arrays stay flat, aligned at column 1; at 6 both break and the inner elements
+land at column 2, under an inner `[` that is itself at column 1. That last
+number is the one that distinguishes composing from resetting.
+
+Mutation-checked three ways, since green proves nothing until the comparison is
+shown to discriminate: widening `split(1)` to `split(2)`, deleting the
+`begin()`/`end()` pair, and dropping the `begin` offset back to `begin()` each
+fail both test cases.
+
+### `DDictionary`: the entry is a group, and the key's width stops mattering (2026-08-09)
+
+`DDictionary` keeps the `DArray` framing — `put("{").begin(1)`, `split(1)`
+between entries, `end().put("}")` — and adds one thing `DArray` had no need
+for: **each entry is its own group**, with a fold point after the colon.
+
+```cpp
+sink.begin(1);
+sink.pp(key);
+sink.put(":");
+sink.split(1);          // fits -> "k: v";  breaks -> value on its own line
+sink.pp(value);
+sink.put(";");
+sink.end();
+```
+
+The `;` **terminates** rather than separates, so the last entry carries one too;
+that is legacy's shape and it was kept.
+
+The first attempt wrote `put(": ")` and no entry group. RC rejected it: *"if
+`{a: 1; b: 2;}` doesn't fit on one line, then the tag `k:` should be folding …
+after all, instead of being `k`, the attribute name could have been
+`keep_going_until_you_get_very_close_to_the_right_margin`."* Exactly so — with
+the value starting inline, its every subsequent line is positioned by an
+accident of how long the key was. Two consequences worth stating separately:
+
+- The **group** is what makes the fold conditional. A bare `split` with no
+  `begin`/`end` around the entry inherits the *dictionary's* fit decision, so
+  every entry would break the moment the dictionary did.
+- `split(1)` rather than `put(": ")` costs nothing when the entry fits — it
+  emits the same single space — so no fitting rendering changed.
+
+Observed (`s_dict_v`, `DDictionary-render-nested`), never predicted:
+
+| | legacy | ppsink |
+|---|---|---|
+| empty | `{ }` | `{}` |
+| fits | `{ a: 1; bb: 22; }` | `{a: 1; bb: 22;}` |
+| dict breaks, entries fit | `{ a: 1;`<br>`  bb: 22; }` | `{a: 1;`<br>` bb: 22;}` |
+| entry breaks too (margin 4) | *unchanged* | `{a:`<br>`  1;`<br>` bb:`<br>`  22;}` |
+
+The first three rows are the padding-vs-offset divergence `DArray` already
+settled. The fourth is new, and is the first place a **ppsink printer has
+recourse legacy does not**: legacy has no break point after a key, so it stops
+degrading while ppsink keeps going. Same story with a wide key at margin 30 —
+legacy emits a 41-column line; ppsink folds.
+
+Nested, `{k: {a: 1; b: 2;}; n: 3;}`:
+
+margin 16, ppsink — the entry folds, and the inner dictionary then fits:
+
+```
+{k:
+  {a: 1; b: 2;};
+ n: 3;}
+```
+
+margin 10, ppsink — the inner dictionary breaks as well:
+
+```
+{k:
+  {a: 1;
+   b: 2;};
+ n: 3;}
+```
+
+legacy, at **both** margins — identical, because it cannot fold after `k:` and
+so has nothing left to give:
+
+```
+{ k: { a: 1;
+       b: 2; };
+  n: 3; }
+```
+
+Legacy is *identical* at 16 and 10 — no recourse — while ppsink folds the entry
+at 16 and then breaks the inner dictionary at 10. The inner dictionary opens at
+the running indent (2), so its own `begin(1)` puts its entries at 3: the offset
+**composes** with the enclosing indent rather than resetting. That is the
+assertion a flat dictionary cannot make, and the reason for a nested test here
+as for `DArray`.
+
+Note what folding also bought: because the value always starts at
+`entry-indent + 1`, the question of aligning a continuation to a *column* never
+arises for a dictionary. `PpSink` has no column-relative group — `begin(offset)`
+is defined against the running indent (`PpSink.hpp:166-170`), `lpos()` reports a
+column but the running indent is not exposed, and `FlatSink::lpos()` is
+`nullopt` — and with the fold in place it does not need one.
+
+**Out of scope, RC's call:** the more readable style is the one that lets nested
+content flow on past the key and wrap liberally, rather than folding as soon as
+it will not fit. That needs three layout choices per group (fit / flow / break)
+where the sink has two. Not now.
+
+Mutation-checked five ways: outer `split(1)`→`split(2)`, outer
+`begin(1)`→`begin()`, dropping the outer `begin`/`end`, dropping the **entry**
+`begin`/`end`, and replacing `put(":")`+`split(1)` with `put(": ")` — each fails
+both test cases.
+
+`DStruct` (`xo-object2/include/xo/object2/DStruct.hpp:144`) still carries a stub
+and always will: it is a dead skeleton. Nothing in the tree references it, it
+has no `.cpp` (no member is defined anywhere, `pretty_deprecated` included), it
+is in no `CMakeLists.txt`, it has no facet impls and no `Printable.json5` entry,
+and the header does not even compile — it still includes the v1 `xo/gc/
+Collector.hpp`, which is not on xo-object2's include path. Phase B stubbed it by
+pattern-matching `pretty_deprecated`. Skipped, with RC's agreement; the stub
+count therefore has a floor of 1 in xo-object2.
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 

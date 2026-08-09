@@ -1,6 +1,6 @@
 # 01 — utest mains: replace the static-initializer trick with an explicit `main()`
 
-Status: open
+Status: six of seven converted 2026-08-09; open only on the xo-ppsink decision
 Type: refactor
 Progress: grep -rl 's_plain_pp_style' --include=*utest_main*.cpp xo-*/ | grep -v '/\.build/' | wc -l
 
@@ -135,10 +135,95 @@ done
 
 Three already reach xo-testutil transitively. Three do not and would gain a
 **test-only** dependency — `xo_dependency(${UTEST_EXE} xo_testutil)` in the
-utest CMakeLists, as `xo-alloc2/utest/CMakeLists.txt` does. Worth confirming
-that a utest-only dependency does not have to be added to `subsystem-edges`
-(xo-alloc2 links xo_testutil in its utest; check whether its edge list says so)
-before assuming it is free.
+utest CMakeLists, as `xo-alloc2/utest/CMakeLists.txt` does.
+
+### Answered 2026-08-09: the utest-only dependency IS a subsystem edge
+
+It is not free. `xo_dependency()` records an edge for
+`xo_emit_dependency_edges()` regardless of whether the target is a library or a
+test executable (`xo-cmake/cmake/xo_macros/xo_cxx.cmake:1571`), so the edge
+appears in the build-generated list. That is why the checked-in file already
+carries xo-alloc2's:
+
+```bash
+grep -n '^xo-testutil ' xo-cmake/etc/xo/subsystem-edges
+#   174:xo-testutil xo-alloc2
+#   175:xo-testutil xo-indentlog2
+```
+
+It is nevertheless safe, because xo-testutil is close to the bottom of the
+graph and none of the six is upstream of it:
+
+```bash
+xo-deps --deps-of=xo-testutil --format=names -q
+#   xo-ppsink  xo-subsys  xo-testutil  xo-timeutil
+for s in xo-ratio xo-reflect xo-webutil; do xo-deps --why=xo-testutil:$s -q || echo "no path: $s"; done
+#   no path: xo-ratio / xo-reflect / xo-webutil
+```
+
+No cycle is possible for any of the six. **This does not generalise** — a
+subsystem that xo-testutil itself depends on (xo-ppsink, xo-subsys, xo-timeutil)
+cannot take this dependency, which is the same constraint that makes xo-ppsink
+the odd one out below.
+
+**Consequence: `xo-cmake/etc/xo/subsystem-edges` now lags the generated list.**
+The checked-in copy is published by hand, and neither 525b1ca3 nor the
+2026-08-09 conversions re-published it:
+
+```bash
+diff <(sort .build/subsystem-edges) <(sort xo-cmake/etc/xo/subsystem-edges)
+#   only-in-generated: xo-testutil {xo-alloc, xo-expression, xo-interpreter,
+#                                   xo-ratio, xo-reflect, xo-webutil,
+#                                   xo-object2, xo-stringtable2}
+#                      xo-indentlog2 {xo-gc, xo-object, xo-object2, xo-stringtable2}
+```
+
+Republish with `./reconfigure --capture-subsystem-edges` (the message
+`xo_emit_dependency_edges: complete` in the configure output is the signal that
+the capture would be whole rather than partial). Not done here: it rewrites
+edges unrelated to this ticket, so it wants to be its own commit.
+
+## Done 2026-08-09: six of seven
+
+| subsystem | commit |
+|---|---|
+| xo-alloc | `525b1ca3` xo-alloc: use xo-testutil utest setup [REFACTOR] |
+| xo-expression, xo-interpreter, xo-ratio, xo-reflect, xo-webutil | uncommitted at time of writing |
+
+Each is the `xo-indentlog2/utest/indentlog2_utest_main.cpp` shape verbatim —
+`CATCH_CONFIG_EXTERNAL_INTERFACES`, `CATCH_REGISTER_LISTENER(UtestListener)`,
+own `main()` with `PpStyle::default_style() = PpStyle::plain()` as its first
+statement — plus one `xo_dependency(<utest-exe> xo_testutil)` line each.
+
+Verified, not assumed. An empty catch2 registry is the exact failure this
+pattern risks (see the `CATCH_CONFIG_RUNNER` note above), and it exits 0 —
+another instance of absence looking like success — so the test counts were read
+rather than the sweep's `ok` taken at face value:
+
+```bash
+xo-build -q -k --utest xo-expression xo-interpreter xo-ratio xo-reflect xo-webutil
+#   all five ok
+for s in expression interpreter ratio reflect webutil; do $(find xo-$s/.build -name utest.$s -type f) | tail -2 | head -1; done
+#   42 assertions in 6 test cases    (expression)
+#   46 assertions in 3 test cases    (interpreter)
+#   4099 assertions in 8 test cases  (ratio)
+#   172 assertions in 15 test cases  (reflect)
+#   12 assertions in 6 test cases    (webutil)
+xo-reflect/.build/utest/utest.reflect --announce | head -1
+#   Starting unit test: [struct-reflect-empty] at [.../StructReflector.test.cpp:24]
+```
+
+The `--announce` line is the check that the *listener* registered, which is new
+behaviour these binaries did not have before; the assertion counts are the check
+that the registry is not empty. That the rendering tests (`pretty.test.cpp`,
+`ratio_pp.test.cpp`, `TypeDescr_pp.test.cpp`, `EndpointDescr.test.cpp`) still
+pass is the check that `plain()` is still installed early enough.
+
+Full sweep unchanged: 61 subsystems, 34 ok / 26 no-tests / 1 failed (xo-jit).
+
+**Loose end from 525b1ca3:** `xo-alloc/utest/alloc_utest_main.cpp` opens
+`@file indentlog2_utest_main.cpp` — copy-paste from the file it was modelled on.
+One line, wrong in a way `grep` for a filename will believe.
 
 ## Scope note
 
@@ -159,9 +244,15 @@ obscure idiom where it exists, not uniformity for its own sake.
   set it
 
 **Done when:**
-- the `Progress:` count is 0 for the six, each setting the style as a statement
-  in its own `main()`
-- xo-ppsink has an explicit decision recorded here, whichever way it goes
+- ~~the `Progress:` count is 0 for the six~~ — done 2026-08-09; the count is
+  now **1**, and the one left is xo-ppsink
+- xo-ppsink has an explicit decision recorded here, whichever way it goes.
+  Now the *only* thing standing between this ticket and closed. The evidence
+  above sharpens it: a utest-only `xo_dependency` is a real edge, and xo-ppsink
+  is upstream of xo-testutil, so adopting the pattern there would close a cycle
+  in the generated graph — not merely look like one. Either xo-ppsink keeps the
+  initializer with a comment saying why, or the style-setting moves somewhere
+  that does not need xo-testutil.
 - the full sweep is unchanged: `xo-build -q -k --utest $SUBS` still gives
   34 ok / 26 no-tests / 1 failed (xo-jit)
 
