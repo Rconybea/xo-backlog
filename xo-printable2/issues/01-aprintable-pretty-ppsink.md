@@ -410,6 +410,99 @@ Any later pass over these declarations must accept both forms. Recovery was
 free only because the insertion script was idempotent — re-running it on the
 four inserted exactly four and left the other 51 untouched.
 
+## Phase C: the per-printer cycle (established 2026-08-09)
+
+RC's workflow: **introduce printers one at a time, bottom-up, and stop to
+review after each.** Rendering differences need reviewing individually, so
+roughly 55 commits. The harness's job is therefore to *surface* differences for
+judgement, not to force equality — where old and new disagree, that is a
+decision, not a test failure to be silenced.
+
+### The cycle
+
+```cpp
+render_deprecated(x, margin)  // toppstr2(ppconfig{margin}, x)
+                              //   -> ppdetail<obj<APrintable,D>> -> pretty_deprecated
+render_pretty(x, margin)      // toppstr(PpConfig{margin}, x)
+                              //   -> Prettifier<obj<APrintable,D>> -> pretty
+
+REQUIRE(modern == legacy);         // differential -- SCAFFOLDING, dies at phase E
+REQUIRE(modern == tc.expected_);   // absolute    -- the coverage that SURVIVES
+```
+
+**Margin is the case variable**, in the schedule style
+(`Testcase_Render`/`s_testcase_v`/indexed loop with `INFO`): it is what makes
+the two protocols disagree if they are going to.
+
+Worked example: `xo-stringtable2/utest/printable_render.test.cpp`.
+
+### BOTH assertions are required, and the second is the point
+
+A purely differential test is scaffolding. It cannot survive phase E — deleting
+`pretty_deprecated` removes the thing it compares against — so a cycle that
+only ever asserts `modern == legacy` ends with 55 tests to delete and **no
+coverage gained**.
+
+This ticket's author wrote exactly that on the first attempt, having already
+argued the opposite, and it was caught only because RC asked. Every printer's
+test must pin its **observed** output as a literal, so that when the legacy half
+goes away the expectation remains.
+
+There is currently **no test anywhere that renders any of these 55 types**, so
+phase C is first-time coverage, not overhead on the way to a refactor. That is
+the strongest reason to do it per-printer rather than in bulk.
+
+### Infrastructure this needed
+
+- **`xo::pp::toppstr`** — `.xo-backlog/xo-indentlog2/issues/01`. The
+  new-protocol render. Did not exist; 23 files hand-rolled it.
+- **`Prettifier<obj<APrintable, DRepr>>`** —
+  `xo-printable2/include/xo/printable2/detail/pretty_Printable.hpp`, wired in
+  via `user_hpp_includes`. The exact ppsink mirror of the existing
+  `ppdetail_Printable.hpp`. Without it `toppstr(cfg, x)` falls through
+  Prettifier's empty primary template to `operator<<`, and the differential test
+  compares two wrong things while passing. Safe to add when it was added
+  because nothing rendered a printable obj through a ppsink yet — check that
+  again if it is ever reintroduced elsewhere.
+
+### Mutation-check each printer
+
+Green proves nothing here until the comparison is shown to discriminate: both
+sides could be falling through to the same fallback. Break the new `pretty()`,
+confirm the test fails, revert. Doing this for `DString` also demonstrated
+`DUniqueString`'s delegation chain was live rather than accidentally passing.
+
+### Done so far
+
+| type | notes |
+|---|---|
+| `DString` | `sink.pp(&chars_[0])` — `ppdetail_atomic` is a bare `pps()->write(x)`, a leaf with no quoting or framing |
+| `DUniqueString` | pure delegation, as the deprecated form was |
+
+Both **degenerate**: an atomic leaf has no break points, so they render
+identically at every margin, even margin 4 against 17 characters of content.
+They establish the cycle; they do not stress it. **Whether the two protocols
+agree on WHERE to break is still unknown** and arrives with the first
+structured printer.
+
+## Phase E checklist — things to delete, not just `pretty_deprecated`
+
+Recorded as they accumulate, because each is easy to leave behind:
+
+- `pretty_deprecated` from `xo-printable2/idl/Printable.json5`, then regenerate
+- the 55 hand-written `pretty_deprecated` implementations
+- **`render_deprecated()` from every phase C test**, and with it the
+  `REQUIRE(modern == legacy)` line — the absolute assertion is what remains
+- the `#include <xo/indentlog/print/ppstr.hpp>` those tests carry for
+  `toppstr2`, which is the last xo-indentlog dependency in the cluster's tests
+- `xo-printable2/include/xo/printable2/detail/ppdetail_Printable.hpp` and its
+  entry in `user_hpp_includes`
+- `<xo/indentlog/print/ppindentinfo.hpp>` from the IDL's `includes:`, and the
+  `ppindentinfo` entry from its `types:`
+
+Only after all of that does `xo-deps --why=xo-printable2:xo-indentlog` return
+rc=1, which is the milestone's actual goal.
+
 ### Regeneration is manual, and its output is committed
 
 ```bash
