@@ -93,9 +93,36 @@ plausible and none has been thought through.
   A double formatter should not reintroduce `<ostream>` into the hot path;
   `std::to_chars` handles floating point in C++17 onward.
 
+## The wrapper precedent is not hypothetical: legacy `fixed`
+
+`xo-indentlog/print/fixed.hpp` already is the wrapper answer for this exact
+case -- `fixed(x, prec)` renders a double at a given precision. Its
+implementation is also evidence for the design direction:
+
+```cpp
+std::ios::fmtflags orig_flags = s.flags();
+std::streamsize    orig_p     = s.precision();
+s.flags(std::ios::fixed);
+s.precision(fx.prec_);
+s << fx.x_;
+s.flags(orig_flags);
+s.precision(orig_p);
+```
+
+Six lines of save/set/restore, purely to stop one value's formatting leaking
+into a shared stream. **Legacy did not use ambient stream state; it defended
+against it.** So "the sink owns formatting" is not a departure from how xo
+worked -- it is what xo was already doing the hard way.
+
+`fixed` has zero real consumers and was missing from the facility inventory
+until 2026-08-09; now recorded in
+`.xo-backlog/xo-ppsink/issues/02-facility-gaps.md`. Whether ppsink wants a
+`fixed` equivalent is part of THIS ticket's decision, since a wrapper and a
+context are alternative answers to the same question.
+
 ## A prerequisite that is worth doing regardless
 
-**Write `Prettifier<double>`.** Independent of any context design, doubles
+**~~Write `Prettifier<double>`~~ — done 2026-08-09.** Independent of any context design, doubles
 should not be rendering through an accidental fallback. Doing it alone would:
 
 - make the current behaviour a choice rather than an inheritance
@@ -104,9 +131,20 @@ should not be rendering through an accidental fallback. Doing it alone would:
   rendering in xo — `xo-object2/utest/printable_render.test.cpp` already pins
   six values for exactly this reason
 
-Whether it should preserve `0.333333` or pick something better is itself a
-decision, and one worth taking deliberately rather than by writing the
-specialization carelessly.
+It preserves `0.333333`: `std::to_chars` with `chars_format::general` and
+precision 6 is exactly `%.6g`, hence exactly what ostream produced. NB **not**
+to_chars' no-precision overload, which gives the shortest round-trip form
+(`0.3333333333333333`) and would have changed every float rendering in xo.
+Full sweep confirms the tree is unchanged.
+
+Whether 6 significant digits is the RIGHT default is still open, and is now a
+one-line change in one place (`c_default_float_precision`) rather than a
+property inherited from `<ostream>`.
+
+`Prettifier<double>::print(PpSink & sink, double x)` already receives the sink,
+so a nested context can be reached through it without changing the signature --
+RC's point, and the reason this was worth doing before the context design
+rather than after.
 
 **Files:**
 - `xo-ppsink/include/xo/ppsink/Prettifier.hpp` — the empty primary template and

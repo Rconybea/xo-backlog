@@ -90,6 +90,41 @@ default — `2022-09-26 09:30:00.123456000`, which embeds a space and therefore
 does not read back as a single token. Use `pp_to_stream()` or an explicit
 wrapper.
 
+### Missing from this inventory until 2026-08-09: `print/fixed.hpp`
+
+`xo::fixed(x, prec)` -- a value wrapper rendering a double at a given
+precision. Not listed above, in either the unported or the ported table, though
+this ticket exists to be a complete inventory.
+
+**Zero real consumers**, so it never blocked anything, which is presumably why
+nothing surfaced it:
+
+```bash
+grep -rln 'print/fixed.hpp' xo-*/ --include=*.hpp --include=*.cpp | grep -v '/\.build/'
+#   xo-indentlog/utest/fixed.test.cpp    -- its own test, excluded by this
+#                                           ticket's "real consumers" rule
+```
+
+It is worth recording anyway, for two reasons.
+
+**It is the existing precedent for float formatting control.** The
+implementation saves `flags()`/`precision()`, sets its own, prints, restores --
+i.e. legacy already treated ambient stream state as something to defend against
+rather than use. That bears directly on
+`.xo-backlog/xo-ppsink/issues/07-nested-formatting-context.md`, where the
+question is whether formatting should be controlled by value wrappers or by a
+nested context: `fixed` is proof the wrapper approach was already in use for
+precisely this case.
+
+**A gap with no consumers is exactly what an inventory is for.** The whole
+point of this ticket is that `hex_view` was discovered missing only after work
+had been scoped. A facility with no users today is the one most likely to be
+missed when a consumer appears.
+
+Whether it wants porting at all is open --
+`Prettifier<double>` (added 2026-08-09) now owns the default, so a ppsink
+`fixed` would be an override of that default, and issue 07 may subsume it.
+
 ## Deliberately absent, not a gap
 
 - **`ppindentinfo.hpp`** — the legacy two-pass `upto()` fit protocol. ppsink's
