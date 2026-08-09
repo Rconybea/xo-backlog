@@ -32,19 +32,50 @@ designed to prevent (`.xo-backlog/xo-cmake/issues/01`), reappearing one level
 up: not "a failure looks like a success", but "a partial run looks like a full
 one".
 
-## Proposal
+## Design (settled with RC, 2026-08-08)
 
-`-k | --keep-going`, for `--utest` at least: run every named subsystem, report
-per-subsystem status, exit non-zero if any failed.
+`-k | --keep-going`, an opt-in flag, matching `make -k`: continue with work
+that does not depend on what failed.
 
-Fail-fast is right for `--configure/--build/--install` — subsystems are built in
-dependency order, so failures after the first are mostly noise. It is wrong for
-`--utest`, where the point is a survey and every subsystem is independent.
+**Build phases (`--configure` / `--build` / `--install`) prune by dependency.**
+When subsystem `foo` fails, drop every remaining subsystem downstream of it —
+they cannot build against a broken dependency, and their failures would be
+cascade noise. One call per failure:
 
-Worth deciding whether `-k` should be the default for `--utest` rather than a
-flag. The argument for: nobody running tests over a list wants to be told about
-only the first failure. The argument against: consistency with the other
-phases, and a single-subsystem invocation is unaffected either way.
+```bash
+xo-deps --users-of=foo --format=names -q      # foo, plus everything downstream
+```
+
+**`--utest` continues unconditionally, with no pruning.** A test failure does
+not invalidate a dependent's tests: the dependent built fine, and its tests
+exercise different code. Pruning there would discard real signal — and would
+defeat the case that motivated this ticket, since `xo-jit`'s tests fail
+permanently and everything downstream of it should still be surveyed.
+
+One sentence for the asymmetry, if it needs defending later: **a build failure
+invalidates dependents; a test failure does not.**
+
+### Details that are easy to get wrong
+
+- **`-q`, not `2>/dev/null`, on the `xo-deps` call.** Exit 2 is "no such
+  subsystem"; with stderr hidden it is indistinguishable from exit 1, "nothing
+  depends on foo". The pruning would then silently *under*-skip and run
+  dependents against a broken dependency. Treat any non-zero `xo-deps` exit as
+  "do not prune" — fail toward attempting too much, since that surfaces as
+  ordinary build errors rather than as a quiet gap. Same trap CONVENTIONS.md
+  records for the `--why` loop.
+- **`--users-of`, not `--why`.** `--why=X:Y` exists and answers exactly the
+  path question, but it answers it for ONE pair; pruning needs the whole
+  downstream set, so `--users-of` is one call per failure where `--why` would
+  be one per remaining candidate per failure.
+- **A skipped subsystem must not read as passed.** The summary has to
+  distinguish `ok` / `FAILED` / `skipped (depends on foo)`. Reporting only
+  failures would recreate this ticket's own complaint one level down: a partial
+  run looking like a full one.
+- **Ordering.** `xonames` is rebuilt bottom-up only on the `--with-deps` /
+  `--all` paths; an explicit list is taken as given. The skip set must
+  therefore be consulted at the top of the loop rather than assumed to be
+  forward-only, so a list in arbitrary order still behaves.
 
 **Output volume needs a thought.** On failure `--utest` re-runs with
 `--rerun-failed --output-on-failure` and that output goes straight to the
@@ -94,10 +125,26 @@ loop, the redirect, and the rule all become unnecessary together.
   `xo-build` lines with no shell loop once this lands
 
 **Done when:**
-- `xo-build --utest a b c` runs all three even when `a` fails, and exits
+- `xo-build -k --utest a b c` runs all three even when `a` fails, and exits
   non-zero
+- `xo-build -k --build a b c`, with `b` downstream of a failing `a`, skips `b`
+  and still attempts an independent `c`
+- skipped subsystems are reported as skipped, naming what they were skipped for
 - the summary survives being read after several failures
 - CONVENTIONS.md's verification recipe contains no hand-written `ctest` loop
+
+### Where the change goes
+
+The loop and the per-subsystem status line already exist — ticket 01 added
+them. Fail-fast comes from exactly two hard exits:
+
+- `run_phase()` in `xo-cmake/bin/xo-build.in` — covers configure/build/install
+- the inline `exit 1` in the `--utest` block
+
+Under `-k`, `run_phase` returns the code instead of exiting; its call sites sit
+directly in the per-subsystem loop body, so they can `continue` to skip that
+subsystem's remaining phases. Failures accumulate; the summary and the non-zero
+exit come after the loop.
 
 ## Notes
 
