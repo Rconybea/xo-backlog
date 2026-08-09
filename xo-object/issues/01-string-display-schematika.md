@@ -89,12 +89,20 @@ The tokenizer's stale diagnostic is a separate small bug: it should name `t`.
 
 - `.xo-backlog/xo-ppsink/issues/04` — adding `\t` narrows the gap but does not
   close it; `\xNN` still is not Schematika syntax.
-- `.xo-backlog/xo-alloc/issues/01` — `display()` becomes `pretty(PpSink&)` across
-  the Object hierarchy. **Sequence that first**, or this rendering gets written
-  twice. Whatever escape policy is chosen should land in the `pretty()` body.
+- `.xo-backlog/xo-alloc/issues/01` — **DONE 2026-08-08.** This ticket's
+  prerequisite is cleared: `display()` is gone from the Object hierarchy, and
+  the rendering now lives in `String::pretty(PpSink&)`. It was converted
+  byte-identically on purpose, so the escape-policy question is untouched and
+  this ticket is now unblocked rather than partly done.
+
+  Whatever policy is chosen lands in that `pretty()` body — and it now has a
+  PpSink in hand, so a Schematika literal can be emitted as structure rather
+  than a pre-quoted string if that turns out to matter.
 
 **Files:**
-- `xo-object/src/object/String.cpp:127` — the rendering
+- `xo-object/src/object/String.cpp` — the rendering, now `String::pretty()`
+  (was `display()` at `:127`; the line moved during the conversion — do not
+  trust that number)
 - `xo-tokenizer/include/xo/tokenizer/tokenizer.hpp` — the reader's escape set,
   for the round-trip question
 - `xo-ppsink/include/xo/ppsink/escape.hpp` — what `quot` currently does

@@ -1,8 +1,159 @@
 # 01 — Object::display(std::ostream&) -> Object::pretty(PpSink&)
 
-Status: open
+Status: fixed 2026-08-08
 Type: task
 Milestone: ppsink-migration
+
+## Resolution (2026-08-08)
+
+`virtual void display(std::ostream&)` is gone from the `xo::gc::Object`
+hierarchy, replaced by `virtual void pretty(xo::pp::PpSink&)`. The inserter
+moved to an opt-in `xo-alloc/include/xo/alloc/alloc_ostream.hpp`, following
+`xo-webutil/include/xo/webutil/webutil_ostream.hpp`.
+
+Done as approach (b), bridged, in four commits-worth of steps, tree green
+throughout. The bridge went **one direction only** — `Object::pretty()`
+defaulted to `display()`, while `Object::display()` printed directly and never
+delegated back. That is what kept the two defaults from recursing for a
+subclass overriding neither, and it let unconverted subclasses keep rendering
+correctly while their subsystem waited its turn.
+
+### Scope, as built
+
+| subsystem | overrides converted |
+|---|---|
+| xo-object | 6 (List, Float, String, Integer, Boolean, Primitive) |
+| xo-interpreter | 4 (ExpressionBoxed, VsmStackFrame, GlobalEnv, LocalEnv) |
+| xo-alloc | 2 (Blob, Forwarding1) + 2 test-local subclasses |
+
+43 files across **four** subrepos: the three above plus xo-ordinaltree. See the
+correction below — the fourth was not predicted.
+
+### Rendered output is unchanged, and that is checked
+
+Baselines were captured BEFORE any production change, and still pass unaltered:
+
+- `xo-object/utest/display_baseline.test.cpp` — Integer, Float, String,
+  Boolean, List (incl. nested and mixed-type)
+- `xo-alloc/utest/display_baseline.test.cpp` — Blob, Forwarding1
+- `xo-interpreter/utest/display_baseline.test.cpp` — LocalEnv
+
+Each baseline file was mutation-checked (deliberately break one expectation,
+watch it fail, revert) so it cannot be passing vacuously.
+
+`GlobalEnv`, `VsmStackFrame` and `ExpressionBoxed` are NOT pinned — they need
+fixtures (a `GlobalSymtab`, a `VsmInstr*`) that the utest has no cheap way to
+build. Said plainly in the test file rather than left looking like coverage.
+
+### What the conversion actually buys, also pinned
+
+`xo-alloc/utest/object_pretty.test.cpp` and
+`xo-object/utest/object_pretty.test.cpp` assert the thing flat output cannot
+show: a nested object participates in the enclosing structure's line breaking.
+Before, `gp<Object>` fell through `Prettifier`'s empty primary template to
+`operator<<`, arriving as ONE atomic token:
+
+```
+<outer
+  :b
+   <blob :z 64>>      <- could not break at any margin
+```
+
+`List` gained real breaking too: element separators are `sink.split(1)`, which
+renders as the old single space when flat.
+
+## Three things this ticket did not predict
+
+### 1. The Prettifier must cover the hierarchy, not just gp<Object>
+
+Written first as an exact `Prettifier<gp<Object>>`. The inserter it replaced
+took `gp<Object>` and accepted a `gp<Derived>` by **implicit conversion**;
+template argument matching grants no such conversion, so every derived type
+silently fell back to `operator<<`. Invisible until step 4 deleted that
+fallback, then surfaced as `gc_ptr<GlobalEnv>` failing inside `PpSink.hpp`.
+
+Correct form, now in `Object.hpp` with the reasoning beside it:
+
+```cpp
+template <typename T>
+    requires std::derived_from<T, xo::Object>
+struct Prettifier<xo::gp<T>> { ... };
+```
+
+No test would have caught this: it is only observable once the fallback is
+gone.
+
+### 2. There are TWO mirrored base interfaces, and only one was converted
+
+`xo-ordinaltree`'s `RedBlackTree` picks its base from its allocator:
+
+- gc allocator → `xo::Object` (converted)
+- otherwise → `xo::gc::FallbackObjectInterface`
+  (`xo-allocutil/include/xo/allocutil/gc_allocator_traits.hpp:36`), which still
+  declares `virtual void display(std::ostream &) const {}`
+
+`RedBlackTree` overrides neither — the one under `#ifdef SET_ASIDE` is disabled
+— so its `operator<<` called whichever base it inherited. Resolved *without*
+converting the fallback, because xo-allocutil does not depend on xo-ppsink and
+mirroring `pretty()` there would create a new `xo-allocutil -> xo-ppsink` edge:
+that is a design decision, not a refactor detail. Instead the inserter detects
+which base the instantiation has, by expression validity rather than by naming
+either base (`RedBlackTree.hpp`, `if constexpr (requires ...)`).
+
+**So display() is NOT retired tree-wide.** `FallbackObjectInterface` still has
+it. Whether xo-allocutil should take a ppsink dependency is left open.
+
+### 3. The blast radius was callers, not overrides
+
+The 2026-08-08 re-measurement in this ticket ("12 overrides across 3 built
+subsystems") is correct **about overrides** and was wrong as a statement about
+what the change touches. It was arrived at by grepping three subsystem
+directories, which cannot see a caller of an INHERITED method in a fourth.
+
+The audit that works here is the build, not grep: deleting the base method
+turns every stale caller into a compile error. `xo-ordinaltree` surfaced that
+way, as did five call sites needing the new ostream header —
+`xo-object/utest/{Boolean,Integer,List,String}.test.cpp` and
+`xo-interpreter/src/interpreter/Schematika.cpp` — where this ticket predicted
+only `List.test.cpp`.
+
+Generalising, and it is the same lesson as `xo-ppsink/issues/02`: **an
+enumeration of definitions is not a measurement of impact.**
+
+## Verified
+
+```bash
+SUBS=$(xo-build --list | tr ' ' '\n' | grep '^xo-' \
+       | while read s; do [ -f "$s/CMakeLists.txt" ] && echo "$s"; done)
+xo-build -q --configure --with-utests --with-examples --build --install $SUBS
+for s in $SUBS; do ctest --test-dir $s/.build; done
+```
+
+61 subsystems build clean; 34 suites pass, 1 fails — `xo-jit machpipeline.fptr`,
+the documented pre-existing failure (`.xo-backlog/xo-jit/issues/01`).
+
+NB when scripting that sweep, do not read the build's status out of `$?` after
+a pipe into `grep` — that reports grep's exit, and a failing build reads as
+success. It briefly did here.
+
+```bash
+nix-build ci.nix -A xo-object --no-out-link    # exit 0
+```
+
+That one earns its keep for this ticket specifically: step 4 changed xo-alloc's
+public header surface (`operator<<` left `Object.hpp` for `alloc_ostream.hpp`),
+and nix is the only check that exercises an installed package config the way a
+real consumer would.
+
+## Follow-ons, not filed
+
+- `xo-interpreter/src/interpreter/Schematika.cpp` — the REPL prints results with
+  `cout << value << endl` and already holds a `PrettySink` (there is a
+  commented-out `pps.pretty(value)` beside it). Rendering results through that
+  sink would give the REPL line-broken output. Deliberately not done here: this
+  conversion was to leave rendered output unchanged.
+- `FallbackObjectInterface::display` — see 2 above.
+- `GlobalEnv` / `VsmStackFrame` / `ExpressionBoxed` baselines — see above.
 
 Deferred out of the xo-object ppsink migration (2026-08-07), which was scoped to
 the plain indentlog->ppsink swap. This is the follow-on API change, and it is
