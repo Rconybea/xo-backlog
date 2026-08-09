@@ -124,13 +124,46 @@ incremental; without it, phases B and C are a single 54-type flag day.
 subsystem, and each is independently verifiable — a stubbed type renders
 nothing, so a baseline diff shows exactly which types are still pending.
 
-Whether the stub can instead *bridge* to `pretty_deprecated`, making phase C
-purely additive, is **unverified**: `ppindentinfo` is a two-pass fit/emit
-protocol and `PpSink` is single-pass, and
-`.xo-backlog/xo-expression/issues/01` found the two-pass bodies were the hard
-part of the pilot rather than something mechanically wrappable. Worth
-establishing before phase B, since it decides whether the intermediate state
-renders correctly or renders nothing.
+### The stub cannot bridge to pretty_deprecated — settled 2026-08-09
+
+Asked whether phase B's stub could delegate to the legacy method, so the
+intermediate state would render correctly. **It cannot**, and the reason is
+structural rather than awkward. `ppindentinfo` carries:
+
+```cpp
+/* xo-indentlog/include/xo/indentlog/print/ppindentinfo.hpp */
+ppstate *      pps_;    /* legacy xo-indentlog pretty state (flyweight) */
+std::uint32_t  ci0_;    /* current indent column */
+std::uint32_t  ci1_;    /* ci0 + one indent level */
+bool           upto_;   /* true: fit on remainder of line; false: break */
+```
+
+Three of the four cannot be supplied from a `PpSink`:
+
+- **`ppstate *`** is xo-indentlog's own state, and a PpSink has none —
+  xo-ppsink is deliberately ostream-free and independent of xo-indentlog.
+  Manufacturing one reintroduces the stack this migration removes.
+- **`ci0_`/`ci1_`** are the caller's indent columns. Under PpSink, indentation
+  is the sink's internal business; `FlatSink` has no notion of it at all.
+- **`upto_`** *is* the two-pass protocol: legacy calls `pretty()` with
+  `upto=true` to ask "does this fit?", then again with `upto=false`. PpSink is
+  single-pass and resolves fitting afterwards from the token stream, so no
+  value of `upto` carries the intended meaning.
+
+The bridge would have to reconstruct precisely the state the new design exists
+to eliminate. (RC's judgement, confirmed against the header.)
+
+**So phase B's stubs render nothing**, and the baseline diff is how phase C is
+steered: a stubbed type shows as missing output, which makes "what is still
+pending" observable rather than tracked by hand.
+
+**The bridge does invert, though**, and that is worth using. Implementing
+`pretty_deprecated(ppindentinfo)` in terms of `pretty(PpSink&)` is at least
+plausible — render into a sink, measure the width, answer the fit question —
+because it consumes single-pass output rather than manufacturing two-pass
+state. Unverified, but if it holds, a converted type's legacy method becomes a
+delegate rather than a maintained duplicate, and phases D and E get much
+cheaper: no window in which both implementations must be kept correct by hand.
 
 ### Regeneration is manual, and its output is committed
 
