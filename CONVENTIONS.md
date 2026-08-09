@@ -76,7 +76,31 @@ work remains:
 `xo-imgui/issues/01` read `Status: open` above a confidently wrong diagnosis.
 `hypothesised` would have flagged it as needing the check.
 
-### 5. Record corrected diagnoses, don't overwrite them
+### 5. A ticket carries the MEANS of counting, never the count
+
+A ticket whose work is "N of M things converted" may declare how to count what
+is left:
+
+```
+Progress: grep -rl 'PHASE B STUB' --include=*.hpp xo-*/ | grep -v '/\.build/' | wc -l
+```
+
+`xo-sdlc --tickets --progress` runs it (from `XO_UMBRELLA2`) and shows
+`[N left]` beside the ticket. Off by default: it executes shell read from the
+ticket, and a tree-wide command per ticket is not free.
+
+The command must print a **count of remaining items** — lower is better. A
+failing, empty or non-numeric result shows `[progress?]`, never `0`, because a
+silent zero reads as "done".
+
+**Do not write the number into the ticket.** `xo-printable2/issues/01` carried a
+per-subsystem table of counts, correctly annotated "re-run the grep rather than
+trusting them", and it was wrong within hours — 55 in the table, 51 in the tree.
+This is the same reasoning that makes milestone membership a query over
+`Milestone:` lines rather than a hand-kept list (see rule 2): a written count
+decays, a command cannot.
+
+### 6. Record corrected diagnoses, don't overwrite them
 
 When a ticket's diagnosis turns out wrong, say so in the ticket and keep the
 wrong reading with a note on why it was plausible. The next person will reach

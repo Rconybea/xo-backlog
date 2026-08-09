@@ -1,7 +1,42 @@
 # 04 — `Progress:` line: let a ticket say how to count its own remaining work
 
-Status: open
+Status: fixed 2026-08-09
 Type: feature
+
+## Resolution (2026-08-09)
+
+Implemented as `--progress`, in **`~/proj/xo-sdlc/bin/xo-sdlc.in`** — note the
+Files section below originally said `xo-cmake/bin/xo-sdlc.in`, which was wrong:
+xo-sdlc lives in its own repo.
+
+```
+$ xo-sdlc --tickets --progress
+xo-printable2/issues/01-...md   open   [50 left]   [ppsink-migration]
+```
+
+Decisions taken:
+
+- **Off by default.** `--tickets` is used casually and must not run shell read
+  from a file, nor pay for a tree-wide command per ticket.
+- **Convention fixed rather than labelled**: the command prints a count of
+  REMAINING items, lower is better, displayed `[N left]`. A per-ticket label
+  was considered and dropped as unnecessary complexity for the first cut.
+- **Runs from `XO_UMBRELLA2`**, so ticket commands are written tree-relative.
+- **Failure is never zero.** A non-zero exit, empty output, or non-numeric
+  output all report `[progress?]`. Verified against all three:
+
+```bash
+Progress: ... ; false          -> [progress?]
+Progress: echo not-a-number    -> [progress?]
+Progress: true                 -> [progress?]
+```
+
+  A genuine zero reads `[0 left]`, which is visibly distinct. This mattered
+  enough to test explicitly: a silent 0 reads as "done", the same defect as
+  ctest exiting 0 having run no tests (`.xo-backlog/xo-cmake/issues/03`).
+
+Proven live: converting `DBoolean` took the count from 51 to 50 with no ticket
+edit at all.
 
 `xo-sdlc --tickets` shows a ticket's `Status:` and `Milestone:`, which is the
 right granularity for most tickets. It has nothing to say about a ticket whose
@@ -75,18 +110,21 @@ a count or keep one in prose:
   ctest exiting 0 with no tests made 26 subsystems look like passes.
 
 **Files:**
-- `xo-cmake/bin/xo-sdlc.in` — `--tickets` at `:579`, `Status:`/`Milestone:`
-  parsing at `:477,483`
+- `~/proj/xo-sdlc/bin/xo-sdlc.in` — NOT xo-cmake; `ticket_progress()` beside
+  `tickets_list()`
 - `.xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md` — the first
   consumer; its query is at the "The work-list IS a query" section
 - `.xo-backlog/CONVENTIONS.md` — where the convention should be documented
   alongside `Status:` and `Milestone:`
 
 **Done when:**
-- a ticket carrying a `Progress:` line shows its count in `xo-sdlc`
-- tickets without one are unaffected and cost nothing
-- a failing or unparseable command is visibly distinct from zero remaining
-- the convention is recorded in CONVENTIONS.md
+- ~~a ticket carrying a `Progress:` line shows its count in `xo-sdlc`~~ done
+- ~~tickets without one are unaffected and cost nothing~~ done — the function
+  returns immediately when no `Progress:` line is present, and nothing runs at
+  all without `--progress`
+- ~~a failing or unparseable command is visibly distinct from zero~~ done
+- ~~the convention is recorded in CONVENTIONS.md~~ done — rule 5, beside
+  `Status:` (rule 4) and the corrected-diagnoses rule (now 6)
 
 ## Notes
 

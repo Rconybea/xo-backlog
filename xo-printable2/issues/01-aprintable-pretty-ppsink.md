@@ -3,6 +3,7 @@
 Status: open
 Type: task
 Milestone: ppsink-migration
+Progress: grep -rl 'PHASE B STUB' --include=*.hpp xo-*/ | grep -v '/\.build/' | wc -l
 
 The last and largest piece of the indentlog->ppsink migration: the facet cluster
 rooted at `xo-printable2`, whose facet method is still the legacy two-pass
