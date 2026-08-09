@@ -79,38 +79,79 @@ so the tree stays green.
 
 **Phase C — implement, subsystem by subsystem**, bottom-up:
 printable2 → stringtable2/object2 → procedure2/tokenizer2 → expression2 →
-interpreter2 → reader2. This is the real work, ~55 types.
+interpreter2 → reader2. This is the real work, ~54 types. See the constraint
+below: phase B has to stub all of them first, so this phase replaces stubs
+rather than adding methods.
 
 **Phase D — switch call sites** from `pretty_deprecated` to `pretty`.
 
 **Phase E — delete** `pretty_deprecated` from the IDL, regenerate, remove the
 old implementations.
 
-### The risk this shape carries
+### How the facet model constrains this (RC, 2026-08-09)
 
-`IPrintable_Any` terminates rather than defaulting:
+**The vtable lives with the fat object pointer, not with the object.** At
+runtime a valid FOP carries a vtable represented by a specific
+`IPrintable_DBar`. `IPrintable_Any` is the placeholder the compiler is induced
+to use where the destination type is not yet known — an FOP before it is
+initialised. So
 
 ```cpp
-/* xo-printable2/include/xo/printable2/detail/IPrintable_Any.hpp:59 */
+/* IPrintable_Any.hpp:59 */
 [[noreturn]] bool pretty(Copaque, const ppindentinfo &) const override { _fatal(); }
 ```
 
-So after phase B every type has a **fatal** `pretty(PpSink&)` until phase C
-reaches it. That is a runtime landmine, not a compile error — unlike
-`.xo-backlog/xo-alloc/issues/01`, where the base class carried a working
-default and an unconverted subclass simply rendered through the old path.
+means "called through an uninitialised FOP", **not** "this type has not
+implemented the method". An earlier reading of this ticket had it as a runtime
+fallback and concluded phase B left a runtime landmine. That was wrong, and
+wrong in the safe direction: the real constraint is stricter and is enforced by
+the compiler.
 
-Two mitigations, and the choice is open:
+**Adding a method to `Printable.json5` is not separable.** `APrintable`,
+`IPrintable_Any` and `RPrintable` must agree with every `IPrintable_DBar`, so
+regenerating the facet side alone does not compile until all the per-type
+implementations are regenerated too. Each regenerated `IPrintable_DBar` then
+delegates to `DBar`'s method, which must exist.
 
-- keep phases C and D tightly coupled per subsystem, so no call site reaches a
-  type that has not been converted; or
-- give the new method a real default that bridges to `pretty_deprecated`.
-  **Unverified whether that is constructible**: `ppindentinfo` is a two-pass
-  fit/emit protocol and `PpSink` is single-pass, and
-  `.xo-backlog/xo-expression/issues/01` found the two-pass bodies were the hard
-  part of the pilot rather than something mechanically wrappable. Worth an hour
-  to establish before committing to the order, because a working bridge would
-  make phase C interruptible.
+So phase B cannot be inert, and the sequence needs one more step:
+
+**Phase B — add the method, regenerate everything, and stub every D-type.**
+All 54 implementations need *a* `pretty(PpSink&)` for the tree to compile, even
+an empty one. That stub pass is mechanical and is what makes the rest
+incremental; without it, phases B and C are a single 54-type flag day.
+
+**Phase C then replaces stubs with real implementations**, subsystem by
+subsystem, and each is independently verifiable — a stubbed type renders
+nothing, so a baseline diff shows exactly which types are still pending.
+
+Whether the stub can instead *bridge* to `pretty_deprecated`, making phase C
+purely additive, is **unverified**: `ppindentinfo` is a two-pass fit/emit
+protocol and `PpSink` is single-pass, and
+`.xo-backlog/xo-expression/issues/01` found the two-pass bodies were the hard
+part of the pilot rather than something mechanically wrappable. Worth
+establishing before phase B, since it decides whether the intermediate state
+renders correctly or renders nothing.
+
+### Regeneration is manual, and its output is committed
+
+```bash
+grep -rc 'manual target; generated code committed' --include=CMakeLists.txt xo-*/
+#   152 such targets across 11 subsystems, xo-reader2 alone 44
+git ls-files --error-unmatch \
+    xo-expression2/include/xo/expression2/variable/IPrintable_DVariable.hpp   # tracked
+```
+
+Two consequences. Each phase that touches the IDL is a deliberate regeneration
+across 11 subsystems producing a large committed diff — reviewable only by
+knowing it is generated. And a stale generated file does not self-heal on
+build, so "did I regenerate everything" is a real question: check by rebuilding
+from clean rather than by inspection.
+
+The per-type IDLs reference the facet IDL rather than restating it
+(`facet_idl: "idl/Printable.json5"` plus `FACET_PKG xo_printable2` in the
+CMake target), so there is exactly one copy of the method list and no
+per-consumer IDL edits. Confirmed: `find xo-*/ -name 'Printable.json5'` returns
+one path.
 
 ## The precedent to copy
 
