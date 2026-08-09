@@ -509,16 +509,192 @@ confirm the test fails, revert. Doing this for `DString` also demonstrated
 
 ### Done so far
 
+Which types remain is the `Progress:` query, not this table; the table is for
+what each conversion *taught*, which a count cannot carry.
+
 | type | notes |
 |---|---|
 | `DString` | `sink.pp(&chars_[0])` — `ppdetail_atomic` is a bare `pps()->write(x)`, a leaf with no quoting or framing |
 | `DUniqueString` | pure delegation, as the deprecated form was |
+| `DInteger`, `DBoolean` | leaves |
+| `DFloat` | leaf, but the two stacks format doubles by different code (`ppstate::write` vs `Prettifier<double>`); six values pinned, not one |
+| `DList` | deliberate divergence: legacy printed `(...)`, ppsink prints the elements structurally. Pinned in `xo-gc/utest/Object2.test.cpp` |
+| `DRuntimeError` | first `pretty_struct`; the divergence below |
 
-Both **degenerate**: an atomic leaf has no break points, so they render
-identically at every margin, even margin 4 against 17 characters of content.
-They establish the cycle; they do not stress it. **Whether the two protocols
-agree on WHERE to break is still unknown** and arrives with the first
-structured printer.
+The four leaves are **degenerate**: an atomic leaf has no break points, so they
+render identically at every margin, even margin 4 against 17 characters of
+content. They establish the cycle; they do not stress it.
+
+### The first structured printer: what `DRuntimeError` settled (2026-08-09)
+
+`DRuntimeError` is `pretty_struct` with two `DString` fields — two levels, the
+smallest thing that can disagree about break placement. Rendered through both
+protocols at margins 80 / 40 / 16, output observed rather than predicted
+(`xo-object2/utest/printable_render.test.cpp`, `s_error_v`):
+
+- **margin 80** — one line, identical.
+- **margin 40** — struct breaks, each field on its own line at indent 2.
+  Identical. So the two protocols agree on *where the struct breaks* and on the
+  struct-level indent.
+- **margin 16** — each field breaks from its own value, and the continuation
+  indent differs: **legacy 4, ppsink 3**.
+
+The margin-16 difference is real and deliberate. Legacy adds another
+`indent_width_` (2) below the field; ppsink adds `xo::pp::tag_config::value_offset`,
+which is 1 (`xo-ppsink/include/xo/ppsink/tag.hpp:46`), so a broken value hangs
+one column past its `:name` instead of lining up with the next nesting level.
+Reviewed and kept: it is a named, configurable constant in ppsink where legacy's
+was neither. Pinned in the test.
+
+**A trap the leaf tests hid — `ppconfig::ugly()`.** The template test used
+`xo::print::ppconfig::ugly()` for the legacy render, and every test copied from
+it inherited that. `ugly()` sets `indent_width_ = 0`
+(`xo-indentlog/include/xo/indentlog/print/ppconfig.hpp:29`), so under it a broken
+struct's fields land in column 0 — the comparison silently stops being about
+indent at all. Harmless for a leaf, which never breaks; wrong the moment a
+printer has structure. **Use a default-constructed `ppconfig` with
+`right_margin_` set** (`indent_width_ = 2`, matching `xo::pp::PpConfig`).
+`xo-object2`'s test now does; `xo-stringtable2`'s still says `ugly()` and should
+be changed if anything structured is ever added there.
+
+### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
+
+Found while pinning `DRuntimeError`: legacy defaults colour ON
+(`xo/indentlog/print/tag_config.hpp:29`), ppsink defaulted it OFF, so **every
+call site moved from `toppstr2` to `toppstr` would silently lose colour** and
+need a line of its own to put it back. Both are process-wide statics rather
+than fields of either config object, so this is a default rather than a protocol
+divergence.
+
+`xo::pp::color_config::color_enabled` now defaults **true**
+(`xo-ppsink/include/xo/ppsink/color.hpp`). False was the right default while
+ppsink was new — adopting it could not then change any existing output — and is
+the wrong one now that adoption is the whole project. RC: "may have to rebase
+some surrounding unit tests, but will simplify phase D".
+
+Rebasing cost, measured: **6 assertions in 2 files**, all pinning scope-banner
+text that now carries the nesting-level colour (`xterm 153`) —
+`xo-ppsink/utest/scope.test.cpp`, `xo-indentlog2/utest/scope.test.cpp`. Full
+sweep otherwise unchanged.
+
+Two things came with it:
+
+- **`xo::pp::color_enabled_guard`** (`color.hpp`) — RAII over the gate, distinct
+  from `color_guard`, which emits escapes. Anything pinning rendered text says
+  `color_enabled_guard no_color(false);`. Preferred to assigning the global,
+  because set-then-restore leaves it flipped for every later test if an
+  assertion fires in between — a hazard the existing tests already worked
+  around by hand ("reset BEFORE asserting").
+- **A test for the default itself** (`color-enabled-by-default`). Every other
+  test in that file turns colour off in order to pin text, so without it the
+  default could be flipped back and the suite would stay green. That is
+  presumably how it stayed false unnoticed.
+
+### `PpStyle`: colours become per-sink, and get legacy's values (2026-08-09)
+
+The gate alone did not close the phase-D gap: `tag_config::tag_color` was
+`none()`, so `:name` stayed uncoloured. Legacy had two conflicting answers and
+no test for either —
+
+| legacy path | colour |
+|---|---|
+| tag ostream inserters (`tag_config::tag_color`) | `xterm(245)`, grey |
+| `pretty_struct` (`print/pretty.hpp:407,425`) | `yellow()`, hardcoded, `// tag_config::tag_color` left commented beside it |
+
+— and ppsink had one knob for both. RC: the yellow began as a diagnostic, but
+the tag/field distinction turned out worth keeping, so it stayed after its
+original motivation went away. **Inherited and chosen, not inherited by
+default.**
+
+So both values are kept, and the knob is split in two. The obvious home,
+`PpConfig::tag_color`, does not work: the consumers are
+`Prettifier<tag_impl>` (`xo-ppsink/.../tag.hpp`) and `Prettifier<field_impl>`
+(`xo-ppsink/.../pretty_struct.hpp`), which are handed only a `PpSink &`, and
+`PpConfig` is in xo-indentlog2 —
+
+```bash
+xo-deps --why=xo-indentlog2:xo-ppsink -q
+#   xo-indentlog2 -> xo-ppsink
+```
+
+— one subsystem *above*. Independently, `FlatSink` has no `PpConfig` at all, so
+a config-only home leaves every flat render with no answer.
+
+Hence **`PpStyle`** (`xo-ppsink/include/xo/ppsink/PpStyle.hpp`): the values at
+PpSink level, reached through `PpSink::style()`, settable per sink with
+`PpSink::with_style()`. `PpConfig` carries one and `PrettySink` installs it on
+itself at construction — the only thing connecting the two, and therefore
+tested (`xo-indentlog2/utest/toppstr.test.cpp`, `toppstr-carries-style`;
+dropping the `with_style` line fails 3 assertions).
+
+Contents: `tag_color` (grey), `struct_tag_color` (yellow), and
+`tag_value_offset` — the last folded in from `tag_config::value_offset` and
+renamed for its context, since it is the offset *below a tag name*, not a
+general one. It is what produced the 3-vs-4 divergence above, now configurable
+rather than a global.
+
+`tag_config` is **gone**, not aliased: two names for one setting is how half a
+program configures the other half's copy.
+
+**This is the hook `xo-ppsink/issues/07` requires** — a sink-level place to
+reach presentation state. A nested context becomes a stack behind `style()`
+rather than a second mechanism.
+
+#### Rebasing cost: the number that mattered
+
+The gate flip alone cost 6 assertions. Giving the colours non-`none` defaults
+cost **~60 assertions across 8 subsystems** — every test in the tree that pins a
+rendered struct or tag: xo-ppsink, xo-indentlog2, xo-reflect, xo-ratio,
+xo-alloc, xo-expression, xo-interpreter, xo-webutil. Ten times the estimate the
+design was agreed on, which is worth stating plainly.
+
+It was not paid per assertion. **Each utest main installs `PpStyle::plain()`
+once** (8 lines total): unit tests pin readable text, and 60 expectations
+containing raw SGR escapes would be unmaintainable. A test wanting colour asks
+locally, via `default_style_guard` or `sink.with_style()`.
+
+That leaves the real defaults exercised nowhere — they could be reverted to
+`none()` and the suite would stay green, which is exactly how the colour gate
+came to be `false` unnoticed. So `xo-ppsink/utest/PpStyle.test.cpp` is the one
+place they are asserted, and it constructs the styles it checks rather than
+reading the ambient default. Mutation-checked both ways: changing either
+default fails 3 assertions.
+
+**`color_enabled_guard` did not survive — superseded same day.** It was written
+to reach *scope* colours (`nesting_level_color`, `code_location_color`, the
+function entry/exit colours), which are `scope_config`, not `PpStyle`, and stay
+that way: a PrettySink should know nothing about `xo::pp::scope`. But the gate
+it moved, `color_config::color_enabled`, was itself a process-wide global, and
+RC took the next step rather than leaving two mechanisms:
+
+- `bool color_enabled` moves into `PpStyle`
+- `color_guard` reads `sink.style().color_enabled` — it already had the sink,
+  and every emission site goes through it (`scope.hpp:226,276`,
+  `scope.cpp:55,85`)
+- `color_config` and `color_enabled_guard` are **deleted**, on the same argument
+  that retired `tag_config`: two names for one setting
+
+The payoff is that the retirement *removes* call sites rather than replacing
+them. All 9 `color_enabled_guard` uses (8 in `xo-ppsink/utest/scope.test.cpp`,
+1 in `xo-indentlog2/utest/scope.test.cpp`) can be deleted outright, because the
+utest mains already install `PpStyle::plain()` and every sink copies the default
+at construction — **provided `plain()` clears `color_enabled`**, which is the
+one detail that makes the deletion work. `plain()` clearing only the two colour
+values leaves scope banners coloured in tests.
+
+Behaviour change worth noting beyond the refactor: colour enablement becomes
+per-sink, captured at construction, exactly like the colours. A "not a tty →
+no colour" check must therefore run before any sink is built, or set
+`PpStyle::default_style().color_enabled` and build after. One rule instead of
+two, which is the point.
+
+**Unrelated bug found next door, not fixed:** legacy `print_fg_color_on` emits
+`\033[31;<code>m` for `color_encoding::ansi`
+(`xo-indentlog/include/xo/indentlog/print/color.hpp:80`) — a hardcoded `31;`
+(red) ahead of the requested colour, so legacy `yellow()` is really "red, then
+yellow". ppsink emits `\033[<code>m` (`xo-ppsink/src/ppsink/color.cpp:27`),
+i.e. correctly. Anyone diffing raw escapes between the two stacks will meet
+this; it is legacy-only and dies with it.
 
 ## Phase E checklist — things to delete, not just `pretty_deprecated`
 

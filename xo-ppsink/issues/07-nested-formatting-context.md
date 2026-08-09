@@ -80,12 +80,15 @@ plausible and none has been thought through.
 - **Where does it live?** `PpConfig` holds margins, but those are per-render
   and global to it. Nesting implies a stack pushed/popped around `begin()` /
   `end()`, or an explicit scope object. `PpConfig` is likely the wrong shape.
-- **Three tickets now circle the same gap.** This one,
+- **FOUR tickets now circle the same gap.** This one,
   `.xo-backlog/xo-indentlog2/issues/02` (PrettyContext: configuration as a
-  value), and `.xo-backlog/xo-indentlog2/issues/03` (bounded rendering:
-  max-items/max-depth, also inherently scoped). They should be designed
-  together or at least sequenced deliberately — three separate mechanisms for
-  "richer sink configuration" would be worse than one.
+  value), `.xo-backlog/xo-indentlog2/issues/03` (bounded rendering:
+  max-items/max-depth, also inherently scoped), and — added 2026-08-09 —
+  `.xo-backlog/xo-ppsink/issues/08` (style stack in PpState, push/pop as
+  PpTokens). They should be designed together or at least sequenced
+  deliberately; four separate mechanisms for "richer sink configuration" would
+  be worse than one. **Issue 08 is the one carrying a concrete proposal**, and
+  is the natural place to start.
 - **Levelization.** `Prettifier<double>` belongs in xo-ppsink, which sits below
   xo-indentlog2 and knows nothing of PrettySink. Any context mechanism must be
   expressible at the PpSink level, not only the PrettySink level.
