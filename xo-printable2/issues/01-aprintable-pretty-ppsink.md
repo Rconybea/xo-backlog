@@ -128,7 +128,8 @@ incremental; without it, phases B and C are a single 54-type flag day.
 
 **Phase C then replaces stubs with real implementations**, subsystem by
 subsystem, and each is independently verifiable — a stubbed type renders
-nothing, so a baseline diff shows exactly which types are still pending.
+`STUB:<classname>`, so any output containing `STUB:` names exactly which
+printers are still pending.
 
 ### The stub cannot bridge to pretty_deprecated — settled 2026-08-09
 
@@ -159,9 +160,11 @@ Three of the four cannot be supplied from a `PpSink`:
 The bridge would have to reconstruct precisely the state the new design exists
 to eliminate. (RC's judgement, confirmed against the header.)
 
-**So phase B's stubs render nothing**, and the baseline diff is how phase C is
-steered: a stubbed type shows as missing output, which makes "what is still
-pending" observable rather than tracked by hand.
+**So phase B's stubs cannot bridge** — they render `STUB:<classname>` instead
+(see the phase B section). That marker is how phase C is steered: an
+unconverted type names itself in the output, which makes "what is still
+pending" observable rather than tracked by hand, and unlike silence it cannot
+be mistaken for a type that legitimately renders nothing.
 
 **The bridge does invert, though**, and that is worth using. Implementing
 `pretty_deprecated(ppindentinfo)` in terms of `pretty(PpSink&)` is at least
@@ -351,11 +354,42 @@ Inline in each D-type header, immediately after `pretty_deprecated`, so there
 is no `.cpp` edit and nothing to satisfy at link time:
 
 ```cpp
-/* PHASE B STUB -- renders nothing until phase C converts this type.
+/* PHASE B STUB -- not yet converted by phase C.  Renders a marker rather
+ * than nothing, so an unconverted printer is VISIBLE in output instead of
+ * silently absent.
  * See .xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md
  */
-void pretty(xo::pp::PpSink & sink) const { (void)sink; }
+void pretty(xo::pp::PpSink & sink) const { sink.put("STUB:DFoo"); }
 ```
+
+**Revised 2026-08-09 (RC): the stub emits `STUB:<classname>`, not nothing.**
+It first rendered nothing, and this ticket said so — wrongly, and in a way that
+mattered, because the phase C steering advice depended on it.
+
+The marker gives a **runtime** detector alongside the two static ones. Silence
+is indistinguishable from "this type legitimately renders as nothing"; a marker
+is not. Once phase D switches call sites, an unconverted printer announces
+itself in rendered text.
+
+It also strengthens the case for closing this ticket. "Did we visit all 55?"
+previously rested on a grep over source; it now also rests on **no rendering
+anywhere containing `STUB:`**, checkable against real output including the
+REPL's.
+
+Mechanical notes for anyone regenerating or extending the stubs:
+
+- **The class name is not the filename stem.** `DPrimitive.hpp` declares
+  `class Primitive`; `TypeRef`, `ParserStack` and `ParserResult` are not
+  `D`-prefixed at all. Derive it by scanning back to the nearest enclosing
+  `class`/`struct` at *shallower indentation* than the stub, then check every
+  site resolved and every name is distinct — 53 and 53 when this was done.
+- **`put`, not `pp`.** `sink.put(...)` writes raw, as `pretty_array.hpp` does
+  for its brackets. `pp` would route a string literal through the Prettifier
+  machinery for nothing.
+
+Deliberately **not** `noexcept`, even where the neighbouring
+`pretty_deprecated` is: phase C's real implementations might throw, and the
+facet's own declaration is not noexcept either.
 
 Deliberately **not** `noexcept`, even where the neighbouring
 `pretty_deprecated` is: a do-nothing stub cannot throw, but phase C's real
