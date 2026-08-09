@@ -326,6 +326,90 @@ sed -e 's/\bpretty(const ppindentinfo/pretty_deprecated(const ppindentinfo/g' \
 (underscore is a word character); `pretty.hpp` in includes is why the pattern
 requires the open paren.
 
+## Phase B, done 2026-08-09 — and the phase C work-list
+
+168 files, +1021/-1: a second `const_method` on the facet, its regenerated
+consequences across the 54 impls, and 55 stubs. Build clean, sweep unchanged
+(34 ok / 26 no-tests / 1 `xo-jit`), regeneration idempotent. Nothing calls the
+new method yet, so no rendered output changed.
+
+The facet now carries both, and `IPrintable_Any` terminates both:
+
+```cpp
+virtual bool pretty_deprecated(Copaque data, const ppindentinfo & ppii) const = 0;
+virtual void pretty(Copaque data, PpSink & sink)                        const = 0;
+```
+
+The IDL needed a `PpSink` entry in `types:` (`xo::pp::PpSink`) and
+`<xo/ppsink/PpSink.hpp>` in `includes:`. **No new dependency** — xo-printable2
+already declares xo-ppsink (`xo-deps --deps-of=xo-printable2`), reaching it via
+xo-facet → xo-arena.
+
+### The stub
+
+Inline in each D-type header, immediately after `pretty_deprecated`, so there
+is no `.cpp` edit and nothing to satisfy at link time:
+
+```cpp
+/* PHASE B STUB -- renders nothing until phase C converts this type.
+ * See .xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md
+ */
+void pretty(xo::pp::PpSink & sink) const { (void)sink; }
+```
+
+Deliberately **not** `noexcept`, even where the neighbouring
+`pretty_deprecated` is: a do-nothing stub cannot throw, but phase C's real
+implementations might, and the facet's own declaration is not noexcept either.
+
+`xo::pp::PpSink` resolves in these headers with no added include — confirmed by
+converting one header first and building, before touching the other 54.
+
+### The work-list IS a query — do not copy it into this ticket
+
+55 sites, one per D-type header, no header carrying more than one:
+
+```bash
+grep -rl 'PHASE B STUB' --include=*.hpp xo-*/ | grep -v '/\.build/'   # 55 files
+```
+
+| subsystem | stubs |
+|---|---|
+| xo-reader2 | 24 |
+| xo-expression2 | 12 |
+| xo-object2 | 8 |
+| xo-interpreter2 | 8 |
+| xo-stringtable2 | 2 |
+| xo-procedure2 | 1 |
+
+(counts as of 2026-08-09; re-run the grep rather than trusting them)
+
+**Phase C progress is therefore derived, not tracked.** Each conversion deletes
+its stub marker, so the count falls monotonically and reaching zero *is* phase C
+being complete. Same principle as the `Milestone:` lines: a hand-kept checklist
+would drift the first time someone converted a type and forgot to tick it.
+
+### The `const noexcept` variant, and a check that confirmed the wrong set
+
+Four D-types declare the legacy method as `const noexcept;` rather than
+`const;`:
+
+```
+xo-interpreter2/include/xo/interpreter2/DLocalEnv.hpp
+xo-interpreter2/include/xo/interpreter2/DVsmDefContFrame.hpp
+xo-interpreter2/include/xo/interpreter2/DVsmIfElseContFrame.hpp
+xo-interpreter2/include/xo/interpreter2/DVsmSeqContFrame.hpp
+```
+
+The first stub pass used a pattern requiring `const;` and so silently covered
+51 of 55. **The verification missed it too**: "51 declarations, 51 stubs, every
+declaration matched" — because both numbers came from the same faulty pattern.
+A self-consistent count proves nothing when both sides derive from one query.
+The build caught it, as it caught the orphan in phase A.
+
+Any later pass over these declarations must accept both forms. Recovery was
+free only because the insertion script was idempotent — re-running it on the
+four inserted exactly four and left the other 51 untouched.
+
 ### Regeneration is manual, and its output is committed
 
 ```bash
