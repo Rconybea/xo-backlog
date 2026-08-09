@@ -26,8 +26,9 @@ correctly while their subsystem waited its turn.
 | xo-interpreter | 4 (ExpressionBoxed, VsmStackFrame, GlobalEnv, LocalEnv) |
 | xo-alloc | 2 (Blob, Forwarding1) + 2 test-local subclasses |
 
-43 files across **four** subrepos: the three above plus xo-ordinaltree. See the
-correction below — the fourth was not predicted.
+44 files across **five** subrepos: the three above, plus xo-ordinaltree (a
+caller of the inherited method) and xo-allocutil (the mirrored fallback base).
+Neither of the last two was predicted — see correction 3.
 
 ### Rendered output is unchanged, and that is checked
 
@@ -83,25 +84,63 @@ struct Prettifier<xo::gp<T>> { ... };
 No test would have caught this: it is only observable once the fallback is
 gone.
 
-### 2. There are TWO mirrored base interfaces, and only one was converted
+### 2. There are TWO mirrored base interfaces
 
 `xo-ordinaltree`'s `RedBlackTree` picks its base from its allocator:
 
-- gc allocator → `xo::Object` (converted)
+- gc allocator → `xo::Object` → renders `"<Object>"`
 - otherwise → `xo::gc::FallbackObjectInterface`
-  (`xo-allocutil/include/xo/allocutil/gc_allocator_traits.hpp:36`), which still
-  declares `virtual void display(std::ostream &) const {}`
+  (`xo-allocutil/include/xo/allocutil/gc_allocator_traits.hpp`) → renders
+  nothing
 
 `RedBlackTree` overrides neither — the one under `#ifdef SET_ASIDE` is disabled
-— so its `operator<<` called whichever base it inherited. Resolved *without*
-converting the fallback, because xo-allocutil does not depend on xo-ppsink and
-mirroring `pretty()` there would create a new `xo-allocutil -> xo-ppsink` edge:
-that is a design decision, not a refactor detail. Instead the inserter detects
-which base the instantiation has, by expression validity rather than by naming
-either base (`RedBlackTree.hpp`, `if constexpr (requires ...)`).
+— so its `operator<<` called whichever base it inherited, and deleting
+`Object::display()` broke the gc path.
 
-**So display() is NOT retired tree-wide.** `FallbackObjectInterface` still has
-it. Whether xo-allocutil should take a ppsink dependency is left open.
+**Both bases are now converted, and xo-allocutil took on no dependency.**
+`FallbackObjectInterface::pretty(xo::pp::PpSink &) const {}` is a no-op, and a
+no-op never touches its parameter, so a reference to a **forward-declared**
+`PpSink` suffices — `namespace xo::pp { class PpSink; }` at the top of the
+header, no include.
+
+That distinction is load-bearing rather than stylistic. Measured 2026-08-08:
+
+```bash
+xo-deps --deps-of=xo-allocutil --format=names -q    # empty, before and after
+xo-deps --why=xo-allocutil:xo-ppsink -q             # rc=1, no path
+find xo-allocutil/.build -name '*.o.d' | xargs grep -lE 'xo/ppsink/' | wc -l   # 0
+xo-deps --users-of=xo-allocutil --format=names -q | wc -l                      # 15
+```
+
+xo-allocutil is a foundational leaf with **no dependencies at all** and 15
+subsystems above it. Including `PpSink.hpp` would have given it its first
+dependency and propagated that across all 15 — to serve a method that does
+nothing. Do not "tidy" the forward declaration into an include.
+
+NB the header did not include `<ostream>` or `<iosfwd>` either; `std::ostream`
+was arriving transitively through `<memory>`/`<type_traits>`. The explicit
+forward declaration is sturdier than what it replaced.
+
+With the mirror restored, `RedBlackTree`'s inserter needs no compile-time
+branch: both bases spell it `pretty(PpSink&)`, so it calls that unconditionally.
+An earlier fix here used `if constexpr (requires ...)` to detect which base was
+present; that complexity existed only while the mirror was broken.
+
+### Why FallbackObjectInterface exists at all
+
+Stated by RC (2026-08-08): **it predates `if constexpr`.** It supplies no-op /
+`assert(false)` defaults so call sites can name these members unconditionally,
+which was the only option before compile-time branching.
+
+Worth recording because nothing in the code says it, and the class reads as a
+deliberate abstract base that a careful reader will preserve on principle —
+this ticket's author proposed exactly that, and separately proposed deleting
+it, both from misreading its purpose.
+
+It does not follow that the class is simply obsolete: the GC members
+(`_shallow_size`, `_shallow_copy`, `_forward_children`) are harder to replace
+with `if constexpr` than the rendering one was, and RC's concern there is their
+being `virtual`. Left alone.
 
 ### 3. The blast radius was callers, not overrides
 
@@ -115,7 +154,11 @@ turns every stale caller into a compile error. `xo-ordinaltree` surfaced that
 way, as did five call sites needing the new ostream header —
 `xo-object/utest/{Boolean,Integer,List,String}.test.cpp` and
 `xo-interpreter/src/interpreter/Schematika.cpp` — where this ticket predicted
-only `List.test.cpp`.
+only `List.test.cpp`. xo-allocutil surfaced one step further out again, only
+once xo-ordinaltree was fixed and rebuilt against a non-gc allocator.
+
+Final radius: 3 subsystems by override count, **5 subrepos** by what actually
+had to change.
 
 Generalising, and it is the same lesson as `xo-ppsink/issues/02`: **an
 enumeration of definitions is not a measurement of impact.**
@@ -152,7 +195,8 @@ real consumer would.
   commented-out `pps.pretty(value)` beside it). Rendering results through that
   sink would give the REPL line-broken output. Deliberately not done here: this
   conversion was to leave rendered output unchanged.
-- `FallbackObjectInterface::display` — see 2 above.
+- ~~`FallbackObjectInterface::display`~~ — done, see 2 above. `display()` is now
+  retired from both mirrored bases.
 - `GlobalEnv` / `VsmStackFrame` / `ExpressionBoxed` baselines — see above.
 
 Deferred out of the xo-object ppsink migration (2026-08-07), which was scoped to
