@@ -64,6 +64,12 @@ so "what remains is the facet cluster" — false on 2026-08-08, per
 The point of this sequence is that the expensive-looking step is mechanical and
 the tree stays green throughout.
 
+**Phase A0 — resync generated code with the current templates. DO THIS FIRST,
+as its own commit.** Regenerating with an *unchanged* IDL was not a no-op: the
+committed generated code predated the templates, so a rename would have carried
+unrelated drift along with it and a failure could have been either. Done
+2026-08-09; see the A0 section below for what it found.
+
 **Phase A — rename, no new behaviour.** In `xo-printable2/idl/Printable.json5`,
 rename the `pretty` const_method to `pretty_deprecated`. Rebuild the genfacet
 targets; every generated file follows. Hand edits are then only the renames in
@@ -164,6 +170,85 @@ because it consumes single-pass output rather than manufacturing two-pass
 state. Unverified, but if it holds, a converted type's legacy method becomes a
 delegate rather than a maintained duplicate, and phases D and E get much
 cheaper: no window in which both implementations must be kept correct by hand.
+
+## Phase A0, done 2026-08-09 — and the prerequisite nobody would have guessed
+
+### 35 of the 54 genfacet targets did not exist
+
+`xo_add_genfacetimpl()` creates no target at all unless `share_<FACET_PKG>` is
+already defined at the point of the call
+(`xo-cmake/cmake/xo_macros/xo_cxx.cmake`):
+
+```cmake
+if(NOT TARGET share_${GF_FACET_PKG})
+    message(STATUS "xo_add_genfacetimpl: share_${GF_FACET_PKG} not available; skipping ${GF_TARGET}")
+    return()
+```
+
+In **xo-object2, xo-procedure2, xo-reader2 and xo-stringtable2** nothing had
+found `xo_printable2` by then, so those targets were never created and
+`cmake --build … -- <target>` failed with a bare `No rule to make target` —
+with nothing connecting that to the cause. xo-object2 alone emitted 14 skips,
+and they were not only Printable: `share_xo_alloc2` was missing too, so the
+`gcobject` facetimpls were equally uncreatable.
+
+**xo-expression2 and xo-interpreter2 worked only by accident.** Their utest
+declares `xo_dependency(${UTEST_EXE} xo_numeric)`, which finds `xo_printable2`
+transitively. xo-reader2 also has `add_subdirectory(utest)` ahead of its
+genfacet blocks, but its utest declares no dependencies — so reordering alone
+would NOT have fixed it. The dependency has to be found explicitly:
+
+```cmake
+find_package(xo_printable2 CONFIG REQUIRED)
+find_package(xo_alloc2     CONFIG REQUIRED)
+```
+
+added before the genfacet blocks in each of the four. Skips then go to zero,
+including the self-referential `FACET_PKG xo_procedure2` / `xo_reader2` entries
+— those resolve through the transitive closure, contrary to what this ticket's
+author first assumed and wrote into the comments before measuring.
+
+Verify with: reconfigure and count `not available; skipping`. Expect **zero**.
+That count is the only signal; nothing fails.
+
+### Three hand-edits to generated files, relocated to their sources
+
+Regenerating reverts anything hand-applied to generated output. A0 found three:
+
+| hand-edit | proper home |
+|---|---|
+| include ordering (xo topological policy) | post-generation `xo-clang-format-includes --fix` |
+| `#include <xo/alloc2/Allocator.hpp>` in `Printable.hpp`, added by `b1add3bb` | the IDL's `user_hpp_includes` |
+| `_drop` / `_has_null_vptr` **absent** | nothing to relocate — the templates had moved on |
+
+The third is a semantic change riding along: `_drop` is a new pure virtual on
+`APrintable`, implemented in `IPrintable_Xfer` as `_dcast(d).~DRepr()`, so
+facet-level destruction went live across all 54 impls as part of A0. That is
+precisely why A0 is a separate commit — if destruction misbehaves it is
+attributable here, not tangled with a rename.
+
+Include ordering cannot be fixed in the IDL, incidentally: the template emits
+the IDL's includes *before* its own fixed `xo/facet/*` block, and the correct
+position of `xo/indentlog/…` relative to `xo/facet/…` is a topology fact
+(`xo-gen-clang-format` derives it from `subsystem-edges`; facet is priority
+141, indentlog 152). The generator should not know include policy; the
+formatter should.
+
+### The acceptance test for A0
+
+```bash
+git diff > before.diff
+# regenerate printable2 + all 54, then:
+xo-clang-format-includes --fix --style <generated-style> $(git diff --name-only | grep -E '\.(hpp|cpp)$')
+git diff > after.diff
+diff -q before.diff after.diff     # must be identical
+```
+
+**Regeneration must be a no-op.** It was not before A0, and is now. Until that
+holds, no later phase's diff can be trusted to contain only its own change.
+
+Result: 61 subsystems build clean; sweep 34 ok / 26 no-tests / 1 failed
+(`xo-jit`, the documented baseline) — unchanged by A0.
 
 ### Regeneration is manual, and its output is committed
 
