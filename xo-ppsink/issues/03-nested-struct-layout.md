@@ -2,6 +2,7 @@
 
 Status: resolved (2026-08-07)
 Type: bug
+Milestone: ppsink-migration
 
 ## Resolution
 

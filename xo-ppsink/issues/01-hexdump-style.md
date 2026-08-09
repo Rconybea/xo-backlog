@@ -2,6 +2,7 @@
 
 Status: open
 Type: feature
+Milestone: ppsink-migration
 
 `xo::pp::hex_view` (`xo-ppsink/include/xo/ppsink/hex.hpp`) currently renders a
 byte range as a bracketed run, breaking at 16-byte row boundaries:

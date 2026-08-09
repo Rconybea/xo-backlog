@@ -2,6 +2,7 @@
 
 Status: open
 Type: task
+Milestone: ppsink-migration
 
 `xo::obj::String` is a Schematika string *value*. Its printed form is currently
 whatever xo's generic diagnostic quoting produces:

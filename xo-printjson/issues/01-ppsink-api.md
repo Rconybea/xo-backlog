@@ -2,6 +2,7 @@
 
 Status: open
 Type: task
+Milestone: ppsink-migration
 
 `xo-printjson` serialises to `std::ostream *` throughout. Change it to write
 into a `xo::pp::PpSink`.

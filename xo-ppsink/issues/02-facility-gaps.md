@@ -2,6 +2,7 @@
 
 Status: open (1 facility left)
 Type: task
+Milestone: ppsink-migration
 
 Inventory of what xo-indentlog still supplies that xo-ppsink does not, so the
 indentlog→ppsink migration order can be chosen with the blockers visible.

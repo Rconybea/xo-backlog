@@ -2,6 +2,7 @@
 
 Status: fixed 2026-08-08
 Type: task
+Milestone: ppsink-migration
 
 `xo-expression` still depends on `xo-indentlog`. It was previously described as
 part of the printable2 stack, waiting on the

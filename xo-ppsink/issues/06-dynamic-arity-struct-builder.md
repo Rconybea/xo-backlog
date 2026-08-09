@@ -2,6 +2,7 @@
 
 Status: fixed 2026-08-08
 Type: feature
+Milestone: ppsink-migration
 
 `pretty_struct(name, fields...)` is variadic, so its arity is fixed at compile
 time. There is currently **no way to render `<Name :f0 … :f1 … >` where the

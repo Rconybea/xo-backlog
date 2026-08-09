@@ -2,6 +2,7 @@
 
 Status: fixed 2026-08-08
 Type: task
+Milestone: ppsink-migration
 
 `tostr(args...)` builds a `std::string`. When the only consumer is a sink, that
 string is pure overhead — it is constructed solely to be handed straight back to

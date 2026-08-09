@@ -2,6 +2,7 @@
 
 Status: open
 Type: task
+Milestone: ppsink-migration
 
 Deferred out of the xo-object ppsink migration (2026-08-07), which was scoped to
 the plain indentlog->ppsink swap. This is the follow-on API change, and it is
