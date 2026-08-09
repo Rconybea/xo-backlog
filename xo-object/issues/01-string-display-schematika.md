@@ -84,6 +84,60 @@ character (`\xNN`). So the round-trip-vs-diagnostic question is still open, but
 the gap is now narrow and specific rather than "the reader is much narrower".
 
 The tokenizer's stale diagnostic is a separate small bug: it should name `t`.
+Filed as `.xo-backlog/xo-tokenizer/issues/02`.
+
+### Corrected 2026-08-09: round-trip was not "never available" — it was LOST
+
+This ticket reads as though Schematika never had a round-trippable printed
+form and the question is whether to acquire one. That is wrong. **Legacy
+round-tripped, and the ppsink migration traded it away.**
+
+The reader takes any unrecognised character in a string body verbatim:
+
+```bash
+sed -n '543,545p' xo-tokenizer/include/xo/tokenizer/tokenizer.hpp
+#   default:
+#       tk_text.push_back(*ix);
+```
+
+So a raw control character inside a literal is accepted. Legacy `quot` emitted
+control characters raw — see this ticket's own table, tab as raw `<TAB>`,
+others raw — so print/read was a round trip. ppsink escapes them to `\xNN`,
+which the reader rejects, and that is what broke it.
+
+The trade was correct, and it is not reversible: `xo-ppsink/escape.hpp` **must**
+escape ESC, because `PpState::count_visible_chars` treats a raw ESC as the
+start of a zero-width colour escape, undercounts the token's visible width and
+breaks line fitting. Emitting raw control characters again would reintroduce
+that.
+
+So the option space is three, not two:
+
+| | round-trips | cost |
+|---|---|---|
+| **A** diagnostic — keep `\xNN` | no, for control chars | none; record and close |
+| **B** raw control characters, as legacy | yes | breaks ppsink line fitting — ruled out |
+| **C** teach the reader `\xNN` | **yes, for every byte** | one `case 'x':` in the tokenizer |
+
+**Decision (RC, 2026-08-09): C.**
+
+C is the only option that closes the gap rather than narrowing it, and it is
+cheap because the printer already emits exactly the form the reader would gain:
+one more case in the same switch as the five existing escapes, plus two hex
+digits. Printer and reader then agree for every byte, not just the five
+characters that happen to have short forms.
+
+Note this is a **Schematika language change** — `\xNN` becomes valid surface
+syntax — not merely a printing fix.
+
+Sequence it with `.xo-backlog/xo-tokenizer/issues/02`: same function, same
+switch, and both are the same underlying defect — the reader's escape set, and
+its own description of that set, having drifted from what the printer emits.
+
+Once C lands, `String::pretty()` needs no change at all: its current
+`sink.pp(quot(c_str()))` becomes round-trippable by virtue of the reader
+catching up. The test this ticket asks for — print, re-read, compare — is then
+the thing that pins the two together.
 
 ## Interaction with other tickets
 
@@ -108,6 +162,12 @@ The tokenizer's stale diagnostic is a separate small bug: it should name `t`.
 - `xo-ppsink/include/xo/ppsink/escape.hpp` — what `quot` currently does
 
 **Done when:**
-- a decision is recorded on round-trip vs diagnostic
-- if round-trip: `String`'s printed form re-reads to an equal `String`, pinned by
-  a test that goes through xo-reader
+- ~~a decision is recorded on round-trip vs diagnostic~~ — done 2026-08-09,
+  option C above
+- the reader accepts `\xNN`, so what `xo::pp::quot` already emits re-reads
+- `String`'s printed form re-reads to an equal `String`, pinned by a test that
+  goes through xo-reader — including a control character, since that is the
+  case the whole ticket is about
+- `\b` and `\f`: decide whether the reader gains them too, or whether the
+  printer should stop emitting short forms it cannot read back. Either closes
+  the gap; emitting `\b` while accepting only `\xNN` would not.
