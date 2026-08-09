@@ -148,11 +148,36 @@ stops being needed.
 So **this ticket has no dependency on `xo-ppsink/issues/02`.** Its one remaining
 facility, `print/cond.hpp`, has nothing to do with printjson.
 
-Why the wrong reading was plausible: `xo::pp::iso8601` and legacy
-`xo::print::iso8601` differ only in namespace at the call site, and
-`pp_time_ostream.hpp` makes ppsink's version usable from ostream code — so a
-grep for `iso8601` beside an `ostream *` looks exactly like an unmigrated call
-site. Checking which namespace it resolves to takes one line and was not done.
+**This was not a misreading — the claim went stale.** Established by dates
+rather than guessed at:
+
+| | |
+|---|---|
+| ticket drafted, per the deferral it cites | 2026-08-06 |
+| `eca10aa4 xo-ppsink: + time prettifiers`, which is where printjson switched to `xo::pp::iso8601` | 2026-08-07 |
+| ticket committed to the backlog (`1a2905d`) | 2026-08-08 |
+
+```bash
+git log --oneline -S'using xo::pp::iso8601' -- xo-printjson/src/printjson/PrintJson.cpp
+```
+
+So the claim was true when written, was falsified by work that landed the next
+day, and was committed unchanged the day after that. An earlier reading of this
+correction blamed a namespace confusion between `xo::pp::iso8601` and legacy
+`xo::print::iso8601`; that was invented, and the dates do not support it.
+
+**The general problem: cross-ticket blocker claims are hand-maintained and rot
+exactly like the hand-kept milestone lists this backlog already stopped
+keeping.** Nothing failed when `pp_time.hpp` gained `Prettifier<iso8601>` and
+this ticket kept asserting the gap — the same silent drift as a ticket that
+forgets its `Milestone:` line, but without the query that would expose it.
+
+Cheap remedy, until something better exists: **when a facility gap closes, grep
+the backlog for tickets naming that facility** before closing the item.
+
+```bash
+grep -rln 'iso8601' .xo-backlog/          # would have found this ticket
+```
 
 Measure flat output before and after. Two separate incidents on this migration
 came from predicting rendering rather than observing it.
