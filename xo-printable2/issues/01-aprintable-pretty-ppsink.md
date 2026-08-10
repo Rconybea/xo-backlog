@@ -533,6 +533,7 @@ what each conversion *taught*, which a count cannot carry.
 | `Primitive<Fn>` | first struct whose field VALUES leave the line; exposed the field-value indent divergence and a second colour gate, see below |
 | `TypeRef` | first NON-D-type printer, so the first needing its own `Prettifier<>`; and the first field whose legacy `cond()` has no ppsink equivalent, see below |
 | `DVariable` | first printer NESTING an already-converted one (`TypeRef`), so the first where the field-value indent divergence compounds per level, see below |
+| `DVarRef` | first field taking ppsink's leaf FALLBACK (`Binding` has only an `operator<<`) — the silent case; and a legacy null deref, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -974,6 +975,59 @@ and `InitSubsys<S_expression2_tag>`, because a `DVariable` cannot exist without
 an allocator and its `APrintable` facet is registered by `SetupExpression2`.
 That is the shape every remaining expression2/interpreter2/reader2 printer will
 need, and it is why `TypeRef` was worth doing first: it needed none of it.
+
+### `DVarRef`: the fallback fires silently, and legacy dereferenced null (2026-08-10)
+
+Two fields, `:name` (a string) and `:path` (a `Binding`), and the second is why
+this one was worth doing before the interior nodes.
+
+**`Binding` has no `Prettifier<>` and no `ppdetail<>` — only an `operator<<`**
+(`xo-expression2/include/xo/expression2/Binding.hpp:58`). So it takes ppsink's
+leaf fallback: the empty primary template means not-string-like falls through to
+`operator<<` (`Prettifier.hpp`, and the rule is documented on the primary
+template itself). Both stacks render `{path:0:3}`, byte-identical at every
+margin tested.
+
+That agreement is the point. `TypeRef` was the same situation and **failed to
+compile**, because it had no `operator<<` — which made a missing `Prettifier<>`
+loud. `Binding` shows the other half: a type that *does* have an `operator<<`
+compiles either way and renders flat, with no diagnostic. Pinning it is the only
+way to know the fallback fired rather than something else. Directly relevant to
+`ParserStack` and `ParserResult` in reader2, which are in the same position.
+
+RC's call on reviewing it: **`Binding` should get a `Prettifier<>` eventually.**
+Written up as a follow-up, with the four other cluster types that take the same
+branch, in `.xo-backlog/xo-expression2/issues/01-binding-prettifier.md`. Not a
+conversion turn — it changes no output, and `s_dvarref_v` already pins the bytes
+it must preserve.
+
+**Legacy dereferences a null pointer here.** `pretty_deprecated` does
+`std::string_view(*(this->name()))`, and `name()` forwards to
+`vardef_->name()`, which has no non-null invariant — `DVariable::pretty` guards
+for exactly this. `DVarRef::pretty()` guards too, matching the sibling printer.
+That is a change, so it is stated rather than slipped in:
+
+- output-identical wherever legacy is *defined*, i.e. every case in the table
+- the null case is pinned in a **separate test** (`DVarRef-anon-render`) that
+  renders through `pretty()` only, because there is no legacy rendering to
+  compare against — legacy is undefined, not merely different
+- mutating the guard's empty string to `"?"` fails that test and only that test
+
+**A legacy inconsistency preserved deliberately:** `DVariable` quotes its
+`:name`, `DVarRef` does not. Both were transcribed as-is. Unifying them would be
+an output-visible change and wants its own commit, not a conversion turn.
+
+Pinned in `s_dvarref_v` (`xo-expression2/utest/printable_render.test.cpp`), six
+cases over binding kind (local / global) × link (0 / 2) × margins 200 / 30 / 20
+/ 12. A sentinel `Binding` is **not** among them and cannot be: `DVarRef::make`
+builds its binding through `Binding::relative`, which asserts on a sentinel
+(`Binding.cpp`), so `"{path}"` is unreachable by construction. Margin 12 breaks
+both field values at once, so the known field-value column divergence (legacy 4,
+ppsink 3) appears twice in one render.
+
+Mutation-checked four ways — struct name, adding `quot()` to `:name`, renaming
+`:path` to `:binding`, and the null-name guard — each fails exactly the cases it
+should.
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 
