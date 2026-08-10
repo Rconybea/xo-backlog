@@ -96,6 +96,60 @@ plausible and none has been thought through.
   A double formatter should not reintroduce `<ostream>` into the hot path;
   `std::to_chars` handles floating point in C++17 onward.
 
+## Direction: runtime configuration, not retuned defaults (RC, 2026-08-10)
+
+Asked during the `DVariable` conversion, with the phase-C evidence in hand:
+now that ppsink owns layout, should the migration take the opportunity to pick
+different layout defaults?
+
+**No.** RC's call, and it settles the question for the rest of phase C rather
+than re-opening it at each nesting printer: the right answer is to reach these
+values through **runtime configuration**, not to keep adjusting hardwired
+defaults. Retuning a default during the port would also cost the phase-C safety
+net — both protocols currently render identically except where a divergence was
+individually reviewed, so a moved knob would add a second possible cause to
+every future diff.
+
+Two supporting facts, both measured rather than assumed:
+
+- **Layout cannot be judged yet.** 43 printers still render `STUB:` against 12
+  converted, and the converted ones are the shallow ones. The cases where
+  layout choices earn or lose — a deeply nested `DLambdaExpr`, a reader2 parser
+  stack — do not render at all yet.
+- **Phase E deletes the comparison anyway.** The divergence bookkeeping in
+  `.xo-backlog/xo-printable2/issues/01` is transitional; afterwards the question
+  stops being "match legacy" and becomes "what should xo's output be", asked
+  against a complete corpus.
+
+### The concrete instance: layout is already split across two config objects
+
+The two numbers that jointly decide where a broken field value lands are
+configured through different objects at different levels:
+
+| value | lives in | reachable from | default |
+|---|---|---|---|
+| `indent_width` | `PpLayoutConfig` (xo-indentlog2) | `PrettySink` only | 2 |
+| `tag_value_offset` | `PpStyle` (xo-ppsink) | every `PpSink`, via `style()` | 1 |
+
+That split is **forced, not chosen** — `tag.hpp` and `pretty_struct.hpp` read
+the offset through `sink.style()` on the base sink, and xo-ppsink cannot see
+xo-indentlog2's `PpConfig`. It is the "Levelization" constraint above, already
+realized in shipped code rather than anticipated.
+
+Two consequences for whatever design this ticket lands on:
+
+- `PpStyle::plain()` documents itself as leaving "layout defaults unchanged"
+  while carrying a layout field. `PpStyle` is therefore not purely style today.
+- A caller who sets `with_indent_width(4)` moves one of the two numbers and
+  silently not the other. Any runtime-configuration mechanism has to reach both
+  from one place, or the knobs disagree.
+
+So the layout question and this ticket's formatting-context question are the
+same question — **where does per-render, nestable configuration live, and how
+does a `PpSink` (not only a `PrettySink`) reach it** — and they should be
+answered once. Note this makes layout a *fifth* thing circling the gap named in
+the constraints above; the response is still one mechanism, not another one.
+
 ## The wrapper precedent is not hypothetical: legacy `fixed`
 
 `xo-indentlog/print/fixed.hpp` already is the wrapper answer for this exact

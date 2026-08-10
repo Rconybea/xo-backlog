@@ -951,6 +951,14 @@ deeper printers still to come (`DLambdaExpr`, `DApplyExpr`, and most of reader2)
 will diverge by more than this and it will look like a new problem each time.
 It is one difference, already reviewed, applied per level.
 
+**Do not "fix" it by retuning a default.** Asked and settled 2026-08-10:
+`tag_value_offset = 2` would make the two stacks agree at every level, and it is
+a one-line change — but the defaults stay put for the rest of phase C, and the
+answer is runtime configuration instead. Reasoning, and the finding that
+`indent_width` and `tag_value_offset` live in different config objects at
+different levels, are in
+`.xo-backlog/xo-ppsink/issues/07-nested-formatting-context.md`.
+
 Pinned in `xo-expression2/utest/printable_render.test.cpp` (`s_dvariable_v`),
 seven cases over name present/absent × typeref resolved/unresolved × margins
 200 / 80 / 40 / 20. Rendered through `with_facet<APrintable>::mkobj(var)` rather
