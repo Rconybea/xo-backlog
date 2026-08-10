@@ -458,7 +458,7 @@ decision, not a test failure to be silenced.
 ```cpp
 render_deprecated(x, margin)  // toppstr2(ppconfig{margin}, x)
                               //   -> ppdetail<obj<APrintable,D>> -> pretty_deprecated
-render_pretty(x, margin)      // toppstr(PpConfig{margin}, x)
+render_pretty(x, margin)      // toppstr(PpConfig::scratch(margin), x)
                               //   -> Prettifier<obj<APrintable,D>> -> pretty
 
 REQUIRE(modern == legacy);         // differential -- SCAFFOLDING, dies at phase E
@@ -468,6 +468,14 @@ REQUIRE(modern == tc.expected_);   // absolute    -- the coverage that SURVIVES
 **Margin is the case variable**, in the schedule style
 (`Testcase_Render`/`s_testcase_v`/indexed loop with `INFO`): it is what makes
 the two protocols disagree if they are going to.
+
+`PpConfig::scratch(margin)` arrived with `522799d7` (RC, 2026-08-09) and
+replaced the hand-built
+`PpConfig().with_soft_right_margin(margin).with_style(PpStyle::plain())` in all
+four render tests. It carries the 64k logbuf, a unique arena name and
+`PpStyle::plain()`, so a `render_pretty` helper no longer has to remember the
+style argument to keep its expectations free of ANSI escapes — see the colour
+sections below for why that argument was there.
 
 Worked example: `xo-stringtable2/utest/printable_render.test.cpp`.
 
@@ -522,6 +530,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DRuntimeError` | first `pretty_struct`; the divergence below |
 | `DArray` | first variable-arity sequence; `begin(1)` to align elements, see below |
 | `DDictionary` | keyed sequence; `DArray`'s framing plus a per-entry group so the value folds after the key, see below |
+| `Primitive<Fn>` | first struct whose field VALUES leave the line; exposed the field-value indent divergence and a second colour gate, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -728,6 +737,90 @@ Collector.hpp`, which is not on xo-object2's include path. Phase B stubbed it by
 pattern-matching `pretty_deprecated`. Skipped, with RC's agreement; the stub
 count therefore has a floor of 1 in xo-object2.
 
+### `Primitive<Fn>`: the first struct whose field values leave the line (2026-08-09)
+
+`xo-procedure2`'s only printer, and the last one below expression2 / interpreter2
+/ reader2. It is a class **template** (`Primitive<Fn>`, aliased as
+`DPrimitive_gco_0`, `..._1_gco`, `..._2_gco_gco`, `..._2_dict_string`,
+`..._3_dict_string_gco`), so the definition goes out of line in the header
+beside `pretty_deprecated`, not in `DPrimitive.cpp`.
+
+The body is a direct transcription of the deprecated one:
+
+```cpp
+sink.pretty_struct("Primitive<Fn>",
+                   xo::pp::field("name", name_),
+                   xo::pp::field("td",   fn_td_),
+                   xo::pp::field("fn",   fn_));
+```
+
+Two new includes in `DPrimitive.hpp`: `<xo/ppsink/pretty_struct.hpp>` and
+`<xo/reflect/TypeDescr_pp.hpp>` (the `Prettifier<TypeDescr>` for the `:td`
+field). `xo-procedure2` declares neither `xo_ppsink` nor `xo_reflect` in
+`src/procedure2/CMakeLists.txt`; both already arrived transitively, as
+`<xo/reflect/Reflect.hpp>` and `<xo/indentlog/print/pretty.hpp>` did before this
+change. Left alone rather than fixed here, so this stays one printer per commit.
+
+**Why this one is not just another `pretty_struct`.** `DRuntimeError`'s fields
+are short `DString`s: they always fit, so nothing about a *broken* field was ever
+pinned. `Primitive`'s `:td` renders a `TypeDescr` whose `:canonical_name` alone
+is 78 columns. Two things fall out, both first sightings:
+
+**1. A broken field's value indents differently — legacy 4, ppsink 3.**
+
+```
+legacy                     ppsink
+<Primitive<Fn>             <Primitive<Fn>
+  :name cwd                  :name cwd
+  :td                        :td
+    <TypeDescr ...            <TypeDescr
+  :fn 1>                      ...
+```
+
+Both put `:td` in column 2. Legacy then puts its value at 2 + `indent_width`
+(2) = 4; ppsink at 2 + `PpStyle::tag_value_offset` (1) = 3
+(`Prettifier<field_impl>`, `pretty_struct.hpp:101`). This is not specific to
+`Primitive` — it applies to **every** struct field value that goes to its own
+line, so expect it in expression2 / interpreter2 / reader2 too.
+
+**2. Legacy's `:td` cannot break at any margin; ppsink's folds.** Not because
+the two-pass protocol is weaker here, but because legacy's `TypeDescr` rendering
+is *already ppsink underneath and already flat*:
+`TypeDescrBase::display(std::ostream&)` streams `xo::pp::xtag` through a
+`FlatSink` (`TypeDescr.cpp:337`, `tag_ostream.hpp`), reached via
+`operator<<(ostream&, const TypeDescrBase&)`. Legacy therefore renders a
+143-column line at margin 20 and is byte-identical at margins 80 and 20. Same
+shape as `DDictionary`'s long-key case, different cause.
+
+**A second colour gate.** `render_deprecated` in the other
+`printable_render.test.cpp` files clears only
+`xo::tag_config::tag_color_enabled`. That is not enough here: the nested
+`TypeDescr` reaches ppsink (above), which reads colour from `PpStyle`, so the
+legacy rendering came back with ANSI escapes on the *inner* field names and none
+on the outer ones. Fixed with `xo::pp::default_style_guard
+plain(xo::pp::PpStyle::plain())` — the tool `PpStyle.hpp` documents for exactly
+this, reaching the `FlatSink`s that convenience entry points build internally.
+Any legacy-side expectation that transitively renders something already migrated
+needs both gates.
+
+**`:fn 1`, in both renderings.** A function pointer has no `operator<<`, so it
+converts to `bool`. Legacy printed `1`; ppsink prints `1`. Not a divergence and
+not introduced here — recorded so it is not mistaken for ppsink damage. Making
+it useful (a symbol name, or dropping the field) is an output-visible change and
+belongs in its own commit.
+
+**`:id` is scrubbed in the test.** `TypeId` is a process-wide counter handed out
+in reflection order, so the value inside `:td` depends on how many other types
+this binary reflects first — an unrelated new test file would move it.
+`scrub_type_id()` replaces the digits with `N`; every other column stays pinned
+exactly. It is xo-reflect's field, pinned by xo-reflect's own tests.
+
+Pinned in the new `xo-procedure2/utest/printable_render.test.cpp` at margins
+200 / 80 / 20, over `ObjectPrimitives::make_cwd_pm`. Mutation-checked four ways:
+struct name `"Primitive<Fn>"`→`"Primitive"`, dropping the `:fn` field, field name
+`"td"`→`"tdx"`, and wrapping the whole struct in an extra `begin()`/`end()` (the
+layout mutation) — each fails.
+
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 
 Found while pinning `DRuntimeError`: legacy defaults colour ON
@@ -760,6 +853,37 @@ Two things came with it:
   test in that file turns colour off in order to pin text, so without it the
   default could be flipped back and the suite would stay green. That is
   presumably how it stayed false unnoticed.
+
+**Reopened by `522799d7`, for the no-config entry point** (found 2026-08-09,
+after that commit). `toppstr(x)` — the overload with no `PpConfig` — used to
+delegate to `toppstr(PpConfig(), x)`, whose default-constructed `PpStyle` is
+coloured. It now delegates to `toppstr(PpConfig::plain(), x)`, which is not.
+Measured against the installed headers:
+
+```cpp
+toppstr(tag("k", x))                     // ":k 1"                  -- was coloured
+toppstr(PpConfig(), tag("k", x))         // "\e[38;5;245m:k\e[0m 1"
+toppstr(PpConfig::colored(), tag("k",x)) // "\e[38;5;245m:k\e[0m 1"
+```
+
+So the exact failure mode this section was written to prevent — a call site
+moving from `toppstr2` to `toppstr` and silently losing colour — is live again
+for every caller that does not pass a config. No test caught it because, as
+recorded above, every test in `toppstr.test.cpp` deliberately renders without
+colour in order to pin text; `color-enabled-by-default` guards
+`color_config::color_enabled`, not `PpConfig`'s style member.
+
+**Settled the same day (RC, 2026-08-09): the decision above stands unnarrowed.**
+The no-config overload now uses `PpConfig::colored()`, so `toppstr(x)`,
+`toppstr(PpConfig(), x)` and `toppstr(PpConfig::colored(), x)` agree again. What
+was missing was not the default but a test *naming* it: an overload that picks
+its own config is constrained by nothing else in the file.
+`toppstr-no-config-is-colored` now pins it, and fails if the overload is
+switched back. See `.xo-backlog/xo-indentlog2/issues/05` — fixed.
+
+Same shape as `color-enabled-by-default` above, and for the same reason: every
+other test in that file renders colourless in order to pin text, so a default no
+test names is a default that can flip silently.
 
 ### `PpStyle`: colours become per-sink, and get legacy's values (2026-08-09)
 

@@ -3,6 +3,14 @@
 Status: fixed 2026-08-09
 Type: feature
 
+**Superseded in part by `522799d7` (2026-08-09).** Two names this ticket
+records were deleted by that commit and their jobs moved into `PpConfig`:
+`c_toppstr_default_logbuf_z` and `detail::toppstr_logbuf_config` are now
+`PpConfig::scratch_aux()`, which sets both the 64k size and the unique arena
+name at config-construction time. `toppstr(cfg, ...)` no longer rewrites the
+caller's logbuf name. Kept below as written — the *reasoning* for both defaults
+is still the reasoning, and issue 02 carries what the move changed.
+
 ## Resolution (2026-08-09)
 
 `xo-indentlog2/include/xo/indentlog2/print/toppstr.hpp`, tested in

@@ -8,6 +8,20 @@ takes a `PpConfig` and builds a `PrettySink` internally. That covers the
 one-shot case, but leaves configuration as something threaded through call
 sites rather than held.
 
+**Partly overtaken by `522799d7` (RC, 2026-08-09), "xo-indentlog2: streamline
+scratch PpSink/PpConfig".** That commit added named `PpConfig` factories —
+`plain()`, `colored()`, `scratch(margin)`, `scratch_aux(basename, margin,
+style)` — and made `toppstr(cfg, ...)` use the caller's config **as given**
+rather than rewriting its logbuf name. Two consequences for this ticket, both
+detailed under *Care needed*:
+
+- the "configuration as a value you can build in one expression" motivation is
+  now largely delivered by the factories, so what is left that only a
+  `PrettyContext` gives is the `std::streambuf *` and the `ThreadPrettySink`
+  relationship;
+- the arena-name invariant **moved**, and moved in a direction that makes
+  `make_sink()` harder rather than easier.
+
 **Proposed by RC 2026-08-09.** Introduce a `PrettyContext` holding the two
 things a PrettySink is built from:
 
@@ -76,17 +90,33 @@ Plausible readings, not yet decided:
 
 ## Care needed
 
-- **Arena names must stay unique per sink.** `toppstr` currently mints one per
-  call (`detail::toppstr_logbuf_config`), because two PrettySinks sharing an
+- **Arena names must stay unique per sink** — because two PrettySinks sharing an
   `ArenaConfig` name interfere and the symptom is wrong indentation in whichever
-  renders second — a silent wrong answer. If a single `PrettyContext` can make
-  many sinks, `make_sink()` inherits that duty; it must not simply hand out the
-  stored `PpConfig`. Pinned today by
-  `xo-indentlog2/utest/toppstr.test.cpp`'s `toppstr-is-repeatable`, which should
-  be extended to cover repeated `make_sink()` from one context.
-- **`ArenaConfig::size_` defaults to 0 and a zero-sized logbuf aborts** — see
-  issue 01. The default ctor must supply the 64k default, not merely
-  `PpConfig()`.
+  renders second, a silent wrong answer rather than an error.
+
+  **Where that duty lives changed in `522799d7`.** It used to sit in
+  `toppstr()`, which minted a fresh name per call
+  (`detail::toppstr_logbuf_config`, now deleted) and so *could not* be given a
+  colliding config. It now sits in `PpConfig::scratch_aux()`, which mints the
+  name **once, when the config is built** — and `toppstr()` passes the config
+  straight through. So a `PpConfig` is now a value carrying a specific arena
+  name, and re-using one is the caller's business.
+
+  That makes `make_sink()` *more* dangerous, not less: a `PrettyContext` holding
+  one `scratch()` config and handing it to many sinks gives them all the same
+  name. `make_sink()` must re-mint (`PpConfig::with_logbuf_name`, added by the
+  same commit, is the tool), and this ticket's test obligation stands.
+
+  Note the current tests do not falsify the hazard: `toppstr-carries-style`
+  (rewritten by `522799d7`) renders twice from **one** `PpConfig::plain()` and
+  passes. Sequential re-use of a name is evidently fine; what is unproven is
+  concurrent or nested use. Worth establishing before `make_sink()` is designed
+  around it — the whole bullet may be smaller than it looks.
+- ~~**`ArenaConfig::size_` defaults to 0 and a zero-sized logbuf aborts.**~~
+  Answered by `522799d7`: `PpConfig::scratch_aux()` sets 64k, so
+  `PpConfig::plain()` / `scratch()` are safe to hand to a `PrettySink` where a
+  bare `PpConfig()` still is not. A `PrettyContext` default ctor should delegate
+  to `PpConfig::plain()`.
 - **`make_sink()` returning by value** needs `PrettySink` to be movable, and it
   owns arena state; check before committing to that signature.
 
