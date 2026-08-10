@@ -531,6 +531,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DArray` | first variable-arity sequence; `begin(1)` to align elements, see below |
 | `DDictionary` | keyed sequence; `DArray`'s framing plus a per-entry group so the value folds after the key, see below |
 | `Primitive<Fn>` | first struct whose field VALUES leave the line; exposed the field-value indent divergence and a second colour gate, see below |
+| `TypeRef` | first NON-D-type printer, so the first needing its own `Prettifier<>`; and the first field whose legacy `cond()` has no ppsink equivalent, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -820,6 +821,83 @@ Pinned in the new `xo-procedure2/utest/printable_render.test.cpp` at margins
 struct name `"Primitive<Fn>"`→`"Primitive"`, dropping the `:fn` field, field name
 `"td"`→`"tdx"`, and wrapping the whole struct in an extra `begin()`/`end()` (the
 layout mutation) — each fails.
+
+### `TypeRef`: a printer with no facet, and a field legacy `cond()` cannot hand over (2026-08-09)
+
+The bottom of xo-expression2 — two fields, depending on nothing else in the
+subsystem — and the first conversion where the *dispatch* had to be built as
+well as the printer.
+
+**`TypeRef` is not a D-type.** It has no facet impl, so no regenerated
+`IPrintable_DTypeRef` calls its `pretty()`. Legacy reached it through a
+hand-written `print::ppdetail<TypeRef>` in `TypeRef.hpp`; ppsink needs the exact
+mirror, added beside it:
+
+```cpp
+template <>
+struct Prettifier<xo::scm::TypeRef> {
+    static void print(PpSink & sink, const xo::scm::TypeRef & x) { x.pretty(sink); }
+};
+```
+
+Without it the empty primary template sends a `TypeRef` to `operator<<`, which
+it does not have — a compile error here, but the same omission on a type that
+*does* have an inserter would compile and silently render flat. The ticket's
+`Prettifier<obj<APrintable,DRepr>>` note makes this point for the facet types;
+it applies to the three non-`D` exceptions too (`TypeRef`, `ParserStack`,
+`ParserResult`).
+
+**`cond(td_, td_, "null")` has no ppsink counterpart, and the substitute is a
+branch in the printer.** Legacy rendered `:td null` for an unresolved TypeRef.
+ppsink has no `cond`, and the two things that look like they would serve do not:
+
+- `Prettifier<TypeDescr>` prints **nothing** for a null descriptor
+  (`TypeDescr_pp.hpp`, deliberate — printing `<null>` is an output-visible
+  change to xo-reflect and is reserved for its own commit), so
+  `field("td", td_)` yields a bare `:td` with no value.
+- `field()`'s `present` flag omits the field *entirely*, which is a different
+  statement: "this TypeRef has no td field" rather than "its td is null".
+
+So `TypeRef::pretty()` uses `struct_open()` and branches, supplying the word
+itself. Output matches legacy exactly. Recorded because an unresolved TypeRef is
+the normal pre-typecheck state, not an edge case, and because the same shape
+will recur wherever a legacy printer used `cond()` — `DDefineExpr` and
+`DProgressSsm` are the other two.
+
+RC, on review: **if/when ppsink supports `cond()`, this printer is a use case for
+it.** `.xo-backlog/xo-ppsink/issues/02` is the facility inventory and now carries
+the two shape constraints this call site imposes — arms of differing type, and
+usable as a field *value* rather than a sink-writing function.
+
+**`quot`, not `unq`.** First quoting in the migration. Legacy used
+`xo::print::quot`, which always quoted; `xo::pp::quot` is its exact counterpart
+and `xo::pp::unq` (quote only when bare would be ambiguous) is not — it would
+render `t:1` bare and turn an empty id into nothing at all rather than `""`.
+Both forms are pinned, `"t:1"` and `""`, so the choice cannot be reverted
+silently. The nicer-looking `unq` remains available if the rendering is ever
+revisited deliberately.
+
+Everything else was already settled by `Primitive<Fn>`, and reappears for the
+same reason — `:td` is a `TypeDescr`: the broken-field-value column (legacy 4,
+ppsink 3), legacy's `:td` unable to break at any margin because its path is
+already a FlatSink, and the need for **both** colour gates in
+`render_deprecated`.
+
+Pinned in the new `xo-expression2/utest/printable_render.test.cpp` over three
+TypeRef states (id only / td only / both) at margins 200 / 80 / 40 / 20.
+The type-variable name is supplied rather than generated:
+`TypeRef::generate_unique()` draws on a process-wide counter, so a generated
+name would move whenever an unrelated test made a TypeRef first — same hazard as
+the nested `TypeDescr`'s `:id`, which is still scrubbed.
+
+Mutation-checked four ways — struct name `"TypeRef"`→`"TypeRefX"`, `quot`→`unq`,
+dropping the null branch, and an extra `begin()`/`end()` around the struct —
+each fails exactly one test case.
+
+`xo-expression2/utest` gained `xo_testutil` and `xo_indentlog2`, and
+`pkgs/xo-expression2.nix` the matching check-only `xo-testutil` + `cli11`
+(same fix as `9526eeb8` for xo-object2 and its repeat for xo-procedure2 — a
+utest dependency added in CMake is a nix package edit every time).
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 

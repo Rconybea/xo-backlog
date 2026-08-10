@@ -36,6 +36,57 @@ xo-deps --why=xo-expression2:xo-printable2  # xo-expression2 -> xo-printable2
 xo-deps --why=xo-reader2:xo-printable2      # xo-reader2 -> xo-expression2 -> xo-printable2
 ```
 
+### The first consumer has now been converted WITHOUT it — and wants it back (RC, 2026-08-09)
+
+`TypeRef` was converted in phase C of
+`.xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md`, so the
+question above — "their three call sites may read better rewritten without it"
+— has one measured answer rather than none. **It reads worse.**
+
+Legacy:
+
+```cpp
+ppii.pps()->pretty_struct(ppii, "TypeRef",
+                          refrtag("id", quot(id_)),
+                          refrtag("td", cond(td_, td_, "null")));
+```
+
+ppsink, without `cond` — the single `pretty_struct()` call has to become a
+`struct_open()` plus a branch, because neither near-miss says what legacy said:
+`Prettifier<TypeDescr>` renders *nothing* for a null descriptor, and `field()`'s
+`present` flag omits the field entirely (a different statement — "no td field"
+rather than "td is null").
+
+```cpp
+auto st = sink.struct_open("TypeRef");
+st.field("id", id);
+if (td_) { st.field("td", td_); }
+else     { st.field("td", c_null); }
+```
+
+RC's call, on reviewing it: **if/when ppsink supports `cond()`, this printer is
+a use case for it.** Not a defect in the conversion — output is identical to
+legacy and pinned — but the shape is worth keeping in view, since two more
+consumers (`DDefineExpr`, `DProgressSsm`) reach the same decision point at their
+own phase C turn, and each will otherwise grow its own branch.
+
+Two constraints this call site puts on any eventual `cond`, both of the kind the
+Notes section at the bottom of this ticket warns about:
+
+- **The two arms have different types** (`TypeDescr` and a string literal), so it
+  must be templated over both, not over one `T`.
+- **It must be usable as a field VALUE**, i.e. a value wrapper with a
+  `Prettifier<cond_impl<...>>` — not a sink-writing function. `field()` captures
+  by reference, so it also needs the named-local discipline that `quot()`
+  already has (`pretty_struct.hpp`).
+
+A third question this raises, which is really issue 07's: whether the right
+answer is `cond` at all, or a `Prettifier<T*>`-level policy for null pointers.
+`TypeDescr_pp.hpp` deliberately prints nothing for null and records that
+`<null>` would be an output-visible change wanting its own commit — so today
+every printer holding a possibly-null pointer must decide this for itself, which
+is how three call sites came to need `cond` in the first place.
+
 ### `print/printer.hpp` was never a gap (retired 2026-08-08)
 
 It was listed as blocking xo-process on the strength of a `grep` hit. The two
