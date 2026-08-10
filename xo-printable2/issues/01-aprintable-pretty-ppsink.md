@@ -532,6 +532,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DDictionary` | keyed sequence; `DArray`'s framing plus a per-entry group so the value folds after the key, see below |
 | `Primitive<Fn>` | first struct whose field VALUES leave the line; exposed the field-value indent divergence and a second colour gate, see below |
 | `TypeRef` | first NON-D-type printer, so the first needing its own `Prettifier<>`; and the first field whose legacy `cond()` has no ppsink equivalent, see below |
+| `DVariable` | first printer NESTING an already-converted one (`TypeRef`), so the first where the field-value indent divergence compounds per level, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -895,9 +896,76 @@ dropping the null branch, and an extra `begin()`/`end()` around the struct —
 each fails exactly one test case.
 
 `xo-expression2/utest` gained `xo_testutil` and `xo_indentlog2`, and
-`pkgs/xo-expression2.nix` the matching check-only `xo-testutil` + `cli11`
+`pkgs/xo-expression2.nix` the matching check-only `xo-testutil`
 (same fix as `9526eeb8` for xo-object2 and its repeat for xo-procedure2 — a
 utest dependency added in CMake is a nix package edit every time).
+`cli11` was added alongside it and **removed again by RC**: xo-procedure2's
+utest main parses arguments, `xo-expression2/utest/expression2_utest_main.cpp`
+does not. Copying a nix package edit from a sibling copies its dependencies too;
+check each one has a consumer here.
+
+### `DVariable`: the indent divergence compounds per level (2026-08-10)
+
+The first converted printer that **nests another converted printer** — its
+`:typeref` field is a `TypeRef`, pinned the day before. Nothing new had to be
+built: `xo::pp::field("typeref", typeref_)` finds `Prettifier<TypeRef>`
+(`TypeRef.hpp`) and the nested printer composes. That is the first evidence the
+bottom-up order is paying, rather than merely being tidy.
+
+Body is a plain `pretty_struct` — no `struct_open` branch, unlike `TypeRef`,
+because the one conditional (`name_` may be null) picks a *value* rather than
+deciding whether a field exists:
+
+```cpp
+auto name = (name_ ? std::string_view(*name_) : std::string_view(""));
+const auto qname = xo::pp::quot(name);
+
+sink.pretty_struct("DVariable",
+                   xo::pp::field("name", qname),
+                   xo::pp::field("typeref", typeref_));
+```
+
+A null `name_` renders `""` — **not** nothing, and not `"null"`. Both stacks
+reach it through the same branch, which legacy already had, so this is not a
+`cond()` case: the choice happens before either printing protocol sees it.
+
+**What is new: the field-value indent divergence compounds per nesting level.**
+`Primitive<Fn>` and `TypeRef` each showed it once — a broken field's value lands
+at `indent + indent_width` (legacy, 2) versus `indent + tag_value_offset`
+(ppsink, 1). Two levels deep it accumulates, so the nested `<TypeRef` opens at
+column 4 vs 3, and *its* fields at 6 vs 4. Observed at margin 80:
+
+```
+legacy                             ppsink
+<DVariable                         <DVariable
+  :name "myvar"                      :name "myvar"
+  :typeref                           :typeref
+    <TypeRef                          <TypeRef
+      :id ""                           :id ""
+      :td <TypeDescr ...>>>            :td <TypeDescr ...>>>
+```
+
+Same tokens, same break points, different column arithmetic — and the gap widens
+with depth rather than staying constant. Worth stating plainly now, because the
+deeper printers still to come (`DLambdaExpr`, `DApplyExpr`, and most of reader2)
+will diverge by more than this and it will look like a new problem each time.
+It is one difference, already reviewed, applied per level.
+
+Pinned in `xo-expression2/utest/printable_render.test.cpp` (`s_dvariable_v`),
+seven cases over name present/absent × typeref resolved/unresolved × margins
+200 / 80 / 40 / 20. Rendered through `with_facet<APrintable>::mkobj(var)` rather
+than the raw pointer — DVariable *is* a facet D-type, unlike `TypeRef`, and that
+is the path phase D changes.
+
+Mutation-checked four ways — struct name `"DVariable"`→`"DVariableX"`, dropping
+`quot()`, rendering the null name as `"null"`, and swapping the two fields —
+each fails exactly one test case.
+
+The fixture needed a real collector (`DX1Collector` + `CollectorTypeRegistry`)
+and `InitSubsys<S_expression2_tag>`, because a `DVariable` cannot exist without
+an allocator and its `APrintable` facet is registered by `SetupExpression2`.
+That is the shape every remaining expression2/interpreter2/reader2 printer will
+need, and it is why `TypeRef` was worth doing first: it needed none of it.
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 
