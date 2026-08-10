@@ -2,6 +2,7 @@
 
 Status: open
 Type: task
+Milestone: ostream-containment
 
 Raised by RC 2026-08-10, from the `DVarRef` conversion in
 `.xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md`.
@@ -117,9 +118,16 @@ is supposed to be reviewable as "did the rendering change".
 
 ## Notes
 
-The general question — how do you *find* the types silently taking branch 3 —
-has no tool today. The grep above finds declared `operator<<`s, which is a proxy:
-it over-reports (a type may also have a `Prettifier<>`) and under-reports (an
-inherited or templated inserter would not match). A `static_assert`-based opt-out,
-or a compile-time listing of types instantiating the fallback, would be a real
-answer; neither is designed.
+**The general question — how do you *find* the types silently taking branch 3 —
+now has an answer, and it is structural rather than a tool.** RC's, 2026-08-10:
+you are done when every `operator<<` for an xo type lives in a
+`*_ostream.hpp` header and no non-test xo header includes one. Then "which types
+stream?" is a directory listing rather than a grep with known false positives
+(a type may also have a `Prettifier<>`) and false negatives (an inherited or
+templated inserter does not match a textual search).
+
+That is `.xo-backlog/milestones/ostream-containment.md`, measured at 47 headers
+remaining across 21 subsystems — deliberately a **separate** milestone from
+`ppsink-migration`, which it is downstream of rather than part of. `Binding` is
+this ticket and is one of the 47; the other four types listed above are also in
+that count.
