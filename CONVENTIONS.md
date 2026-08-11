@@ -154,59 +154,105 @@ X" is only checkable if the reader can see the whole set; `--users-of=Y
 
 ## Verifying a change in this tree
 
-The recipe below was re-derived from scratch several times on 2026-08-08, and
-got it wrong twice — once by omitting examples, once by discarding a build
-failure. Written down so the next pass starts from the working version.
-
 ```bash
-# 61 buildable subsystems: xo-equable2 and xo-hashable2 are empty placeholder
-# subrepos (README + .gitrepo, no CMakeLists) and abort `xo-build --all`
-SUBS=$(xo-build --list | tr ' ' '\n' | grep '^xo-' \
-       | while read s; do [ -f "$s/CMakeLists.txt" ] && echo "$s"; done)
-
-xo-build -q --configure --with-utests --with-examples --build --install $SUBS
+xo-build --sweep
 ```
 
-Four things that recipe encodes:
+That is the whole recipe, as of 2026-08-10. It runs two stages — configure /
+build / install with `--with-utests --with-examples`, then `--utest` — both
+with `-q -k` over `--all`.
+
+**Expect `62 attempted: 33 ok, 28 with no tests, 1 failed, 0 skipped`.** The one
+failure is `xo-jit machpipeline.fptr`, which fails permanently and is ticketed.
+Any other shape is a regression.
+
+The flag exists because the recipe it replaces was re-derived from scratch
+several times on 2026-08-08 and got it wrong twice — once by omitting examples,
+once by discarding a build failure. It was, until 2026-08-10:
+
+```bash
+# superseded; kept only so an older ticket quoting it is recognisable
+SUBS=$(xo-build --list | tr ' ' '\n' | grep '^xo-' \
+       | while read s; do [ -f "$s/CMakeLists.txt" ] && echo "$s"; done)
+xo-build -q -k --configure --with-utests --with-examples --build --install $SUBS
+xo-build -q -k --utest $SUBS
+```
+
+The `SUBS` filter was a workaround for `--all` aborting on `xo-equable2` and
+`xo-hashable2`, which were bare `README + .gitrepo` directories. Both are now
+scaffolded facet subsystems that build (with no methods and no tests yet), so
+`--all` covers every entry in `subsystem-list` and the filter is gone. The
+totals moved with it: 61 → 62 attempted (+2 new, −1 because `--all` excludes the
+`xo-cmake` bootstrap), 34 → 33 ok, 26 → 28 with no tests.
+
+Six things the flag encodes — worth knowing, because a one-off invocation that
+skips any of them still looks green:
 
 - **`--with-examples`.** Utests alone miss a whole class of breakage: examples
   are compiled by nix but not by a default umbrella build, so a broken example
   passes locally and fails in CI. That is how the xo-tokenizer `tokenrepl`
   regression escaped, and how the pre-existing xo-imgui guard bug stayed hidden.
-- **`-q`.** Quiet on success, loud on failure — 61 lines instead of 3060, and
+- **`-q`.** Quiet on success, loud on failure — 62 lines instead of 3060, and
   unlike `>/dev/null 2>&1` it cannot hide an error. **Never redirect a build to
   /dev/null**: it discards the diagnostics too, so a failing build looks
   identical to a passing one, and any `ctest` that follows silently runs the
   *previous* binary. That cost a long debugging detour on 2026-08-08 —
   symptoms looked like a library bug; the cause was a compile error in a test
   file that had been redirected away.
-- **Pass the list to `xo-build`; do not loop over it, and do not call `ctest`
-  directly.** It takes a subsystem list, prints one status line per subsystem
-  (`-q`, `.xo-backlog/xo-cmake/issues/01`) and surveys past failures (`-k`,
-  issue 03). A shell loop only duplicates the status line, and that duplication
-  is what tempts you into `>/dev/null` to tidy it up — which is how the rule
-  above gets broken by someone who already knows it. That exact sequence
-  happened on 2026-08-08, and issue 03 records it.
-- **`34 ok` is not `60 ok`.** `ctest` exits 0 when a project defines no tests,
-  so 26 of the 61 subsystems would otherwise count as passes having run
+- **`-k`.** Keeps going past a failure, which a whole-tree sweep needs:
+  `xo-jit` fails permanently, and without `-k` everything after it goes
+  untested while still looking like it ran.
+- **Let `xo-build` take the list; do not loop over it, and do not call `ctest`
+  directly.** It prints one status line per subsystem (`-q`,
+  `.xo-backlog/xo-cmake/issues/01`) and surveys past failures (`-k`, issue 03).
+  A shell loop only duplicates the status line, and that duplication is what
+  tempts you into `>/dev/null` to tidy it up — which is how the rule above gets
+  broken by someone who already knows it. That exact sequence happened on
+  2026-08-08, and issue 03 records it.
+- **`33 ok` is not `61 ok`.** `ctest` exits 0 when a project defines no tests,
+  so 28 of the 62 subsystems would otherwise count as passes having run
   nothing. `xo-build` reports those as `ok (utest:no-tests)` and totals them
-  separately. If some future harness reports a suspiciously round pass count,
-  suspect this first — the same defect hit the nix packages
-  (`.xo-backlog/nix-packaging`).
+  separately; the four buckets in the summary line are disjoint and add up to
+  the number attempted, so a total that does not add up is itself a bug. If
+  some future harness reports a suspiciously round pass count, suspect this
+  first — the same defect hit the nix packages (`.xo-backlog/nix-packaging`).
 - **`--install`.** Subsystems find each other through installed configs; a
   build without install validates less than it appears to.
-- **The subsystem list, not `--all`.** `--all` aborts on the two placeholders.
+- **Two stages, not one pass.** `xo-build` runs every chosen phase for a
+  subsystem before moving to the next, so `--build --utest` in one invocation
+  would test `xo-alloc` before `xo-object` was configured.
+
+**`--sweep` does not rebuild `xo-cmake`** — `--all` excludes the bootstrap. After
+editing anything under `xo-cmake/` (including `bin/xo-build.in`, since
+`xo-build` runs from the *installed* copy), run
+`xo-build -q --configure --build --install xo-cmake` first.
+
+**Extra cmake flags go after `--`**, and reach the configure command line only:
+
+```bash
+xo-build --sweep -- -DCMAKE_CXX_FLAGS=-DXO_NO_OSTREAM_INSERTERS
+```
+
+They **stick** — deliberately; caching is how cmake lets you state a variable
+once — and a later `xo-build --configure` without `--` does not clear what it
+never sets. Two ways out:
+
+```bash
+xo-build --sweep -- '-DCMAKE_CXX_FLAGS='   # name the variable, empty
+xo-build --sweep --clobber                 # discard the cache wholesale
+```
+
+Use `--clobber` when you don't know the name of every variable a past
+invocation set. It runs first, before every other phase, and is also the way to
+just delete a build directory (`xo-build --clobber NAME`). It replaced
+`--realclean`, removed 2026-08-10, which did the same thing but ran *last* —
+`--realclean --configure --build` configured, built, then deleted the result.
+An experimental flag that outlives the experiment is the same species as the
+stale SDL2 cache: a build that is not the one the source implies.
 
 ### Then the checks that actually catch things
 
 ```bash
-# tests.  -k keeps going past a failure, which a sweep needs: xo-jit fails
-# permanently (machpipeline.fptr, ticketed), and without -k everything after it
-# would go untested while still looking like it ran.
-#
-# Expect: 34 ok, 26 with no tests, 1 failed -- 61 subsystems in total.
-xo-build -q -k --utest $SUBS
-
 # nix: the ONLY check that exercises an installed package config as a real
 # consumer would.  Caught -lindentlog, the xo-tokenizer example, and
 # xo-reader's empty propagatedBuildInputs -- none of which the umbrella saw.

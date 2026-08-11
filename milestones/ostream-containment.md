@@ -151,6 +151,13 @@ Do not fold this into `ppsink-migration`. That one is nearly done (`xo-sdlc
 - no non-test xo header includes one (excepting xo-ppsink's own machinery)
 - the sweep count above returns 0
 - the naming variant (`_iostream` vs `_ostream`) is resolved one way or the other
+- **`.xo-backlog/xo-ppsink/issues/10-verify-inserters-unused.md` is closed.**
+  Containment says where the inserters are; that ticket says whether anything
+  still calls them, by compiling the definitions out and seeing what breaks.
+  Sequenced immediately after `ppsink-migration`, since that milestone deletes
+  xo-indentlog and a large share of the inserters with it. If the live set comes
+  back empty, the bridges get DELETED rather than merely contained -- so this
+  milestone's real end state is decided there, not here.
 - **`.xo-backlog/xo-reflectutil/issues/01-typeseq-ostream.md` is closed.**
   Called out by name because that one was deliberately left half-done on
   2026-08-10 -- `Prettifier<typeseq>` exists and `typeseq.hpp` dropped

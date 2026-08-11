@@ -121,12 +121,17 @@ It wants a `Prettifier<>` more than `Binding` does, on three counts:
   line, output-identical, and already pinned by `s_constant_v`.
 - **`typeseq.hpp` includes `<iostream>`, not `<ostream>`** (`:10`) — so every
   consumer instantiates `std::ios_base::Init`.
-- **xo-reflectutil is used by 49 subsystems**, verified:
+- **xo-reflectutil is used by 48 subsystems**, verified:
   ```bash
-  xo-deps --users-of=xo-reflectutil --format=names -q | wc -l
+  # -vx xo-reflectutil: xo-deps lists a subsystem as a user of ITSELF, so the
+  # bare `| wc -l` says 49.  See .xo-backlog/xo-cmake/issues/05-xo-deps-self-edge.md
+  xo-deps --users-of=xo-reflectutil --format=names -q | grep -vx xo-reflectutil | wc -l
   ```
   which is very likely the widest `<ostream>` propagation in the tree. `Binding`
   reaches six headers; this reaches nearly everything.
+
+  **Corrected 2026-08-10, same day:** first written as 49, straight from
+  `| wc -l`. The count included xo-reflectutil itself.
 
 ### The decision it forces: xo-reflectutil's first dependency
 

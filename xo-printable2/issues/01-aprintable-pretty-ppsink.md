@@ -536,6 +536,9 @@ what each conversion *taught*, which a count cannot carry.
 | `DVarRef` | first field taking ppsink's leaf FALLBACK (`Binding` has only an `operator<<`) — the silent case; and a legacy null deref, see below |
 | `DGlobalSymtab` | four `std::uint32_t` fields; needed ppsink's integer `Prettifier<>` widened first, see below |
 | `DConstant` | first expression2 printer nesting another SUBSYSTEM's printer; and a field that turns out to be redundant, see below |
+| `DIfElseExpr` | first printer with OPTIONAL fields (`field()`'s `present`), and a third scrubbable counter, see below |
+| `DSequenceExpr` | one field wrapping a `DArray`, so the SEQUENCE divergence reappears one level down, see below |
+| `DDefineExpr` | second optional-field printer; the first case where the indent divergence changes WHICH LINES ARE EMITTED, not just their indentation, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1127,6 +1130,165 @@ shows the usual field-value column divergence on the two long field names while
 Mutation-checked four ways — struct name, dropping `:value`, renaming
 `:value_.tseq`, and the `value_pr` swap. Three fail exactly two cases each; the
 fourth is the redundancy above and correctly fails nothing.
+
+### `DIfElseExpr`: optional fields, and a third counter to scrub (2026-08-10)
+
+First printer whose fields may not exist. Legacy already had the shape —
+`refrtag(name, value, present)` — and it maps one-for-one onto ppsink's
+`field(name, value, present)`. **An absent field drops the field AND its
+separator**, in both stacks: no `:test` with an empty value, no stray space.
+Confirmed at the extreme, with `_make_empty()` leaving all three branches unset
+so three of four fields vanish and only `:typeref` renders.
+
+The presence test is `bool(obj)` on the result of
+`FacetRegistry::try_variant<APrintable,AExpression>(...)` — legacy computed the
+same thing into named `*_present` locals first. Kept as an inline `bool(...)`
+since `field()` takes it by value; the *values* still need named locals, as
+everywhere else.
+
+**A third process-wide counter turned up, and needed its own scrubber.**
+`DIfElseExpr::_make_empty()` builds its TypeRef via
+`TypeRef::generate_unique()`, so `:typeref` renders `:id "if:12"` — the number
+moving with how many TypeRefs the run happened to make first, including from
+unrelated tests. `scrub_typevar()` now normalises it to `:id "if:N"`, keeping
+the prefix (a property of the printer) and dropping the number (not).
+
+That makes three scrubbers in this file, each for a different counter:
+
+| scrubber | counter | pattern |
+|---|---|---|
+| `scrub_type_id` | `TypeId`, reflection order | `:id 42` |
+| `scrub_tseq` | `typeseq`, registration order | `:value.tseq 9` |
+| `scrub_typevar` | `TypeRef::generate_unique`, construction order | `:id "if:12"` |
+
+Worth stating as a rule rather than three accidents: **any identifier handed out
+by a process-wide counter is not a property of the printer and must not be
+pinned.** The remaining printers are full of them — every `Setup*.cpp` shows
+typeseqs, and reader2's state machines carry generated names.
+
+Pinned in `s_ifelse_v`: branches present/absent × margins 200 / 60 / 30, six
+cases. Children are `DConstant`s — already converted — so nothing here pins
+`STUB:` text that would move when a sibling printer lands. Note there is **no
+all-on-one-line case**: with four fields the flat form exceeds 190 characters,
+so even margin 200 breaks.
+
+Mutation-checked four ways, two of them aimed at the new capability — struct
+name, dropping `present` on `:test` (renders an absent field), inverting
+`present` on `:when_false` (renders exactly when it should not), and swapping
+two fields. Each fails.
+
+### `DSequenceExpr`: a nested sequence, and a divergence that is not this printer's (2026-08-10)
+
+One field, `obj<APrintable,DArray>(expr_v_)`. The printer supplies the enclosing
+struct and lets `DArray` — converted back in xo-object2's phase C — do its own
+framing and breaking. Nothing new had to be built.
+
+**The interesting part is that the divergence it shows belongs to `DArray`, not
+to `DSequenceExpr`.** Legacy renders `[ <elem>` with a space after the bracket
+and continues elements at column 6; ppsink renders `[<elem>` and continues at
+column 3. That was reviewed and settled when `DArray` itself was converted; it
+reappears here because `:expr_v` nests one, now stacked on top of the
+field-value column divergence so a narrow margin shows both at once.
+
+Worth naming explicitly, because from here on most divergences will be
+inherited rather than new: **when a nested printer diverges, check whether the
+case was already settled by the nested printer's own conversion before treating
+it as a finding.** The `Done so far` table is where that check starts.
+
+Pinned in `s_sequence_v`: 0 / 1 / 3 elements × margins 200 / 60 / 30, six cases.
+Two of them earn their place beyond coverage:
+
+- **empty (`[]`) is identical at every margin**, including 30 — an empty DArray
+  has no break points to offer, so this case cannot diverge however narrow. It
+  is the sequence analogue of the degenerate leaves.
+- **three elements at margin 60** isolates the element-alignment half of the
+  divergence: each element still fits its own line, so the only difference is
+  where the continuation lands (legacy 6, ppsink 3) rather than how the elements
+  themselves break.
+
+Elements are `DConstant`s — already converted — so nothing pins `STUB:` text.
+
+Mutation-checked three ways — struct name, field name `:expr_v`→`:exprs`, and an
+extra `begin()`/`end()` around the struct — each fails.
+
+### `DDefineExpr`: the divergence stops being cosmetic (2026-08-10)
+
+Two fields: `:lhs`, an `obj<APrintable,DVariable>` that is always present, and
+`:rhs`, optional. The second consumer of `field()`'s `present` argument after
+`DIfElseExpr`.
+
+**What the legacy body did instead**, and why this one was worth converting:
+
+```cpp
+// note: xo::print::cond() doesn't resolve the way we want here
+if (rhs) {
+    return ppii.pps()->pretty_struct(ppii, "DDefineExpr",
+                                     refrtag("lhs", lhs), refrtag("rhs", rhs));
+} else {
+    return ppii.pps()->pretty_struct(ppii, "DDefineExpr",
+                                     refrtag("lhs", lhs));
+}
+```
+
+The whole call duplicated, two spellings of one structure kept in step by hand.
+`DIfElseExpr`'s legacy body used `refrtag`'s three-argument form, so this is the
+first place the ppsink version is *shorter* rather than equivalent. The ppsink
+body is one call:
+
+```cpp
+sink.pretty_struct("DDefineExpr",
+                   xo::pp::field("lhs", lhs),
+                   xo::pp::field("rhs", rhs, bool(rhs)));
+```
+
+#### The finding: the indent divergence can change the line structure
+
+Every previous case of the field-value column divergence (legacy `indent +
+indent_width`, ppsink `indent + tag_value_offset` — 2 vs 1) showed up as
+different *leading whitespace* on the same lines. `init.60` is the first case
+where it changes **which lines exist**:
+
+| | legacy | ppsink |
+|---|---|---|
+| margin 60, `:lhs` | `  :lhs`<br>`    <DVariable`<br>`      :name "x"`<br>`      :typeref <TypeRef :id "" :td null>>` | `  :lhs`<br>`   <DVariable :name "x" :typeref <TypeRef :id "" :td null>>` |
+
+ppsink's value starts one column earlier, which leaves the nested `DVariable`
+just enough width to stay on one line where legacy must break it into four.
+
+This matters for how the remaining conversions are reviewed. Until now a
+divergence could be eyeballed as "same output, shifted"; from here a reviewer
+has to compare **structure**, because one column at an outer level can decide
+whether an inner printer breaks at all. It also means a diff of the two
+renderings is not a reliable way to spot a dropped field — the shapes may
+legitimately differ by more than whitespace.
+
+Nothing to fix: the divergence itself was reviewed and accepted when
+`Primitive<Fn>` first exposed it. This records that its *consequences* are
+larger than they looked.
+
+#### Pinned and checked
+
+`s_define_v`: named/anonymous lhs × with/without rhs × margins 200 / 60 / 30,
+six cases. `anon.200` pairs with the no-`:rhs` cases deliberately — `:name ""`
+is a field with an EMPTY VALUE, `:rhs` absent is NO FIELD, and the two appear in
+one rendering so the distinction is pinned rather than assumed.
+
+Mutation-checked four ways, each failing at least one case: drop the `present`
+argument (renders `:rhs` always), invert it, swap the field order, and change
+the struct name.
+
+Children are `DVariable` and `DConstant`, both converted, so nothing pins
+`STUB:` text.
+
+#### Two dead includes removed
+
+`<xo/indentlog/print/cond.hpp>` and `<xo/indentlog/scope.hpp>` were both unused
+in `DDefineExpr.cpp` — the file compiles without either. The `cond.hpp` one is
+explained by the comment above: it was included for a call that was tried and
+abandoned. **The TU still reaches `xo/indentlog/` transitively** (via
+`DDefineExpr.hpp`'s `<xo/indentlog/print/pretty.hpp>`, needed for
+`ppindentinfo`), which phase E removes; checked with `.o.d`, not grep. So this
+is two fewer declared uses, not one fewer dependency.
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 
