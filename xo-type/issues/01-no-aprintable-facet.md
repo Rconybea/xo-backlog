@@ -27,26 +27,51 @@ if (!retval)
     throw std::runtime_error(tostr("FacetRegistry::variant failed", ...));
 ```
 
-So **any code path that prints a type terminates with an exception.** Two are
-known, both in xo-expression2:
+So **any code path that prints a type terminates with an exception.**
 
-| site | field |
-|---|---|
-| `DLocalSymtab::pretty_deprecated` | the `:types` loop, `(*types_)[i].to_facet<APrintable>()` |
-| `DTypename::pretty_deprecated` | `type_.to_facet<APrintable>()` |
+## Confirmed by test, and the fault is one level down from where this said
 
-**Nothing exercises either**, which is why this has gone unnoticed:
+`xo-expression2/utest/printable_render.test.cpp`, `DLocalSymtab-types-throws`,
+added 2026-08-11, constructs a `DLocalSymtab` holding one `DAtomicType` and
+renders it. Observed:
+
+```
+THREW: FacetRegistry::variant failed
+       :AFrom.tseq 43 :AFrom.tname xo::scm::AType
+       :ATo.tseq 41 :ATo.tname xo::print::APrintable :DRepr 16
+```
+
+The throw is real. **But this ticket named the wrong line for it.** It listed
+two sites:
+
+| site | field | actually |
+|---|---|---|
+| `DLocalSymtab::pretty_deprecated` | the `:types` loop, `(*types_)[i].to_facet<APrintable>()` | **succeeds** |
+| `DTypename::pretty_deprecated` | `type_.to_facet<APrintable>()` | throws |
+
+`types_` holds `DTypename`s, not `AType`s — `DLocalSymtab::append_type` wraps
+each one (`DTypename::make(mm, name, type)`) before pushing it. `DTypename` has
+an `IPrintable_DTypename.json5`, so the symtab's own facet lookup resolves
+fine. The failure is inside the printer it then calls.
+
+The wrong reading was plausible because both lines are spelled
+`to_facet<APrintable>()` on an `obj<>` from a container, and because the symptom
+— an exception while printing a symtab — is the same either way. It was reached
+by grepping for `to_facet<APrintable>` in files that print types, without
+checking what the container actually holds.
+
+**Why it matters:** it moves the tolerate-vs-throw decision. Making
+`DLocalSymtab` tolerant would fix nothing; the placeholder has to go in
+`DTypename`, or the facet has to exist. `DLocalSymtab` converted as a pure
+refactor for exactly that reason (2026-08-11).
+
+**Nothing exercised either site before that test**, which is why this went
+unnoticed:
 
 ```bash
 grep -rn 'DLocalSymtab\|DTypename' --include=*.test.cpp xo-*/ | grep -v '/\.build/'
-#   (no output)
+#   (no output, before 2026-08-11)
 ```
-
-Measured 2026-08-11. **Unverified:** that the throw is what happens at runtime
-rather than what the code reads as — no test constructs a `DLocalSymtab` with a
-non-empty `types_`, so this is a code-read, not an observation. Worth confirming
-with a two-line test before designing the fix, since "it throws" and "it renders
-nothing" call for different remedies.
 
 ## Why it is not blocking the ppsink migration
 
@@ -58,6 +83,14 @@ corrected the same day.
 `DLocalSymtab` / `DTypename` / `DLambdaExpr` can all convert with the type-valued
 fields left exactly as they are — the phase-C expectations simply cannot cover
 that path, because legacy has no rendering to pin against.
+
+`DLocalSymtab` did exactly that on 2026-08-11: pure refactor, and its fixture
+covers var-only cases. The `types_` path is pinned only as
+`DLocalSymtab-types-throws` — legacy throws, ppsink renders, because ppsink
+stops at `DTypename`'s phase-B stub instead of descending. **That asymmetry
+closes when `DTypename` converts**, and that is the point at which this
+decision has to be made rather than deferred: a converted `DTypename` either
+reproduces the throw or renders a placeholder.
 
 ## Two ways to fix, and they are not equivalent
 
@@ -83,8 +116,10 @@ the failure mode.
   migration, and the corrected "blocked" reading
 
 **Done when:**
-- the throw is confirmed (or refuted) by an actual test, not a code-read
-- a decision is recorded for each of the two call sites: tolerate, or print
+- ~~the throw is confirmed (or refuted) by an actual test, not a code-read~~
+  — done 2026-08-11, `DLocalSymtab-types-throws`; it also relocated the fault
+- a decision is recorded for the one call site that has it:
+  `DTypename::pretty` — tolerate, or print
 - if xo-type gains `APrintable`, each of the six D-types has a pinned rendering
 
 ## Notes

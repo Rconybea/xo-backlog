@@ -540,6 +540,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DSequenceExpr` | one field wrapping a `DArray`, so the SEQUENCE divergence reappears one level down, see below |
 | `DDefineExpr` | second optional-field printer; the first case where the indent divergence changes WHICH LINES ARE EMITTED, not just their indentation, see below |
 | `DApplyExpr` | first `struct_open()` consumer here — runtime arity, generated field names; and legacy's hand-rolled flat form turns out to omit its separators, see below |
+| `DLocalSymtab` | TWO dynamic-arity loops, and the first field the fixture CANNOT reach — the `:types` path throws in legacy, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1367,6 +1368,49 @@ tolerate one. A half-scaffolded `DApplyExpr` is a parser-intermediate state;
 whether it should be printable at all is a separate question from this
 conversion, and is not settled here.
 
+### `DLocalSymtab`: two dynamic loops, and a field the fixture cannot reach (2026-08-11)
+
+Same `struct_open()` shape as `DApplyExpr`, twice over — `:nvars`, a loop over
+`vars_`, `:ntypes`, a loop over `types_` — with index names generated as
+`concat("[", i, "]")`. Nothing new was needed in ppsink.
+
+Three things it settled that `DApplyExpr` did not:
+
+**Legacy's separator defect is NOT shared by every hand-rolled printer.** The
+section above predicted more of these among the remaining two-pass printers.
+`DLocalSymtab` is one of them and does **not** have it: its flat branch builds
+fields with `xrefrtag`, which carries the leading space, where `DApplyExpr`
+used `refrtag`, which does not. So the only divergence here is the familiar
+field-value column — legacy `indent + 2`, ppsink `indent + 1` — compounding
+over three levels at margin 30. The prediction was right that the shape recurs
+and wrong that the defect does; worth knowing before assuming it about
+xo-reader2's.
+
+**The index names collide across the two loops.** A symtab with both vars and
+types renders `:[0]` twice, once per loop, because each `snprintf`s from its own
+`i`. Reproduced rather than fixed: this conversion's contract is unchanged
+output, and the names are legacy's. Flagged here because it makes the rendering
+ambiguous to a reader and is worth fixing on its own terms later.
+
+**`types_` cannot be pinned on either side, for two different reasons.** Legacy
+throws (see the section below — and note it throws one level deeper than this
+ticket used to say). ppsink renders, but only because it reaches `DTypename`'s
+phase-B stub and stops; pinning `STUB:DTypename` would pin text that moves.
+So `s_localsymtab_v` is **var-only** — 0 / 1 / 2 vars × margins 200 / 60 / 30,
+seven cases — and the `types_` path gets a separate test,
+`DLocalSymtab-types-throws`, asserting the legacy throw and that the ppsink side
+renders the symtab's *own* fields (`:nvars 0`, `:ntypes 1`, `:[0]`) without
+naming the stub. That test is the first in this migration where the two
+protocols disagree about something other than layout.
+
+Mutation-checked four ways, each failing at least one case: wrong struct name,
+1-based rather than 0-based index names, a dropped `:ntypes` field, and a
+renamed `:nvars`.
+
+Also removed a dead `#include <xo/indentlog/scope.hpp>` from
+`DLocalSymtab.cpp` — same kind of leftover as the two dropped from
+`DDefineExpr.cpp`.
+
 ### xo-type has no APrintable — a real gap, NOT a blocker (2026-08-11)
 
 **Corrected the same day, per `CONVENTIONS.md` rule 6.** This section first said
@@ -1378,8 +1422,8 @@ it stronger than the argument needed.
 | stub | depends on |
 |---|---|
 | `DLambdaExpr` | `DLocalSymtab` — its `:local_symtab` field, present whenever `name_ && body` |
-| `DLocalSymtab` | its `:types` loop does `to_facet<APrintable>()` on xo-type values |
-| `DTypename` | the same, via `type_.to_facet<APrintable>()` |
+| `DLocalSymtab` | ~~its `:types` loop does `to_facet<APrintable>()` on xo-type values~~ — **wrong, see below**: that lookup is on a `DTypename` and succeeds |
+| `DTypename` | the real site, via `type_.to_facet<APrintable>()` |
 
 ```bash
 ls xo-type/idl/ | grep -i printable                                  # nothing
@@ -1430,6 +1474,27 @@ such a case**, since legacy throws rather than rendering. Those cases pin
 `expect_pretty_` only, with the legacy side asserted as a throw — the first in
 this migration where the two stacks are not both renderable. Decide at
 conversion time; do not let it stall the sweep.
+
+**Corrected 2026-08-11, at `DLocalSymtab`'s conversion.** "Their type-valued
+fields" is one field, not two. `DLocalSymtab::append_type` wraps each type in a
+`DTypename` before pushing it, so `types_` holds `DTypename`s — which HAVE an
+`IPrintable` facet. `(*types_)[i].to_facet<APrintable>()` succeeds; the throw
+comes from `DTypename::pretty_deprecated` one level down. Observed, not read
+(`DLocalSymtab-types-throws`):
+
+```
+THREW: FacetRegistry::variant failed
+       :AFrom.tname xo::scm::AType :ATo.tname xo::print::APrintable :DRepr 16
+```
+
+The wrong reading was plausible because both lines are spelled
+`to_facet<APrintable>()` on a container element, and the symptom is identical
+from outside. It came from grepping for the call rather than asking what the
+container holds — the same habit the "check children before converting" note
+below was written about, applied one level too shallow.
+
+So the decision is **`DTypename`'s alone**, and `DLocalSymtab` converted as a
+pure refactor with no decision to make.
 
 #### Check children before converting, not after
 
