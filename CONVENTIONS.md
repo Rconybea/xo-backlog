@@ -162,9 +162,17 @@ That is the whole recipe, as of 2026-08-10. It runs two stages — configure /
 build / install with `--with-utests --with-examples`, then `--utest` — both
 with `-q -k` over `--all`.
 
-**Expect `62 attempted: 33 ok, 28 with no tests, 1 failed, 0 skipped`.** The one
-failure is `xo-jit machpipeline.fptr`, which fails permanently and is ticketed.
-Any other shape is a regression.
+**Expect `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`.** Any
+other shape is a regression.
+
+**The tree has been fully green since 2026-08-11.** Before that this line read
+"33 ok, 1 failed", the failure being `utest.jit`, described here and in its
+ticket as failing *permanently*. It did not: it was three ordinary bugs
+(`.xo-backlog/xo-jit/issues/01`), one of them an inverted comparison operator in
+xo-reflect that could conflate any two function types differing only in return
+type. Calling a failure permanent is a claim like any other and decays the same
+way — it had been carried for nine days without recheck, and it made every sweep
+report one expected red that nobody looked at.
 
 The flag exists because the recipe it replaces was re-derived from scratch
 several times on 2026-08-08 and got it wrong twice — once by omitting examples,
@@ -199,9 +207,11 @@ skips any of them still looks green:
   *previous* binary. That cost a long debugging detour on 2026-08-08 —
   symptoms looked like a library bug; the cause was a compile error in a test
   file that had been redirected away.
-- **`-k`.** Keeps going past a failure, which a whole-tree sweep needs:
-  `xo-jit` fails permanently, and without `-k` everything after it goes
-  untested while still looking like it ran.
+- **`-k`.** Keeps going past a failure. Without it the first red subsystem
+  leaves everything after it untested while the run still looks like it ran —
+  and since `--all` is in dependency order, that is most of the tree. The tree
+  is green today, so `-k` costs nothing and is what makes the next failure
+  legible instead of masking.
 - **Let `xo-build` take the list; do not loop over it, and do not call `ctest`
   directly.** It prints one status line per subsystem (`-q`,
   `.xo-backlog/xo-cmake/issues/01`) and surveys past failures (`-k`, issue 03).

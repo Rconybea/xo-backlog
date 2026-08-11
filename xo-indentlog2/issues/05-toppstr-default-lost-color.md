@@ -32,6 +32,10 @@ Full sweep after the change: 61 subsystems, 34 ok / 26 no-tests / 1 failed
 (`xo-jit machpipeline.fptr`, pre-existing) — so no test elsewhere was relying
 on a bare `toppstr(x)` being colourless.
 
+(Those are the 2026-08-09 totals. The tree reads 62 / 34 / 28 / **0** as of
+2026-08-11 — two placeholder subsystems scaffolded, and `utest.jit` fixed rather
+than permanent. The conclusion above is unaffected; only the numbers moved.)
+
 ---
 
 
