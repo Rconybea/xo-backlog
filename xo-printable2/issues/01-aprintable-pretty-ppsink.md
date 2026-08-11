@@ -541,6 +541,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DDefineExpr` | second optional-field printer; the first case where the indent divergence changes WHICH LINES ARE EMITTED, not just their indentation, see below |
 | `DApplyExpr` | first `struct_open()` consumer here — runtime arity, generated field names; and legacy's hand-rolled flat form turns out to omit its separators, see below |
 | `DLocalSymtab` | TWO dynamic-arity loops, and the first field the fixture CANNOT reach — the `:types` path throws in legacy, see below |
+| `DLambdaExpr` | the first ALL-OR-NOTHING branch — one condition gating the whole struct, not per-field, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1410,6 +1411,56 @@ renamed `:nvars`.
 Also removed a dead `#include <xo/indentlog/scope.hpp>` from
 `DLocalSymtab.cpp` — same kind of leftover as the two dropped from
 `DDefineExpr.cpp`.
+
+### `DLambdaExpr`: an all-or-nothing branch, and why it stays a branch (2026-08-11)
+
+Back to fixed arity and plain `pretty_struct`, with four fields — `:tref`,
+`:name`, `:local_symtab`, `:body` — but gated by a condition that has no
+per-field equivalent:
+
+```cpp
+if (name_ && body) { ...four fields... } else { sink.pretty_struct("LambdaExpr"); }
+```
+
+**Not collapsible into `field()`'s `present` flag**, and the contrast with
+`DDefineExpr` is the point. There the branch was per-field: `:rhs` present or
+absent, everything else unconditional, and `field(name, value, present)` said
+exactly that — it was what legacy's `cond()` could not express. Here one
+condition gates the *whole struct*: an incomplete lambda renders a bare
+`<LambdaExpr>`, not a struct with fields omitted. Writing it as four
+identically-gated fields would say something different, and would also build
+`quot(*name_)` on the path where `name_` is null. The `if/else` is the faithful
+translation; the comment in `DLambdaExpr.cpp` says so, because "simplify this
+into `present` flags" is the obvious wrong idea to have about it later.
+
+Nothing else new: `:local_symtab` nests `DLocalSymtab`, converted immediately
+before, so no `STUB:` text got pinned. This is the ordering the "check children
+before converting" note below was written to produce — `DLambdaExpr` was the
+obvious next target two conversions ago and was deliberately deferred until its
+child existed.
+
+#### Pinned and checked
+
+`s_lambda_v`: eleven cases. Three complete lambdas (0 / 1 / 2 arguments) across
+margins 200 / 80 / 60 / 30, plus four degenerate ones — `name_` null and `body`
+absent, each at a wide and a narrow margin.
+
+`L1.200` is the one worth naming: at margin 200 the lambda breaks (its
+`:local_symtab` value is wide) while the symtab inside it does not, so every
+field lands on its own line and **the two stacks agree exactly** — which
+isolates field order and names from every layout question. `L1.80` is the mixed
+case, one level of the +2/+1 column gap visible; `L1.30` is four levels deep,
+the deepest nesting in this fixture. `Lnobody.8` sets a margin of 8 against 13
+characters of content: the degenerate form does not break even when it cannot
+fit, having nowhere to break.
+
+The expectations were generated from the observed bytes by script rather than
+transcribed — eleven cases × two protocols × up to seventeen lines is past the
+size where hand-copying is trustworthy.
+
+Mutation-checked four ways, each failing at least one case: swapped `:tref` /
+`:name`, the `name_ && body` gate forced true, wrong struct name, and `unq()`
+for `quot()` on the name.
 
 ### xo-type has no APrintable — a real gap, NOT a blocker (2026-08-11)
 
