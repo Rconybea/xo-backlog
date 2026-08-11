@@ -107,6 +107,23 @@ absence rather than fixing it.
 These compose: (2) now, (1) later. Doing (2) alone and calling it done would be
 the failure mode.
 
+**Why the ordering is not just about size** (RC, 2026-08-11): xo-type is itself
+an in-flight refactor — schematika types are moving off `xo::reflect::TypeDescr`
+onto the facet design, because TypeDescr commits a type to a *representation*
+and the goal is to reason about types without specifying one. (Tolerable if
+everything were JIT'd; not otherwise.) So (1) means deciding and pinning six
+renderings against a D-type set that is still moving, and each pinned rendering
+is a rebase later. (2) costs one placeholder and no pins.
+
+The same fact reframes what phase C is pinning. `TypeRef` carries all three
+tracks — `id_`, `type_` (`obj<AType>`), `td_` (`TypeDescr`) — and
+`TypeRef::pretty` renders `:id` and `:td` and **never `type_`**. So every
+phase-C expectation records only the departing half: 75 `:td` occurrences in
+`xo-expression2/utest/printable_render.test.cpp`, 6 in xo-procedure2's. Not
+wrong — phase C's contract is unchanged output — but those rebase when `td_`
+goes, and that is a cost of this ticket landing late rather than of it landing
+badly.
+
 **Files:**
 - `xo-type/idl/` — six `IGCObject_D*` and five `IType_D*`, no `IPrintable_*`
 - `xo-facet/include/xo/facet/FacetRegistry.hpp` — `variant()` vs `try_variant()`
