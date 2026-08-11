@@ -539,6 +539,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DIfElseExpr` | first printer with OPTIONAL fields (`field()`'s `present`), and a third scrubbable counter, see below |
 | `DSequenceExpr` | one field wrapping a `DArray`, so the SEQUENCE divergence reappears one level down, see below |
 | `DDefineExpr` | second optional-field printer; the first case where the indent divergence changes WHICH LINES ARE EMITTED, not just their indentation, see below |
+| `DApplyExpr` | first `struct_open()` consumer here — runtime arity, generated field names; and legacy's hand-rolled flat form turns out to omit its separators, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1289,6 +1290,154 @@ abandoned. **The TU still reaches `xo/indentlog/` transitively** (via
 `DDefineExpr.hpp`'s `<xo/indentlog/print/pretty.hpp>`, needed for
 `ppindentinfo`), which phase E removes; checked with `.o.d`, not grep. So this
 is two fewer declared uses, not one fewer dependency.
+
+### `DApplyExpr`: runtime arity, and a defect in the printer being replaced (2026-08-11)
+
+The first printer in this cluster whose field count is a **runtime** value —
+`n_args_ + 1` — so the first built with `PpSink::struct_open()` rather than
+`pretty_struct()`. `.xo-backlog/xo-ppsink/issues/06` landed that builder on
+2026-08-08 against three quoted call sites; this is the first real consumer, and
+it needed nothing added:
+
+```cpp
+auto st = sink.struct_open("ApplyExpr");
+st.field("fn", fn);
+for (size_type i_arg = 0; i_arg < n_args_; ++i_arg)
+    st.field(xo::pp::concat("arg", 1 + i_arg), arg_i);
+```
+
+Two things worth knowing for `DLocalSymtab`, which has the same shape:
+
+- **`struct_scope::field()` renders immediately**, so unlike the free
+  `xo::pp::field()` it does NOT capture by reference. Temporaries are safe —
+  the `concat()` above is one. This is the opposite of the rule that has caught
+  every previous conversion, so it is worth stating rather than assuming either
+  way.
+- The scope's destructor emits `">"` and closes the group, so the struct's
+  extent is a C++ block.
+
+#### The finding: legacy's flat form omits its separators
+
+Every previous conversion compared two renderings of the same shape. Here they
+differ in content, and **legacy is the wrong one**:
+
+| | legacy | ppsink |
+|---|---|---|
+| 0 args, fits | `<ApplyExpr:fn <DVariable …>>` | `<ApplyExpr :fn <DVariable …>>` |
+| 1 arg, fits | `<ApplyExpr:fn <DVariable …>:arg1 <DConstant …>>` | `<ApplyExpr :fn <DVariable …> :arg1 <DConstant …>>` |
+
+`pretty_deprecated`'s `ppii.upto()` branch is hand-rolled:
+
+```cpp
+if (!pps->print_upto("<ApplyExpr")) return false;
+if (!pps->print_upto(refrtag("fn", fn))) return false;
+```
+
+Nothing emits a separator between the name and the first field, or between
+fields — `pretty_struct` does that for its callers, and this printer does not
+use it. So a flat `ApplyExpr` has always rendered `<ApplyExpr:fn X:arg1 Y>`.
+**The broken form is unaffected**, because a field on its own line needs no
+leading space, which is why the defect survived: it only shows when the whole
+expression fits on one line, and `ApplyExpr`s are usually wide enough not to.
+
+Not a regression and nothing to fix in ppsink — `struct_open()` emits the
+separator by construction. Recorded because it inverts the usual reading of a
+divergence: **the deprecated rendering is not automatically the reference.**
+Two of the four remaining hand-rolled two-pass printers are still to convert
+(`DLocalSymtab`, and the ones in xo-reader2), and they share this shape, so
+expect more of these.
+
+#### Pinned and checked
+
+`s_apply_v`: 0 / 1 / 3 args × margins 200 / 60 / 40 / 30, seven cases. `a3.200`
+earns its place by breaking even at margin 200 — every field then fits its own
+line, so the two stacks agree **exactly**, which isolates the generated names
+`arg1 arg2 arg3` from every layout question. `a3.60` is the mixed case: `:fn`
+breaks while the three args do not, so one field diverges and three do not in a
+single rendering.
+
+Mutation-checked four ways, each failing at least one case: 0-based rather than
+1-based arg names, wrong struct name, `force_break = true`, and a loop bound
+that drops the last argument.
+
+Every argument slot is assigned in the fixture, deliberately. The printer reaches
+its children via `FacetRegistry::variant<APrintable>` — not `try_variant` — so
+an unassigned slot would hand an empty `obj<>` to a lookup that does not
+tolerate one. A half-scaffolded `DApplyExpr` is a parser-intermediate state;
+whether it should be printable at all is a separate question from this
+conversion, and is not settled here.
+
+### xo-type has no APrintable — a real gap, NOT a blocker (2026-08-11)
+
+**Corrected the same day, per `CONVENTIONS.md` rule 6.** This section first said
+three of the four remaining xo-expression2 printers were *blocked* on it. RC's
+call: if existing code cannot print types, that cannot block a refactor whose
+contract is "rendered output is unchanged". Correct, and the measurement makes
+it stronger than the argument needed.
+
+| stub | depends on |
+|---|---|
+| `DLambdaExpr` | `DLocalSymtab` — its `:local_symtab` field, present whenever `name_ && body` |
+| `DLocalSymtab` | its `:types` loop does `to_facet<APrintable>()` on xo-type values |
+| `DTypename` | the same, via `type_.to_facet<APrintable>()` |
+
+```bash
+ls xo-type/idl/ | grep -i printable                                  # nothing
+grep -rn 'APrintable' xo-type/src/ xo-type/include/                  # nothing
+```
+
+**xo-type has no `APrintable` facet at all** — no IDL, no impls, nothing
+registered.
+
+The first version of this section stopped there and concluded "blocked". What it
+failed to do was read what happens next. `to_facet<APrintable>()` on a
+type-erased `obj<AType>` reaches
+`FacetRegistry::variant<APrintable,AType>`, which does not return empty — it
+**throws**:
+
+```cpp
+auto retval = try_variant<ATo>(from);
+if (!retval)
+    throw std::runtime_error(tostr("FacetRegistry::variant failed", ...));
+```
+
+So a `DLocalSymtab` holding even one type is **unprintable today**: the legacy
+printer throws. And nothing exercises it —
+
+```bash
+grep -rn 'DLocalSymtab\|DTypename' --include=*.test.cpp xo-*/ | grep -v '/\.build/'
+#   (no output)
+```
+
+There is therefore **no existing rendering to preserve**, and phase C's contract
+is vacuous on that path. Adding `APrintable` to xo-type is a real gap and worth
+its own ticket, but it is not a prerequisite for finishing this refactor.
+
+#### The decision it defers, rather than removes
+
+When `DLocalSymtab` / `DTypename` are converted, their type-valued fields must
+either
+
+- **reproduce the throw** — keep `variant<>`, so the conversion stays a pure
+  refactor; or
+- **render a placeholder** — `try_variant<>` plus something like
+  `<no APrintable>`, so the object becomes printable.
+
+The second costs nothing (it changes behaviour only where behaviour is currently
+"throw") and stops a debugger dump of a symbol table taking the process down.
+It has one consequence for the test: **`expect_deprecated_` cannot be pinned for
+such a case**, since legacy throws rather than rendering. Those cases pin
+`expect_pretty_` only, with the legacy side asserted as a throw — the first in
+this migration where the two stacks are not both renderable. Decide at
+conversion time; do not let it stall the sweep.
+
+#### Check children before converting, not after
+
+`DLambdaExpr` was the obvious next target by position in the list. Its
+`:local_symtab` field would have pinned `STUB:DLocalSymtab` into every
+non-degenerate expectation — text that then moves twice. `DApplyExpr` was taken
+instead because its children are `AExpression` variants, all converted. That
+check costs one grep and is worth doing before writing any fixture.
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 
