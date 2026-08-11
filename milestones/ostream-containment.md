@@ -35,52 +35,89 @@ header-defined printer that does `os << xtag(..)` has already decided its output
 cannot participate in an enclosing structure's line breaking, which is precisely
 what the ppsink migration exists to undo.
 
-The pattern is not new — ten headers already follow it, and
+The pattern is not new — twenty headers already follow it (ten `_ostream.hpp`
+plus ten spelled `_iostream.hpp`), and
 `xo-webutil/include/xo/webutil/webutil_ostream.hpp` documents the reasoning
 (PpSink is the intended path inside xo; ostream is for newcomers and tests). This
 milestone generalises what those ten already did.
 
 ## Where it stands (measured 2026-08-10)
 
-Ten conforming headers exist:
+Twenty conforming headers exist, under two spellings:
 
 ```bash
-find xo-*/include -name '*_ostream.hpp' | grep -v '/\.build/' | sort
-#   xo-alloc/alloc_ostream.hpp, xo-webutil/webutil_ostream.hpp, and eight in
-#   xo-ppsink (hex, log_level, pad, pp_time, pretty, quoted_char, quoted, tag)
+find xo-*/include -name '*_ostream.hpp' -o -name '*_iostream.hpp' \
+  | grep -v '/\.build/' | sort
+#   _ostream.hpp  (10): xo-alloc/alloc_, xo-webutil/webutil_, and eight in
+#                       xo-ppsink (hex, log_level, pad, pp_time, pretty,
+#                       quoted_char, quoted, tag)
+#   _iostream.hpp (10): xo-unit x6, xo-flatstring x2, xo-ratio, xo-timeutil
 ```
 
-**47 headers remain**, across 21 subsystems. The sweep count is one command —
+**125 headers remain**, across 26 subsystems. The sweep count is one command —
 put it on the sweep ticket as its `Progress:` line when that ticket is written
 (`CONVENTIONS.md` rule 5; `xo-sdlc` runs `Progress:` on **tickets**, not on
 milestone files, so it is recorded here as a command rather than a field):
 
 ```bash
-{ grep -rl 'ostream *& *operator<<' --include=*.hpp xo-*/include 2>/dev/null
-  grep -rl '_ostream\.hpp[">]'      --include=*.hpp xo-*/include 2>/dev/null
-} | grep -v '/\.build/' | grep -v '_ostream\.hpp$' | grep -v '^xo-ppsink/' \
+{ grep -rl 'operator<< *( *std::ostream' --include=*.hpp xo-*/include 2>/dev/null
+  grep -rl '_ostream\.hpp[">]'           --include=*.hpp xo-*/include 2>/dev/null
+} | grep -v '/\.build/' | grep -vE '_(i)?ostream\.hpp$' | grep -v '^xo-ppsink/' \
   | sort -u | wc -l
 ```
 
-Do not write the number into a ticket — it decays. It is two populations, and
-they need different work:
+Do not write the number into a ticket — it decays.
+
+### CORRECTED 2026-08-10, same day: the first query undercounted by 6x
+
+This ticket was written saying **47**, from
 
 ```bash
-# A: declares an operator<< outside an _ostream.hpp  (19 files)
-grep -rln 'ostream *& *operator<<' --include=*.hpp xo-*/include \
-  | grep -v '/\.build/' | grep -v '_ostream\.hpp$'
-
-# B: a non-test header that INCLUDES an _ostream.hpp, i.e. streams in a header
-grep -rn '_ostream\.hpp[">]' --include=*.hpp xo-*/include \
-  | grep -v '/\.build/' | grep -v '_ostream\.hpp$' | grep -v '^xo-ppsink/'
+grep -rln 'ostream *& *operator<<' ...      # 19 files: WRONG
 ```
+
+That pattern requires the return type and the function name on **one line**.
+xo's dominant style puts them on separate lines:
+
+```cpp
+        inline std::ostream &
+        operator<<(std::ostream & s, const typeseq & x) {
+```
+
+so it matched 19 headers where the real figure is 119. Found by accident:
+`DConstant`'s printer renders `typeseq` values, and
+`xo-reflectutil/include/xo/reflectutil/typeseq.hpp:115` declares exactly the
+inserter above — a type visibly in scope for this milestone that the query said
+was not there.
+
+**Why the wrong version was plausible:** it was checked against a known case
+(`Binding.hpp:58`, which happens to be single-line) and produced a list whose
+contents all looked right. A grep that returns real hits reads as working. The
+fix is to match the **parameter** (`operator<<(std::ostream`) rather than the
+return type, since the parameter cannot be split from the function name.
+
+This is `CONVENTIONS.md` rule 3 — *what one command would show this is false?* —
+and the answer here was "grep for a type you already know is a violator and see
+whether it appears". Cheap, and not run.
+
+Two consequences beyond the number:
+
+- **The `_iostream.hpp` naming variant is not one file, it is ten** (xo-unit ×6,
+  xo-flatstring ×2, xo-ratio, xo-timeutil). They already follow this pattern
+  under a different spelling. The query now excludes `_(i)?ostream.hpp`, which
+  counts them as conforming — but that is a decision this milestone owes an
+  argument for, not a grep detail.
+- **16 of the 125 are xo-indentlog**, which `ppsink-migration` deletes outright.
+  So the standing work is nearer 109, and that subset will fall without anyone
+  touching it.
 
 Population **B** is the larger one and is overwhelmingly `tag_ostream.hpp` —
 header-defined printers doing `os << xo::pp::xtag(..)`. Those want converting to
 `sink.pretty_struct(...)`, which is the same work as the ppsink migration and
 should follow the same phase-C discipline (pin the rendering, then change it).
 
-`xo-ordinaltree` alone accounts for 10 of the 47 and is nearly all population B.
+By subsystem the largest are xo-reader2 (19), xo-indentlog (16, self-resolving),
+xo-reader (15), xo-ordinaltree (11) and xo-kalmanfilter (10).
 
 Two exemptions are baked into the query and should be argued rather than
 assumed:
@@ -88,13 +125,14 @@ assumed:
 - **`xo-ppsink` itself** — `scope.hpp`, `tostr.hpp` and `tag_ostream.hpp`
   include `pretty_ostream.hpp` deliberately: they *are* the fallback machinery.
   Excluded by `grep -v '^xo-ppsink/'`.
-- **`xo-indentlog`** — one hit (`print/time.hpp`), and the subsystem is deleted
-  by the `ppsink-migration` milestone, so it resolves itself. Left in the count
-  rather than special-cased, since it is genuinely remaining work.
+- **`xo-indentlog`** — 16 hits, and the subsystem is deleted outright by the
+  `ppsink-migration` milestone, so they resolve themselves. Left in the count
+  rather than special-cased, since they are genuinely remaining work.
 
-Naming is not yet uniform: `xo-unit/include/xo/unit/bpu_iostream.hpp` is
-`_iostream`, not `_ostream`, and the query does not match it. Settle the
-spelling before doing the sweep, or the criterion has a hole in it.
+Naming is not uniform: ten headers spell it `_iostream.hpp` rather than
+`_ostream.hpp` (listed in the correction above). Settle the spelling before
+doing the sweep — the query currently treats both as conforming, which is a
+choice, not a measurement.
 
 ## Relationship to `ppsink-migration`
 
@@ -105,7 +143,7 @@ so the two overlap in practice even though neither gates the other.
 
 Do not fold this into `ppsink-migration`. That one is nearly done (`xo-sdlc
 --milestone=ppsink-migration`) and its remaining work is a single cluster; adding
-47 files of unrelated sweep would make its progress meaningless.
+125 files of unrelated sweep would make its progress meaningless.
 
 ## Done when
 
@@ -113,6 +151,13 @@ Do not fold this into `ppsink-migration`. That one is nearly done (`xo-sdlc
 - no non-test xo header includes one (excepting xo-ppsink's own machinery)
 - the sweep count above returns 0
 - the naming variant (`_iostream` vs `_ostream`) is resolved one way or the other
+- **`.xo-backlog/xo-reflectutil/issues/01-typeseq-ostream.md` is closed.**
+  Called out by name because that one was deliberately left half-done on
+  2026-08-10 -- `Prettifier<typeseq>` exists and `typeseq.hpp` dropped
+  `<iostream>` for `<ostream>`, but the inserter is still there, blocked on the
+  legacy `xo-indentlog` `xtag` sites that `ppsink-migration` removes. A
+  retained-for-now comment in a header is easy to stop seeing; a ticket carrying
+  this milestone is not.
 
 ## Notes
 

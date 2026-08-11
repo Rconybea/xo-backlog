@@ -74,9 +74,17 @@ protocols. So this is a refactor with its test written first, unusually.
 Same shape, same silence, elsewhere in the facet cluster. Measured 2026-08-10:
 
 ```bash
-grep -rn 'std::ostream & *operator<<\|ostream & operator<<' --include=*.hpp \
+# NB match the PARAMETER, not the return type -- xo's style puts the return
+# type on its own line, and the earlier `ostream & operator<<` form undercounted
+# tree-wide by 6x.  See the CORRECTED section of the ostream-containment
+# milestone.
+grep -rn 'operator<< *( *std::ostream' --include=*.hpp \
   xo-expression2/include xo-reader2/include xo-interpreter2/include | grep -v '/\.build/'
 ```
+
+**That table is the facet cluster only, and is now known to be incomplete** —
+re-run the corrected grep above before relying on it; the reader2 count alone
+went from 3 files to 19 once the pattern was fixed.
 
 | type | file |
 |---|---|
@@ -96,6 +104,76 @@ practice; check what they actually render at a narrow margin before deciding.
 Those four are not this ticket's work. They reach their own phase C turn in
 `.xo-backlog/xo-printable2/issues/01`, and the point of listing them here is
 that the question will arrive four more times and should get the same answer.
+
+## A sixth, found 2026-08-10, with a wider blast radius than `Binding`
+
+`xo::reflect::typeseq` — `xo-reflectutil/include/xo/reflectutil/typeseq.hpp:115`.
+Found during the `DConstant` conversion, whose printer renders two of them; it
+is also the type whose multi-line inserter exposed the counting bug in
+`.xo-backlog/milestones/ostream-containment.md`.
+
+It wants a `Prettifier<>` more than `Binding` does, on three counts:
+
+- **The implementation is now trivial.** `typeseq` wraps a single `int32_t`
+  (`seqno()`), and its inserter is `s << x.seqno()`. Since
+  `.xo-backlog/xo-ppsink/issues/09-scalar-prettifiers.md` there is a
+  `Prettifier<>` for every integer width, so this is `sink.pp(x.seqno())` — one
+  line, output-identical, and already pinned by `s_constant_v`.
+- **`typeseq.hpp` includes `<iostream>`, not `<ostream>`** (`:10`) — so every
+  consumer instantiates `std::ios_base::Init`.
+- **xo-reflectutil is used by 49 subsystems**, verified:
+  ```bash
+  xo-deps --users-of=xo-reflectutil --format=names -q | wc -l
+  ```
+  which is very likely the widest `<ostream>` propagation in the tree. `Binding`
+  reaches six headers; this reaches nearly everything.
+
+### The decision it forces: xo-reflectutil's first dependency
+
+`Prettifier<>` lives in xo-ppsink, and **xo-reflectutil currently depends on
+nothing**:
+
+```bash
+xo-deps --deps-of=xo-reflectutil --format=names -q   # prints nothing
+xo-deps --why=xo-ppsink:xo-reflectutil               # exit 1 -> no cycle either way
+xo-deps --deps-of=xo-ppsink --format=names -q        # xo-ppsink xo-timeutil
+```
+
+So `xo-reflectutil -> xo-ppsink` is legal — ppsink is nearly as low, depending
+only on itself and xo-timeutil — but it would be the first edge out of the
+bottom of the graph, and that is a levelization decision rather than a
+refactoring detail.
+
+**There is a precedent, and it is close.** The tree's `<thing>_pp.hpp`
+convention already puts a `Prettifier<>` in a separate header so the base header
+carries no printing vocabulary — four instances today:
+
+| header | subsystem's deps |
+|---|---|
+| `xo-refcnt/.../Refcounted_pp.hpp` | ppsink, reflectutil, timeutil |
+| `xo-arena/.../span_pp.hpp` | ppsink, randomgen, reflectutil, timeutil |
+| `xo-reflect/.../TypeDescr_pp.hpp` | ppsink, refcnt, reflect, subsys, testutil, timeutil |
+| `xo-ratio/.../ratio_pp.hpp` | (ten, incl. ppsink) |
+
+`xo-refcnt` is one level above reflectutil and already carries a ppsink
+dependency for exactly this purpose. So the shape is established; what is new is
+doing it at the very bottom.
+
+Three options, in the order I would consider them:
+
+1. **`xo-reflectutil/include/xo/reflectutil/typeseq_pp.hpp`**, reflectutil
+   gaining a ppsink dependency. Matches the convention; costs one graph edge
+   from the bottom.
+2. **Put `Prettifier<typeseq>` in a consumer that already has both** — xo-facet
+   or xo-printable2. No graph change, but the Prettifier is then somewhere
+   nobody would look for it, and consumers that do not include that subsystem
+   silently stay on the fallback. That last part is the same silent-divergence
+   trap this ticket exists to close.
+3. **Leave it.** The rendering is correct; only the ostream round-trip and the
+   `<iostream>` propagation are at stake.
+
+Unverified either way: whether anything actually depends on `typeseq`'s
+`operator<<` outside printers — worth a grep before removing it.
 
 ## Suggested approach
 

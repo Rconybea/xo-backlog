@@ -534,6 +534,8 @@ what each conversion *taught*, which a count cannot carry.
 | `TypeRef` | first NON-D-type printer, so the first needing its own `Prettifier<>`; and the first field whose legacy `cond()` has no ppsink equivalent, see below |
 | `DVariable` | first printer NESTING an already-converted one (`TypeRef`), so the first where the field-value indent divergence compounds per level, see below |
 | `DVarRef` | first field taking ppsink's leaf FALLBACK (`Binding` has only an `operator<<`) — the silent case; and a legacy null deref, see below |
+| `DGlobalSymtab` | four `std::uint32_t` fields; needed ppsink's integer `Prettifier<>` widened first, see below |
+| `DConstant` | first expression2 printer nesting another SUBSYSTEM's printer; and a field that turns out to be redundant, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1028,6 +1030,103 @@ ppsink 3) appears twice in one render.
 Mutation-checked four ways — struct name, adding `quot()` to `:name`, renaming
 `:path` to `:binding`, and the null-name guard — each fails exactly the cases it
 should.
+
+### `DGlobalSymtab`: a scalar-only struct, and the widening it forced (2026-08-10)
+
+Four fields, all `std::uint32_t` (`DGlobalSymtab.hpp:39`), no nesting. The
+smallest remaining printer, and it still turned up two things.
+
+**It could not be converted honestly until xo-ppsink grew integer
+Prettifiers.** `Prettifier<>` covered `int`, `double` and `float` and nothing
+else, so `std::uint32_t` fell through to the `operator<<` fallback. Converting
+this printer first would have pinned the fallback — in a migration whose whole
+point is to stop rendering through ostreams. Done first instead, as
+`.xo-backlog/xo-ppsink/issues/09-scalar-prettifiers.md` (`fixed 2026-08-10`),
+which also found that `std::is_integral_v<char>` is true and that a naive
+`std::integral` constraint would have turned `'A'` into `"65"` tree-wide.
+
+**Named locals stop being a style preference here.** `field()` captures BY
+REFERENCE (`pretty_struct.hpp`), and every value is a temporary returned by
+value from `size()` / `capacity()`. Written inline, as legacy's `refrtag` calls
+are, the references would dangle before `pretty_struct()` renders them. Legacy
+got away with it because `pretty_struct` consumed its arguments within the full
+expression; the ppsink form does not. Worth stating because the remaining
+printers are full of accessor calls, and this is the first one where the
+distinction bites.
+
+Pinned in `s_symtab_v` over hash-map hint capacity (8 / 64) × contents (empty /
+three variables) × margins 200 / 40 / 14. Notes on the case choices:
+
+- capacity renders as **16** for a hint of 8 — `DArenaHashMap` rounds up, so
+  the hint is not the number
+- a *wide* case (hint 64) is included so the capacities are shown to be read
+  from the maps rather than being a constant that happened to match
+- `:nvar 3 ... :ntype 0` pins that the two arrays are read separately; the
+  mutation swapping `types_->size()` for `vars_->size()` fails exactly one case
+- margin 14 is the interesting one: only the two LONG field names force their
+  values down, so the field-value column divergence (legacy 4, ppsink 3) shows
+  up while `:nvar` and `:ntype` stay in place
+
+The fixture needed a second allocator. `DGlobalSymtab::make` takes `mm` and
+`aux_mm` because the hash-map superstructure lives outside GC space, so
+`VarFixture` gained a `DArena` alongside its collector.
+
+Mutation-checked four ways — struct name, `:ntype` reading `vars_`,
+`:var_capacity` reading `size()`, and swapping two fields — each fails exactly
+one case.
+
+### `DConstant`: cross-subsystem nesting, and a redundant field (2026-08-10)
+
+Three fields: two `typeseq`s and the boxed value. Body is a plain
+`pretty_struct` with named locals — both typeseqs are temporaries, as
+`DGlobalSymtab`'s counts were.
+
+**First expression2 printer to nest a printer from another subsystem.**
+`:value` is an `obj<APrintable>` resolving to `DInteger` / `DFloat`, both
+converted back in xo-object2's phase C. Nothing had to be built for it; the
+facet dispatch finds them. That is the same payoff `DVariable` showed for
+in-subsystem nesting, one level out.
+
+**`typeseq` takes ppsink's `operator<<` fallback**, like `Binding` in `DVarRef`
+— it has no `Prettifier<>` and no `ppdetail<>`, only an inserter at
+`xo-reflectutil/include/xo/reflectutil/typeseq.hpp:115`. Both stacks render the
+bare seqno, identically.
+
+**`:value.tseq` is redundant, and the mutation testing is what showed it.**
+Replacing `value_pr._typeseq()` with `value_._typeseq()` — i.e. printing the
+same thing twice — **passes every test in the file**. That is not a gap in the
+suite: an `obj<>` carries its D-type's typeseq whichever facet it is viewed
+through, and `FacetRegistry::variant()` does not change the D-type, so the two
+fields cannot disagree. Legacy has printed the same number twice under two
+names since it was written.
+
+Recorded rather than fixed. Dropping the field is output-visible and wants its
+own commit; the property is now pinned explicitly in `DConstant-tseq-fields`
+(the two rendered typeseqs are asserted EQUAL, and asserted to differ between a
+boxed int and a boxed float), so whichever way it is resolved later, the
+reasoning is not lost.
+
+**Both typeseqs are scrubbed** in the pinned table, for the reason
+`TypeDescr`'s `:id` is: the number comes from registration order
+(`SetupObject2::register_facets`), not from `DConstant`. Stable today — DInteger
+9, DFloat 10, unchanged across runs and across test filters — but an unrelated
+object2 registration would move it.
+
+A scrubber bug worth carrying forward: `scrub_tseq` first keyed on `".tseq "`
+**with a trailing space**, so it silently scrubbed nothing in exactly the cases
+where the value breaks onto its own line and the separator is a newline. It
+surfaced only because the broken-layout expectations then failed. Any scrubber
+in this family must skip *whitespace*, not a space — `scrub_type_id` has the
+same latent bug and has not been bitten because a `TypeDescr`'s `:id` has so far
+never been the field that breaks.
+
+Pinned in `s_constant_v`: boxed int / float × margins 200 / 44 / 14. Margin 14
+shows the usual field-value column divergence on the two long field names while
+`:value` stays put.
+
+Mutation-checked four ways — struct name, dropping `:value`, renaming
+`:value_.tseq`, and the `value_pr` swap. Three fail exactly two cases each; the
+fourth is the redundancy above and correctly fails nothing.
 
 ### Colour: ppsink's gate now defaults ON (RC's call, 2026-08-09)
 
