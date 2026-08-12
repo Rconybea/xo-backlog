@@ -543,6 +543,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DLocalSymtab` | TWO dynamic-arity loops, and the first field the fixture CANNOT reach — the `:types` path throws in legacy, see below |
 | `DLambdaExpr` | the first ALL-OR-NOTHING branch — one condition gating the whole struct, not per-field, see below |
 | `DTypename` | the last in xo-expression2 — and the only printer in the migration with **no renderable case**, see below |
+| xo-reader2 flat leaves (13) | first BATCHED conversion; established that ppsink's enum fallback matches legacy exactly, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1528,6 +1529,80 @@ With `DTypename` converted, both protocols throw and the asymmetry is gone. The
 test is now the symmetric two-line form. Its comment records the brief
 divergence rather than pretending it did not happen, since the asymmetry is what
 the "cannot pin STUB text" rule was protecting against.
+
+### xo-reader2 batch 1: the flat leaves, and what batching cost (2026-08-11)
+
+**RC's call: batch xo-reader2 rather than one cycle per printer**, ordered flat
+leaves → facet-nesting → `DExpectFormalArglistSsm` → `ParserStack` →
+`DSchematikaParser`, "to minimize churn in test cases". The per-printer rhythm
+earned its keep in xo-expression2 because each conversion taught something new;
+twelve two-field enum structs will not, and 24 cycles is many sessions of
+context for evidence that mostly repeats.
+
+Batch 1 converted **13 classes in one cycle**: `DParenSsm`, `DQuoteSsm`,
+`DDeftypeSsm`, `DExpectQLiteralSsm`, `DExpectExprSsm`, `DSequenceSsm`,
+`DToplevelSeqSsm`, `DGlobalEnv`, `DExpectSymbolSsm`, `DExpectListTypeSsm`,
+`DExpectTypeSsm`, `DExpectFormalArgSsm`. Fifteen cases at margins 200 and 30,
+61 assertions, in a new `xo-reader2/utest/printable_render.test.cpp`.
+
+#### The finding, and why it justified the batch
+
+reader2's printers are full of **enums** — `parenstate`, `quote_xst`,
+`deftypestate`, `fstate`, `seqtype` — and none has a `Prettifier<>`. Each
+reaches ppsink through its leaf **fallback** to `operator<<`: the same silent
+path `DVarRef`'s `Binding` field took, which this ticket flagged as the case
+where nothing tells you it happened.
+
+**The fallback agrees with legacy exactly, in every case** — `lparen_0`,
+`quote_0`, `def_0`, `formal_0`, `toplevel-interactive`, `toplevel-batch`. One
+question, twelve answers, asked once. That is the argument for batching, and it
+is a better answer than twelve separate cycles would have produced, because the
+cases sit side by side in one table.
+
+The only divergence anywhere in the batch is the familiar field-value column
+(legacy `indent+2`, ppsink `indent+1`), visible on the wrapped `:expect` values
+at margin 30 and nowhere else.
+
+#### Three bare structs, each bare for its own reason
+
+Worth recording so none is "fixed" silently later:
+
+- `DExpectSymbolSsm` — legacy's `refrtag("member", member_)` is **commented
+  out**, not conditional.
+- `DExpectListTypeSsm` — prints nothing at all, though it holds an `elt_type_`.
+- `DExpectTypeSsm` — ignores its `corrected` constructor argument. Both values
+  are pinned, so the test asserts that it makes no difference.
+
+#### `DExpectFormalArgSsm` is the counter-example to `DLambdaExpr`
+
+Legacy has the same `if (name_) … else …` shape. But here the branch is
+**per-field** — `:name` present or absent, the other two unconditional — so
+`field(name, value, present)` says exactly what the branch said, and it
+collapses. `DLambdaExpr`'s condition gated the *whole struct* and had to stay a
+branch. Same source shape, opposite conversion; both are commented at the call
+site.
+
+#### What batching cost, measured
+
+Mutation checks are now per *batch*, not per printer. Five mutations, each
+failing exactly one case: an extra field on `DParenSsm`, swapped field order in
+`DExpectExprSsm`, a field added to a bare struct (`DExpectListTypeSsm`),
+`DExpectFormalArgSsm`'s optional `:name` forced always-present, and a wrong
+struct name on `DToplevelSeqSsm`. That is coverage of every *shape* in the
+batch, but not of every *member* — a mistake in, say, `DQuoteSsm` specifically
+is caught by its own two pinned cases rather than by a mutation aimed at it.
+Acceptable here because the shapes are so few; it would not be for the
+facet-nesting batch, which is why that one gets finer granularity.
+
+#### The nix step earned its keep again
+
+`xo-build --sweep` passed and `nix-build ci.nix -A xo-reader2` **failed**: the
+new `xo_dependency(utest.reader2 xo_testutil)` had no matching input in
+`pkgs/xo-reader2.nix`. The local sweep cannot see this — `~/local` has every
+subsystem installed, so a missing declared dependency resolves anyway. Only the
+from-scratch package build notices. Same class of gap as the `find_dependency`
+work in `.xo-backlog/xo-cmake`; fixed by copying `pkgs/xo-expression2.nix`'s
+`lib.optionals doCheck [ xo-testutil ]`.
 
 ### xo-type has no APrintable — a real gap, NOT a blocker (2026-08-11)
 
