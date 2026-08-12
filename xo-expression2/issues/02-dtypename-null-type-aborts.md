@@ -84,6 +84,39 @@ bigger than this.
 - there is a test for it, which means deciding how to assert an abort (death
   test) or eliminating the abort first and asserting the replacement
 
+## A second instance, in a different subsystem (2026-08-11)
+
+`xo-reader2`'s `DExpectQDictSsm::pretty_deprecated` / `pretty` build their
+`:dict` handle the same way:
+
+```cpp
+obj<APrintable,DDictionary> dict_pr(dict_);   // DIRECT, no registry lookup
+```
+
+A freshly `_make()`d `DExpectQDictSsm` has `dict_ == nullptr`, and rendering it
+**aborts** — observed 2026-08-11 while converting reader2 batch 2, on both
+protocols, exactly as here.
+
+What makes it useful evidence rather than just a second bug: its two siblings
+`DExpectQListSsm` and `DExpectQArraySsm` hold the same kind of null child but
+route through `FacetRegistry::variant<APrintable,AGCObject>(...)`, and they
+**throw** instead. Same defect class, same subsystem, same null-child
+situation — and the failure mode is decided purely by whether the conversion
+went through the registry or through direct construction.
+
+That is direct support for the "wider question" framing below: the fault is
+not any one printer's, it is that a directly-constructed `obj<A,DRepr>` over a
+null pointer is indistinguishable from a live one until something calls
+through it.
+
+Reproduced rather than fixed in the conversion, per the phase-C contract. See
+`.xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md`, xo-reader2
+batch 2.
+
+**Also:**
+- `xo-reader2/src/reader2/DExpectQDictSsm.cpp` — both printers
+- `xo-reader2/include/xo/reader2/expect_qdict/DExpectQDictSsm.hpp` — `dict_`
+
 ## Notes
 
 Found while converting `DTypename` to ppsink: the first OBSERVE probe used a

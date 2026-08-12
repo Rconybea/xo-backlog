@@ -1906,6 +1906,130 @@ CMake target), so there is exactly one copy of the method list and no
 per-consumer IDL edits. Confirmed: `find xo-*/ -name 'Printable.json5'` returns
 one path.
 
+### xo-reader2 batch 2: facet-nesting, and the batch that split (2026-08-11)
+
+Planned as nine printers; converted **seven**. `DExpectQListSsm` and
+`DExpectQArraySsm` moved out of the batch after observation, not by plan.
+
+Converted: `DProgressSsm`, `DDefineSsm`, `DIfElseSsm`, `DLambdaSsm`,
+`DApplySsm`, `DExpectQDictSsm`, `ParserResult`. Two new test cases in
+`xo-reader2/utest/printable_render.test.cpp` — `reader2-nesting-render` (37
+assertions, direct construction) and `reader2-parser-render` (31 assertions,
+real parser stepped token by token) — at margins 200/30 and 200/60.
+
+#### Why the batch split, and why the approved order has to change
+
+The ordering RC approved was flat leaves → facet-nesting →
+`DExpectFormalArglistSsm` → `ParserStack` → `DSchematikaParser`, with the note
+"I don't expect us to encounter any surprises that make us regret the
+ordering." One surprise turned up, and it is mild but real.
+
+`DExpectQListSsm` and `DExpectQArraySsm` **cannot be pinned on both protocols
+yet**:
+
+- their EMPTY state is not renderable at all on the legacy protocol —
+  `variant<APrintable,AGCObject>` on a null `start_` / `array_` throws; and
+- their POPULATED state never reaches the top of the parser stack. Each
+  element of a quoted list pushes its own `DExpectQLiteralSsm` on top, so
+  `DSchematikaParser::top_ssm()` shows the element, never the container.
+  Observed: at every token boundary of `#q { ( 1 2 ) }` the container sits at
+  `:[1]` of the parser's `:stack`, never at `:[0]`.
+
+`ParserStateMachine::stack()` is public but `DSchematikaParser::psm_` is
+private, so `top_ssm()` is the only window. The whole-parser rendering does
+reach them — it walks parents — but on the ppsink side it stops at
+`STUB:ParserStack`. So the observation window opens only once `ParserStack`
+and `DSchematikaParser` convert.
+
+**Revised order:** batch 3 (`DExpectFormalArglistSsm`, `ParserStack`) and then
+`DSchematikaParser`, and `DExpectQListSsm` / `DExpectQArraySsm` LAST. Costs no
+rework, and keeps the no-unpinned-conversions rule intact.
+
+#### What batch 2 established
+
+1. **`field()`'s present flag absorbed every optional in the batch.**
+   `DProgressSsm` has three (`:lhs :op :rhs`), `DApplySsm` and `DLambdaSsm`
+   one each. `DLambdaSsm`'s legacy if/else **collapsed** — both arms rendered
+   `:lmstate` and `:expect`, only `:body` differed — the `DExpectFormalArgSsm`
+   shape, not `DLambdaExpr`'s.
+
+2. **`ParserResult`'s switch does NOT collapse**, and is the one branch in the
+   batch that had to stay. Its three arms have three different ARITIES
+   (`:type` / `:type :expr` / `:type :src_fn :error`), and folding them onto
+   present flags would mean calling `variant<APrintable,AExpression>` on the
+   none and error paths, where `result_expr_` is null and that call throws.
+
+3. **`ParserResult` needed a `Prettifier<>` added, not just a `pretty()`
+   body.** It is not a facet type. Before this it fell through ppsink's leaf
+   fallback to `operator<<`, rendering `ParserResult::print(ostream&)` — a
+   genuinely different struct (`:expr` and `:src_fn` always present, `:error`
+   quoted, never wrapping). **Its phase-B stub was dead code that nothing ever
+   called**, which means the `PHASE B STUB` count has been overstating how
+   much of ppsink was actually reachable. Two more printers are in exactly
+   this position and still `ppdetail`-only: `ParserStack*` and
+   `DSchematikaParser*` — i.e. the whole remainder of this subsystem.
+
+4. **Two printers have states in which they cannot be printed at all.** Both
+   pre-existing, both reproduced rather than fixed:
+   - `DDefineSsm::get_expect_str()` hits `assert(false)` for
+     `defstate_ == def_0` — which is exactly what `_make()` leaves behind. A
+     freshly constructed `DDefineSsm` aborts when printed. It only becomes
+     printable after the first token (`def_0 -> def_1`). This is why the
+     pinned `DDefineSsm` cases are parser-driven.
+   - `DExpectQDictSsm` builds its `:dict` handle by DIRECT construction
+     (`obj<APrintable,DDictionary> dict_pr(dict_)`) rather than a registry
+     lookup, so a null `dict_` yields an EMPTY `obj<>` that **aborts** in
+     `pretty_struct` where its QList/QArray siblings merely throw. A second
+     instance of
+     `.xo-backlog/xo-expression2/issues/02-dtypename-null-type-aborts.md`,
+     in a different subsystem — which is evidence that ticket's "wider
+     question" framing was right.
+
+#### Divergences: both inherited, none introduced
+
+- the familiar field-value column, legacy `indent+2` vs ppsink `indent+1`,
+  compounding once per nesting level; and
+- `DDictionary`'s padding (`{ }` vs `{}`, `{ a: 1; }` vs `{a: 1;}`), already
+  pinned deliberately at `xo-object2/utest/printable_render.test.cpp` as
+  `Testcase_Dict(80, {}, "{ }", "{}")`.
+
+Nothing else. 21 of 27 direct-construction observations agree byte-for-byte.
+
+#### Mutation coverage: per-member, as promised for this batch
+
+Batch 1's five mutations covered every shape but not every member, and that
+was flagged as unacceptable for this batch. **Eleven mutations, all caught**,
+at least one per printer and one per optional's present flag: `:op`
+present-flag dropped, `:lhs` renamed (DProgressSsm); `:defstate`/`:expect`
+order swapped (DDefineSsm); `:if_expr` renamed (DIfElseSsm); `:lmstate`
+renamed, `:body` present-flag forced true (DLambdaSsm); `:expect` renamed,
+`:fn_expr` present-flag forced true (DApplySsm); `:key` renamed, `:dict`
+renamed (DExpectQDictSsm); `:src_fn` dropped from the error arm
+(ParserResult).
+
+One documented claim was **corrected by its own mutation**: the code first
+said `DLambdaSsm`'s `:body`-present arm "is pinned by NO test". Forcing the
+flag true IS caught. What is not pinned, and cannot be, is the rendering of a
+*non-null* body — `body_` is assigned only immediately before the ssm pops, so
+it is null at every token boundary and absent from every rendering of a live
+parser stack. Comment fixed in both `DLambdaSsm.cpp` and the test.
+
+#### Verification
+
+`xo-build --sweep` → `62 attempted: 34 ok, 28 with no tests, 0 failed, 0
+skipped`; `nix-build ci.nix -A xo-reader2 --no-out-link` green.
+Stub count 21 → 14.
+
+#### Process note
+
+The mutation harness first reverted each mutation with `git checkout --`,
+which reverts to HEAD — and the batch-2 conversions were uncommitted, so it
+**destroyed** the converted bodies in `DProgressSsm.cpp`, `DDefineSsm.cpp` and
+`DIfElseSsm.cpp`. Recovered in full (test counts identical before and after),
+and the harness now backs up the working copy instead. Worth remembering:
+mutation testing against an uncommitted working tree must not use git to
+revert.
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
