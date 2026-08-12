@@ -2476,6 +2476,66 @@ Stub count 8 → 3. What remains is `DClosure` and `DVsmApplyClosureFrame` (both
 render a `DLocalEnv*`, now converted) and `xo-object2`'s `DStruct`, the
 permanent floor.
 
+### xo-interpreter2: DClosure + DVsmApplyClosureFrame — phase C's last pair (2026-08-12)
+
+Both render a `DLocalEnv`, which is why they waited for it. They render it two
+different ways, and that is the whole story of this unit.
+
+**`DClosure`** wraps each child in `obj<APrintable,T>` and gates the field on a
+per-field present flag, so legacy's flags map straight onto `field()`'s third
+argument. All four combinations of (lambda, env) present/absent are distinct
+renderings and all four are pinned.
+
+Worth noting because it looks like a ticket case and is not: both children are
+reached by **direct construction** of `obj<APrintable,T>` — the shape that
+aborts on use in
+`.xo-backlog/xo-reader2/issues/01-ssm-printer-null-children.md`. It is safe
+here because the emptiness is **tested before the field is emitted**. The
+`closure.neither` case proves it: two null children render `<DClosure>`, not a
+crash. That is why `DClosure` is absent from that ticket.
+
+**`DVsmApplyClosureFrame`** passes the raw `DLocalEnv *` straight to the tag,
+and there is no `ppdetail<DLocalEnv*>` and no `Prettifier<DLocalEnv*>`:
+
+```bash
+grep -rn 'ppdetail<.*DLocalEnv\|Prettifier<.*DLocalEnv' \
+  xo-interpreter2/ --include=*.hpp --include=*.cpp | grep -v '/\.build/'
+```
+
+returns nothing. So both protocols fall through to `operator<<` on a pointer
+and print its **address** — `:env 0x7879d025b098`, and `:env 0` for null.
+
+**The conversion reproduces this literally, on purpose.** The two protocols
+agree byte for byte, address included, so there is no divergence to resolve and
+no behaviour change to justify. This is the opposite situation to `DApplyExpr`,
+where `struct_open()` emitted the correct separators for free and the
+improvement was unavoidable; here nothing in ppsink improves it by accident, so
+"fixing" it would be an intentional behaviour change smuggled into a mechanical
+conversion. Filed instead as
+`.xo-backlog/xo-interpreter2/issues/01-applyclosureframe-env-prints-address.md`,
+with the one-line fix and a note to apply it after phase E.
+
+Pinning it needed a new scrubber, `scrub_addr()`, in the same spirit as
+`scrub_type_id` / `scrub_tseq`. **The need to scrub is itself the finding**: the
+field is not merely ugly, it is unpinnable and changes every run.
+
+The `DClosure` margin-24 case is also the first place in this subsystem where
+the indent divergence **compounds** — 4 vs 3 at `:env`, then 6 vs 4 at the
+nested `:n_args` — the two-level version of what
+`interpreter2-localenv-render` pins at one level.
+
+Verification:
+
+- **10 mutations, all caught** — tag renames, struct-name renames and field
+  reorders on both, plus forcing each of `DClosure`'s two present flags to
+  `true`
+- interpreter2 suite **203 assertions in 22 test cases** (was 181 in 20)
+- `xo-build --sweep` → `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
+- `nix-build ci.nix -A xo-interpreter2 --no-out-link` green
+
+**Stub count 3 → 1.** The remaining one is `xo-object2`'s `DStruct`, the
+permanent floor. Phase C is otherwise complete.
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
