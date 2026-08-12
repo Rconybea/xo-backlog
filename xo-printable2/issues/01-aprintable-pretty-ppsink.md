@@ -542,6 +542,7 @@ what each conversion *taught*, which a count cannot carry.
 | `DApplyExpr` | first `struct_open()` consumer here — runtime arity, generated field names; and legacy's hand-rolled flat form turns out to omit its separators, see below |
 | `DLocalSymtab` | TWO dynamic-arity loops, and the first field the fixture CANNOT reach — the `:types` path throws in legacy, see below |
 | `DLambdaExpr` | the first ALL-OR-NOTHING branch — one condition gating the whole struct, not per-field, see below |
+| `DTypename` | the last in xo-expression2 — and the only printer in the migration with **no renderable case**, see below |
 
 The four leaves are **degenerate**: an atomic leaf has no break points, so they
 render identically at every margin, even margin 4 against 17 characters of
@@ -1461,6 +1462,72 @@ size where hand-copying is trustworthy.
 Mutation-checked four ways, each failing at least one case: swapped `:tref` /
 `:name`, the `name_ && body` gate forced true, wrong struct name, and `unq()`
 for `quot()` on the name.
+
+### `DTypename`: a conversion with nothing to pin (2026-08-11)
+
+The last stub in xo-expression2, and the only one in this migration where the
+phase-C cycle has no rendering to compare. Every case terminates:
+
+| `type_` | both protocols |
+|---|---|
+| non-null | **throw** — `FacetRegistry::variant failed … AType → APrintable` |
+| null | **abort** — `attempt to call uninitialized IPrintable_Any method`, SIGABRT |
+
+Both were observed, and both were verified to predate the conversion (the
+deprecated printer aborts on a null `type_` with the ppsink path removed from
+the probe entirely). The null-type abort is a separate defect and got its own
+ticket, `.xo-backlog/xo-expression2/issues/02`.
+
+#### RC's call: keep the throw
+
+The decision this ticket had deferred since 2026-08-11 morning. Not "reproduce
+the throw because it is the conservative option" — **the throw is the failing
+test**:
+
+> "DTypename's printer can behave as-is, i.e. assume the facet lookup will
+> succeed. This is a yolo version of the 'first make a failing test' practice in
+> TDD."
+
+So `to_facet<APrintable>()` stays. It asserts, from inside production code, that
+xo-type's facet is missing; it stops asserting that by itself on the day the
+facet lands. A `try_variant` + placeholder would have retired the only thing
+currently making the gap visible — which is exactly what the "these compose: (2)
+now, (1) later" framing in `xo-type/issues/01` was in danger of causing.
+
+The comment in `DTypename.cpp` says this at the call site, because "tolerate the
+missing facet" is the obvious well-meant edit to make there later.
+
+#### What this cost the evidence
+
+`DTypename-render` pins the throw on both protocols. That is a real test — it
+is expected to **start failing** when xo-type gains `APrintable`, and that
+failure is the signal to replace it with a rendering test.
+
+But it pins nothing else, and the mutation check says so out loud. Of two
+mutations:
+
+- **`try_variant` + placeholder** (i.e. the change RC rejected) — **caught**.
+  The test does its job: it defends the red.
+- **dropping the `:type` field entirely** — **not caught**, and cannot be. The
+  throw happens at the `to_facet` line, *before* `pretty_struct` is reached, so
+  no mutation to the struct's shape is observable.
+
+So `DTypename`'s field names, field order, and name quoting are pinned by **no
+test in the tree**, and cannot be while every case terminates. Recorded here
+rather than left implicit: when xo-type gains `APrintable`, that is
+newly-exercised code with nothing behind it.
+
+#### Knock-on: `DLocalSymtab-types-throws` changed shape
+
+That test was written the same morning, when `DTypename` was still a phase-B
+stub — so ppsink *rendered* a symtab with types (reaching the stub and stopping)
+while legacy threw. It asserted the symtab's own fields on the pretty side and
+deliberately avoided pinning `STUB:DTypename`.
+
+With `DTypename` converted, both protocols throw and the asymmetry is gone. The
+test is now the symmetric two-line form. Its comment records the brief
+divergence rather than pretending it did not happen, since the asymmetry is what
+the "cannot pin STUB text" rule was protecting against.
 
 ### xo-type has no APrintable — a real gap, NOT a blocker (2026-08-11)
 

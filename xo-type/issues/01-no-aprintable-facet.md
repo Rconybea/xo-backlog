@@ -86,11 +86,16 @@ that path, because legacy has no rendering to pin against.
 
 `DLocalSymtab` did exactly that on 2026-08-11: pure refactor, and its fixture
 covers var-only cases. The `types_` path is pinned only as
-`DLocalSymtab-types-throws` — legacy throws, ppsink renders, because ppsink
-stops at `DTypename`'s phase-B stub instead of descending. **That asymmetry
-closes when `DTypename` converts**, and that is the point at which this
-decision has to be made rather than deferred: a converted `DTypename` either
-reproduces the throw or renders a placeholder.
+`DLocalSymtab-types-throws`.
+
+That test briefly asserted an asymmetry — legacy threw while ppsink rendered,
+because ppsink stopped at `DTypename`'s phase-B stub instead of descending. It
+closed the same day when `DTypename` converted and kept the throw; both
+protocols now throw, and the test is symmetric. See the decision below.
+
+**All of xo-expression2 is converted as of 2026-08-11**, this ticket
+notwithstanding — which is the concrete demonstration that it was never a
+blocker.
 
 ## Two ways to fix, and they are not equivalent
 
@@ -106,6 +111,30 @@ absence rather than fixing it.
 
 These compose: (2) now, (1) later. Doing (2) alone and calling it done would be
 the failure mode.
+
+### The decision, 2026-08-11: keep the throw
+
+RC: *"DTypename's printer can behave as-is, i.e. assume the facet lookup will
+succeed. This is a yolo version of the 'first make a failing test' practice in
+TDD."*
+
+**This supersedes "(2) now, (1) later" above.** Option (2) — `try_variant` plus
+a placeholder — is now the wrong move, and not because it is a half-measure:
+the throw is the only thing in the tree asserting that this gap exists. A
+placeholder would retire that assertion and leave the missing facet invisible
+again, which is the state this ticket was written to escape. `DTypename` keeps
+`to_facet<APrintable>()`, and it stops throwing by itself the day option (1)
+lands.
+
+`xo-expression2/utest`'s `DTypename-render` and `DLocalSymtab-types-throws` pin
+the throw on both print protocols. **Both are expected to fail when this ticket
+is fixed** — that failure is the signal, and the fix is to replace them with
+rendering tests.
+
+One thing the throw does *not* cover: a **null** `type_` aborts rather than
+throwing (`attempt to call uninitialized IPrintable_Any method`, SIGABRT). That
+is a different defect, pre-dates all of this, and has its own ticket —
+`.xo-backlog/xo-expression2/issues/02-dtypename-null-type-aborts.md`.
 
 **Why the ordering is not just about size** (RC, 2026-08-11): xo-type is itself
 an in-flight refactor — schematika types are moving off `xo::reflect::TypeDescr`
@@ -135,8 +164,9 @@ badly.
 **Done when:**
 - ~~the throw is confirmed (or refuted) by an actual test, not a code-read~~
   — done 2026-08-11, `DLocalSymtab-types-throws`; it also relocated the fault
-- a decision is recorded for the one call site that has it:
-  `DTypename::pretty` — tolerate, or print
+- ~~a decision is recorded for the one call site that has it:
+  `DTypename::pretty` — tolerate, or print~~ — done 2026-08-11: **neither.**
+  Keep the throw, see below
 - if xo-type gains `APrintable`, each of the six D-types has a pinned rendering
 
 ## Notes
