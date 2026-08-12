@@ -76,6 +76,31 @@ hazard, on the path that runs **when something has already gone wrong** — so i
 would abort while trying to report a parse error. Worth fixing first if these
 are ever done piecemeal.
 
+## A sixth and seventh site, in xo-interpreter2 — a different mechanism (2026-08-12)
+
+Found while converting `DLocalEnv`'s printer. These are **not** the
+empty-`obj<>` mechanism above; they are a plainer bug, a raw pointer
+dereferenced with no guard:
+
+```bash
+grep -n "args_->size()" xo-interpreter2/src/interpreter2/DLocalEnv.cpp \
+                        xo-interpreter2/src/interpreter2/DVsmApplyFrame.cpp
+```
+
+`DLocalEnv::pretty` renders `field("n_args", args_->size())`, and
+`DLocalEnv::_make` asserts `symtab` but **not** `args`
+(`xo-interpreter2/src/interpreter2/DLocalEnv.cpp:31`). So a null `args_`
+segfaults — on both protocols, and before the ppsink conversion as much as
+after. `DVsmApplyFrame`'s printer does the same thing with its own `args_`;
+whether that one can actually be null is **unverified** and should be checked
+when it converts.
+
+Filed here rather than in a new ticket because the fix shapes below apply
+unchanged, even though the ticket's title says SSM. Worth noting the contrast
+for whoever fixes these: the reader2 cases need the *facet* mechanism decided
+(see "Fixing it"), whereas these two need only a null check or an assert in the
+factory — they are separable, and cheaper.
+
 ## Reachability: latent, and the refactor makes it worse
 
 **Not reachable at token boundaries.** Across five token streams

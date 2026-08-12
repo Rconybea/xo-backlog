@@ -2323,6 +2323,103 @@ grep -rl 'PHASE B STUB' --include=*.hpp xo-reader2/ | grep -v '/\.build/' | wc -
 reports 0 — **xo-reader2 is fully converted.** What remains is xo-interpreter2
 (8) and `xo-object2`'s `DStruct` (1, the permanent floor).
 
+### xo-interpreter2: the scout, and why it is not another reader2 (2026-08-12)
+
+Before converting anything here, the same question that shaped reader2 was
+asked: what is reachable from a test, and what does that force about ordering?
+The answer is the opposite of reader2's, and it is worth recording because the
+reader2 experience predicted wrongly.
+
+**Every printer's owner is directly constructible.** All eight have a public
+`make(obj<AAllocator> mm, ...)` / `_make(...)` taking plain arguments, so a
+test builds one itself. Verified by reading the eight headers under
+`xo-interpreter2/include/xo/interpreter2/`.
+
+That is just as well, because the reader2 route does not exist here:
+`DVirtualSchematikaMachine` has **no printer at all** — neither `print` nor
+`pretty_deprecated` —
+
+```
+grep -n 'pretty_deprecated\|pretty(xo::pp::PpSink' \
+  xo-interpreter2/src/interpreter2/DVirtualSchematikaMachine.cpp \
+  xo-interpreter2/include/xo/interpreter2/vsm/DVirtualSchematikaMachine.hpp
+```
+
+returns nothing, and its `stack_` is a private `obj<AGCObject>` with no
+accessor (`.../vsm/DVirtualSchematikaMachine.hpp:320`).
+
+**The frames do not nest in output.** Each stores a parent/stack link, but no
+printer renders it. The `:cont` field every frame prints is a `VsmInstr` —
+which holds exactly one `vsm_opcode` and nothing else
+(`xo-interpreter2/include/xo/interpreter2/VsmInstr.hpp:47`). So there is no
+continuation chain in the rendering, and no ordering constraint from it.
+
+The dependency graph among the eight is therefore nearly flat: `DLocalEnv` is
+a leaf; `DClosure` and `DVsmApplyClosureFrame` each render a `DLocalEnv*`; the
+remaining five (`DVsmDefContFrame`, `DVsmIfElseContFrame`, `DVsmSeqContFrame`,
+`DVsmEvalArgsFrame`, `DVsmApplyFrame`) print only `:cont` plus a scalar and
+depend on nothing.
+
+Still to check when the first frame converts: **`VsmInstr` has neither a
+`Prettifier<>` nor a `ppdetail<>`**, so both protocols reach it through
+`operator<<`. That is the shape where `ParserResult` and `DSchematikaParser*`
+silently rendered a *different* struct on the ppsink path. Measure it, do not
+assume it.
+
+### xo-interpreter2: DLocalEnv, and the file it establishes (2026-08-12)
+
+One field, `:n_args`. The conversion is three lines. What this unit actually
+bought:
+
+**A printable_render.test.cpp for the subsystem.** xo-interpreter2 had only
+`VirtualSchematikaMachine.test.cpp` and its utest linked neither `xo_testutil`
+nor `xo_indentlog2`. Both added, plus the new source, in
+`xo-interpreter2/utest/CMakeLists.txt`. No collector fixture is needed — unlike
+reader2's `ParseFixture`, which needed a real X1 collector because the parser
+registers itself as a gc root. These objects are built directly and never
+collected inside a test, so a plain arena suffices.
+
+**A nix packaging gap, which only `nix-build` could find.** `xo_testutil` is a
+test-only dependency, so `xo-build` (which resolves against the installed tree)
+was perfectly happy while `nix-build ci.nix -A xo-interpreter2` failed at
+configure with `Could not find a package configuration file provided by
+"xo_testutil"`. Fixed in `pkgs/xo-interpreter2.nix` by copying reader2's
+pattern exactly: a `xo-testutil` argument and `++ lib.optionals doCheck [
+xo-testutil ]` on `nativeBuildInputs`. Worth remembering as the general shape —
+**adding a test-only dependency to a subsystem that did not have one is a
+two-file change, and the second file is the nix package.**
+
+**The smallest instance of the indent divergence in the tree.** At margin 8 the
+value goes to its own line and the protocols differ: legacy indents by
+`indent_width` (2), ppsink by `tag_value_offset` (1).
+
+```
+DEP "<DLocalEnv\n  :n_args\n    3>"
+PRE "<DLocalEnv\n  :n_args\n   3>"
+```
+
+With a single scalar field it cannot compound, so this is the divergence
+isolated. At margin 16 — struct broken, value still beside its tag — the two
+agree exactly. Both pinned.
+
+**Not pinned, and recorded rather than fixed:** `DLocalEnv::_make` asserts
+`symtab` but not `args`, and the printer dereferences `args_` unguarded
+(`xo-interpreter2/src/interpreter2/DLocalEnv.cpp:121`), so a null `args_`
+segfaults on **both** protocols. Same family as
+`.xo-backlog/xo-reader2/issues/01-ssm-printer-null-children.md`.
+`DVsmApplyFrame` prints `args_->size()` the same way and should be checked when
+it converts.
+
+Verification:
+
+- **3 mutations, all caught** (tag rename, struct-name rename, value off-by-one)
+- interpreter2 suite **156 assertions in 19 test cases**
+- `xo-build --sweep` → `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
+- `nix-build ci.nix -A xo-interpreter2 --no-out-link` green, and its log
+  confirms the check phase ran (`1/1 Test #1: utest.interpreter2 ... Passed`)
+
+Stub count 9 → 8.
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
