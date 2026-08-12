@@ -2420,6 +2420,62 @@ Verification:
 
 Stub count 9 → 8.
 
+### xo-interpreter2: the five independent vsm frames, and the VsmInstr answer (2026-08-12)
+
+`DVsmDefContFrame`, `DVsmIfElseContFrame`, `DVsmSeqContFrame`,
+`DVsmEvalArgsFrame`, `DVsmApplyFrame` — converted as one batch. They share a
+shape (`:cont` plus at most one scalar) and share the one question worth
+asking, so a single observed table answers it five times.
+
+**The VsmInstr question, answered.** The scout above flagged that `:cont` is a
+`VsmInstr` with neither a `Prettifier<>` nor a `ppdetail<>`, so both protocols
+reach it through the leaf fallback to `operator<<` — the same silent path on
+which `ParserResult` and `DSchematikaParser*` turned out to render a
+*different* struct on the ppsink side. Measured rather than assumed:
+
+```
+DEP "<DVsmDefContFrame :cont def_cont>"
+PRE "<DVsmDefContFrame :cont def_cont>"
+```
+
+They agree exactly. **No `Prettifier<VsmInstr>` is needed.** The margin-12 rows
+are what actually pin this — a flat render alone cannot distinguish "the two
+protocols agree" from "both happened to fit on one line", so the table forces
+the `:cont` value onto its own line for every frame.
+
+Across all fifteen observed renderings the ONLY difference between protocols is
+the documented indent divergence (legacy `indent_width` 2, ppsink
+`tag_value_offset` 1) on a value pushed to its own line.
+
+**Why nullptr expression arguments are safe in the fixture.** Each frame is
+constructed with a null `def_expr`/`ifelse_expr`/`seq_expr`/`apply_expr`,
+because none of them is rendered. Verified by reading all five `make()` bodies
+in `xo-interpreter2/src/interpreter2/`: every one only forwards its arguments
+into a placement-new, with no dereference and no assert on the expression.
+Likewise `no_parent` — no printer renders the parent/stack link.
+
+`:i_arg -1` is not a value chosen for the test: it is `DVsmEvalArgsFrame`'s
+initial value (`DVsmEvalArgsFrame.hpp:68`), incremented before each argument.
+
+`DVsmApplyFrame` prints `args_->size()` unguarded, the shape flagged when
+`DLocalEnv` converted. Whether its `args_` can actually be null remains
+**unverified**; recorded that way in
+`.xo-backlog/xo-reader2/issues/01-ssm-printer-null-children.md` rather than
+guessed at here.
+
+Verification:
+
+- **14 mutations, all caught** — `:cont` tag rename and struct-name rename on
+  each of the five, plus `:i_seq`/`:i_arg` tag renames, a field reorder on
+  `DVsmSeqContFrame`, and an off-by-one on `DVsmApplyFrame`'s `n_args`
+- interpreter2 suite **181 assertions in 20 test cases** (was 156 in 19)
+- `xo-build --sweep` → `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
+- `nix-build ci.nix -A xo-interpreter2 --no-out-link` green, check phase ran
+
+Stub count 8 → 3. What remains is `DClosure` and `DVsmApplyClosureFrame` (both
+render a `DLocalEnv*`, now converted) and `xo-object2`'s `DStruct`, the
+permanent floor.
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
