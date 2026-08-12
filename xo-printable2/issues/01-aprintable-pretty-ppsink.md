@@ -2030,6 +2030,229 @@ and the harness now backs up the working copy instead. Worth remembering:
 mutation testing against an uncommitted working tree must not use git to
 revert.
 
+### xo-reader2: DExpectFormalArglistSsm (2026-08-11)
+
+One of the subsystem's two **hand-rolled two-pass printers** — the class that
+produced `DApplyExpr`'s missing-separator defect. Converted on its own rather
+than batched, because that defect class earns a cycle.
+
+**It does NOT have the defect.** Its `upto()` pass uses `xrefrtag`, which
+carries the leading space, where `DApplyExpr` used `refrtag`, which does not.
+Same distinction that spared `DLocalSymtab`.
+
+Shape: three fixed fields (`:fastate`, `:expect`, `:n_args`) plus a runtime
+`:arg[i]` loop, so `struct_open()` rather than `pretty_struct()` — the
+`DLocalSymtab` pattern. The hand-rolling existed only because legacy had no
+variadic form for a runtime arity and had to spell both passes out; ppsink
+does, so **the two passes collapse into one body**.
+
+#### The result worth recording
+
+**The printer's own framing is byte-identical on both protocols in every
+pinned case** — `<DExpectFormalArglistSsm`, `:fastate`, `:expect`, `:n_args`,
+`:arg[0]`, `:arg[1]`, and the break decisions between them. Of 18
+observations, 12 agree completely; the 6 that differ all diverge only INSIDE
+`<DVariable`, i.e. in children converted earlier (the field-value column, plus
+ppsink breaking `TypeDescr` further at margins 60 and 30 where legacy keeps it
+flat). Nothing this conversion introduced.
+
+That is the useful evidence for `ParserStack`, the remaining hand-rolled
+printer: a two-pass body that was faithful to begin with converts to
+`struct_open` with no framing change at all.
+
+#### Coverage
+
+Parser-driven, like `DDefineSsm` and `DExpectQDictSsm` — but for a DIFFERENT
+reason, and the reason first recorded here was **wrong**.
+
+This section claimed `_make()` leaves `argl_ == nullptr` so that a bare
+instance null-derefs on `argl_->size()`. It does not. `_make` allocates the
+array:
+
+```bash
+grep -n 'DArray \* argl = DArray::_empty' \
+    xo-reader2/src/reader2/DExpectFormalArglistSsm.cpp
+```
+
+and a bare instance renders `<DExpectFormalArglistSsm :fastate argl_0 :expect
+leftparen :n_args 0>` on both protocols (verified 2026-08-11 by rendering
+one). The wrong reading was plausible because the header does declare `DArray
+* argl_ = nullptr;` — the default member initializer was read as the
+post-`_make` state without checking the constructor that overrides it, and
+three genuine instances of exactly that fault had just been found in this same
+subsystem.
+
+The real reason it is parser-driven is duller: `_make` gives `:n_args 0`, and
+the one and two-argument arities that exercise the loop only exist mid-parse.
+
+`DExpectFormalArglistSsm` is therefore **not** an instance of
+`.xo-backlog/xo-reader2/issues/01-ssm-printer-null-children.md`; the genuine
+instances are `DExpectQDictSsm`, `DExpectQListSsm`, `DExpectQArraySsm` and
+`DDefineSsm`.
+
+Pinned at the loop's three boundary arities via `lambda ()` and
+`lambda (x : f64, y : f64)`: `:n_args` 0 (tk0), 1 (tk4), 2 (tk8), at margins
+200 and 30/60. `reader2-parser-render` 31 -> 49 assertions.
+
+**Five mutations, all caught**: `:fastate` renamed; `:expect`/`:n_args` order
+swapped; `:arg[i]` name shortened; `:n_args` off by one; and the loop bound
+changed to drop the last argument — the one that actually matters for a
+runtime-arity printer.
+
+#### Verification
+
+`xo-build --sweep` -> `62 attempted: 34 ok, 28 with no tests, 0 failed, 0
+skipped`; `nix-build ci.nix -A xo-reader2 --no-out-link` green. Full reader2
+suite 1886 assertions in 31 test cases. Stub count 14 -> 13.
+
+#### Process note
+
+A test run reported stale results (1869/32, the deleted OBSERVE probe still
+present) because the build had not picked up the edit. `touch` on the source
+plus a rebuild fixed it. Worth the habit: when an assertion count moves by an
+implausible amount after an edit, suspect the binary before the test.
+
+### xo-reader2: ParserStack and DSchematikaParser must convert TOGETHER
+
+Established 2026-08-11 while planning. `DSchematikaParser::psm_` is a **private
+member with no accessor**, and `DSchematikaParser::pretty_deprecated` reads
+`psm_.stack()` from inside the class. **A test cannot obtain a `ParserStack*`
+at all.**
+
+So `ParserStack` is only ever renderable *through* `DSchematikaParser`, and
+`DSchematikaParser`'s own rendering (`<SchematikaParser :stack <ParserStack
+...>>`) necessarily contains it. Converting either alone leaves a rendering
+that cannot be pinned on both protocols. They are one unit of work, not two
+batches.
+
+Two things to carry into it:
+
+- both need `Prettifier<>` on **pointer** types (`ParserStack*`,
+  `DSchematikaParser*`), a shape no batch has done yet — and this ticket
+  already warns that a `Prettifier` written for a base type silently misses
+  derived ones.
+- `DSchematikaParser::pretty_deprecated` opens with `if (ppii.upto()) return
+  false;`, so it **never renders flat** — it always breaks. That is a
+  `force_break` in the ppsink version, and it is invisible to observation at
+  wide margins.
+
+Remaining in xo-reader2, in order: **`ParserStack` + `DSchematikaParser`
+(one unit)**, then `DExpectQListSsm` + `DExpectQArraySsm`, which that unit
+unblocks.
+
+### xo-reader2: ParserStack + DSchematikaParser, as one unit (2026-08-11)
+
+Converted together, for the reason recorded above: `psm_` is private with no
+accessor, so no test can obtain a `ParserStack*` and it is only ever reachable
+through the parser's `:stack` field.
+
+Both are non-facet types reached by `ppdetail<T*>` on the POINTER, so both
+needed a `Prettifier<T*>` added rather than just a `pretty()` body — the third
+and last instance of that shape, after `ParserResult`. **`xo-reader2` now has
+no `ppdetail`-only printers left.**
+
+#### What the ppsink path was rendering before
+
+Not the phase-B stub — the leaf fallback to `operator<<`, i.e.
+`DSchematikaParser::print(ostream&)`:
+
+```
+<SchematikaParser \e[38;5;245m:debug\e[0m 0 \e[38;5;245m:has_stack\e[0m 1>\n
+```
+
+Different fields (`:debug`, `:has_stack`, not `:stack`), a trailing
+`std::endl`, and ANSI colour — because `print()` uses legacy `xo::xtag`, which
+honours `tag_config::tag_color_enabled`, and the test harness's
+`render_pretty` does not disable it the way `render_deprecated` does. Worth
+knowing generally: **any leaf-fallback rendering can leak colour into a
+"pretty" expectation.** It stops mattering for these two now they are
+converted.
+
+#### force_break, and how it was found
+
+Both legacy printers open with `if (ppii.upto()) return false;` — they NEVER
+render flat, at any margin. Reproduced with `struct_open(name, true)`;
+`pretty_struct` has no force_break parameter, which is why `DSchematikaParser`
+uses `struct_open` despite having a single compile-time field.
+
+This was found by READING the `upto()` branch, not by observing: legacy's own
+output cannot distinguish "forced" from "did not fit", since it breaks either
+way. But the decision **is** pinned once both protocols are compared — the
+`fresh` case below renders `<SchematikaParser :stack nullptr>`, which fits
+easily at margin 200 and is broken by both. Dropping `force_break` from either
+printer is caught.
+
+A comment in `ParserStack.cpp` first claimed observation "cannot reveal" it;
+corrected, since the mutation proves otherwise.
+
+#### Coverage
+
+`reader2-stack-render`, 15 assertions. Six parser renderings plus a null-parser
+case:
+
+- `fresh` — before `begin_interactive_session()`, `psm_.stack()` is null, so
+  `:stack nullptr`. The only window in which that branch is reachable, and the
+  case that pins force_break. **Byte-identical on both protocols.**
+- `rest` — after `begin_interactive_session()`, one frame
+  (`begin_interactive_session` pushes a `DToplevelSeqSsm`, so "at rest" is not
+  the same as "no stack").
+- `d2` at 200/60, `lam` at 200/60 — two and five frames.
+
+**Every pinned stack is made only of already-converted ssms.** A
+quoted-literal stack renders `:[1] STUB:DExpectQListSsm` today and would churn
+this table when that converts; keeping those out means the last two printers
+add cases rather than editing these.
+
+Divergence: the field-value column only (legacy `indent+2`, ppsink
+`indent+1`), which now compounds twice — once at `:stack`, once at `:[i]`.
+
+**Eight mutations, all caught**: force_break dropped (each printer); `:stack`
+renamed; `:[i]` delimiters changed; struct name D-prefixed; the parent walk
+stopped after the top frame; `Prettifier<ParserStack*>`'s null guard inverted;
+`Prettifier<DSchematikaParser*>`'s nullptr text changed.
+
+#### A coverage gap the mutations found
+
+`Prettifier<DSchematikaParser*>`'s own null branch was pinned by **nothing**.
+The `fresh` case looks like it covers it but does not: `:stack nullptr` comes
+from `Prettifier<ParserStack*>`. A null *parser pointer* is a separate branch,
+and changing its text was the one mutation that survived. Fixed by adding a
+case; both protocols render bare `nullptr`.
+
+Generalises: **when two types both have a null branch and one nests the other,
+a case that exercises the outer one does not exercise the inner one.** Worth
+checking directly rather than by eye.
+
+#### The window it opened
+
+As predicted, the parser's `:stack` now renders on the ppsink path, so
+`DExpectQListSsm` and `DExpectQArraySsm` are observable for the first time —
+they show as `:[1] STUB:DExpectQListSsm` inside a quoted-literal stack. Those
+two are all that remain in this subsystem.
+
+#### Verification
+
+`xo-build --sweep` -> `62 attempted: 34 ok, 28 with no tests, 0 failed, 0
+skipped`; `nix-build ci.nix -A xo-reader2 --no-out-link` green. Full reader2
+suite 1901 assertions in 32 test cases. Stub count 13 -> 11.
+
+#### Process note: the mutation harness was reporting false negatives
+
+Four mutations initially reported NOT-CAUGHT. All four were real catches; the
+harness was testing a **stale binary**, because `xo-build` had not picked up
+the edit. The harness now `touch`es the source and, more importantly,
+**checksums the built artifacts before and after and refuses to report a result
+if they did not change** (`STALE-BIN`).
+
+The asymmetry that makes the earlier runs still trustworthy: a stale binary can
+only ever report "All tests passed", i.e. NOT-CAUGHT. So every `caught` result
+recorded in this ticket stands; only NOT-CAUGHT results were ever suspect, and
+every earlier batch reported all-caught.
+
+Note the checksum must cover `libxo_reader2.so`, not just `utest.reader2` — a
+change under `src/` rebuilds the library and relinks nothing else, so the test
+binary's checksum is legitimately unchanged.
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
