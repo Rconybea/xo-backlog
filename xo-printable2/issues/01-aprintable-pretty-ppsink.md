@@ -2253,6 +2253,76 @@ Note the checksum must cover `libxo_reader2.so`, not just `utest.reader2` — a
 change under `src/` rebuilds the library and relinks nothing else, so the test
 binary's checksum is legitimately unchanged.
 
+### xo-reader2: DExpectQListSsm + DExpectQArraySsm — reader2 reaches zero (2026-08-12)
+
+The last two stubs in xo-reader2. Both are three-field `pretty_struct`s and
+took a handful of lines each; what made them the *last* two is that neither is
+reachable from a test except through the parser, and the parser's printer only
+converted in the previous unit.
+
+Both are pushed and popped inside a single quoted literal, so the only window
+on them is a parser rendered mid-literal. The token sequences:
+
+- list: `#q { ( 1 2` — `#q` takes a **leftbrace**; the bracket *inside* it
+  selects the container
+- array: `#q { [ 1 , 2`
+
+Stopping before the closing bracket is what keeps the ssm on the stack.
+
+**The DDictionary question, answered by measurement.** `xo-object2` pins a
+deliberate legacy-vs-ppsink divergence for empty dictionaries (`{ }` vs `{}`,
+at `xo-object2/utest/printable_render.test.cpp:314`). These two printers embed
+`DList`/`DArray` output, so the same divergence was a live possibility and was
+flagged as unknown-must-observe rather than assumed either way. Diffing the
+full observation table before and after conversion:
+
+```
+diff <observed-before> <observed-after>
+```
+
+changed **only** the `STUB:` lines — 12 of them, and nothing else. `DList` and
+`DArray` have no such divergence. Empty renders as `()` and `[]` on both
+protocols.
+
+**Corrected while writing the code.** A first draft of the `DExpectQListSsm`
+comment claimed `DList::_nil()` is itself nullptr, so a null `start_` would
+render as the empty list rather than throw. Plausible — `_nil()` reads like a
+null sentinel and the member is `DList * start_ = nullptr`. It is wrong:
+`xo-object2/src/object2/DList.cpp:32` returns `&s_null`, the address of a
+static. So state `qlist_0` *does* throw in the printer, exactly as
+`xo-reader2/issues/01-ssm-printer-null-children.md` already records. Same for
+`qarray_0` and `DArray::_empty()`. Neither printer's conversion introduces or
+fixes that; states `qlist_0`/`qarray_0` are deliberately not pinned.
+
+**Also pinned as observed, not corrected:** in state `qarray_1a` the `:expect`
+mnemonic reads `qliteral|rightparen`, not `rightbracket` — a string the array
+ssm shares with the list version. Whether that is a defect is not this
+refactor's question; the test pins what is rendered.
+
+Verification:
+
+- observe → convert → pin both protocols → delete harness → mutate → sweep → nix
+- **9 mutations, all caught** (tag rename, struct-name rename, and field
+  reorder, on each of the two printers)
+- reader2 suite **1914 assertions in 33 test cases** (was 1901 in 32)
+- `xo-build --sweep` → `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
+- `nix-build ci.nix -A xo-reader2 --no-out-link` green
+
+Progress after this unit:
+
+```
+grep -rl 'PHASE B STUB' --include=*.hpp xo-*/ | grep -v '/\.build/' | wc -l
+```
+
+reports 9, and
+
+```
+grep -rl 'PHASE B STUB' --include=*.hpp xo-reader2/ | grep -v '/\.build/' | wc -l
+```
+
+reports 0 — **xo-reader2 is fully converted.** What remains is xo-interpreter2
+(8) and `xo-object2`'s `DStruct` (1, the permanent floor).
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
