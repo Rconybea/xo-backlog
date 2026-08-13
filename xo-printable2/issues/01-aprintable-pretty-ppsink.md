@@ -1,6 +1,6 @@
 # 01 — APrintable::pretty(ppindentinfo) -> pretty(PpSink&), across the facet cluster
 
-Status: open
+Status: fixed 2026-08-13
 Type: task
 Milestone: ppsink-migration
 Progress: grep -rl 'PHASE B STUB' --include=*.hpp xo-*/ | grep -v '/\.build/' | wc -l
@@ -2008,6 +2008,35 @@ carry template arguments needs `(?:<[^<>()]*>)?` in the pattern.**
 Verified: `xo-build --sweep` →
 `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`, and all eight
 cluster packages green from clean via `nix-build ci.nix`.
+
+## Done 2026-08-13 — and why `Progress:` reads 1, not 0
+
+The goal condition:
+
+```bash
+xo-deps --why=xo-printable2:xo-indentlog     # rc=1
+```
+
+is met, and every item on the phase E checklist below is discharged.
+
+**The residual `Progress:` count of 1 is not outstanding work.** It is
+`xo-object2/include/xo/object2/DStruct.hpp`, which still carries a
+`PHASE B STUB` marker. That type is **work-in-progress, present in the tree by
+accident** (RC, 2026-08-13): there is no `DStruct.cpp`, it is not in
+`xo-object2/src/object2/CMakeLists.txt`, and it is not built into the library —
+
+```bash
+grep -n 'DStruct' xo-object2/src/object2/CMakeLists.txt     # no output
+```
+
+so there is nothing for a printer to render and nothing to convert. Its
+`pretty_deprecated` declaration was removed with the other 54 at phase E step 2;
+only the stub body remains.
+
+The `Progress:` command is left as written rather than special-cased. It counts
+what it says it counts, and the count is honest — a stub marker IS present. The
+floor disappears when DStruct is either finished or removed, and doctoring the
+query to hide one file would make it lie about every future one.
 
 ## Phase E, step 3 done 2026-08-13 — the declared dependencies, and the graph
 
