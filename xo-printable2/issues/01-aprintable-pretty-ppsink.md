@@ -1867,6 +1867,89 @@ yellow". ppsink emits `\033[<code>m` (`xo-ppsink/src/ppsink/color.cpp:27`),
 i.e. correctly. Anyone diffing raw escapes between the two stacks will meet
 this; it is legacy-only and dies with it.
 
+## Phase E, step 1 done 2026-08-12 — IDL, regen, bridge, test scaffolding
+
+One commit: the IDL edit, regenerating all 55 Printable targets, deleting
+`ppdetail_Printable.hpp`, and stripping `render_deprecated` from the six
+phase-C tables. **122 files, +188 / -2075.**
+
+IDL (`xo-printable2/idl/Printable.json5`): dropped the `pretty_deprecated`
+const_method, the `ppindentinfo` entry from `types:`, its
+`<xo/indentlog/print/ppindentinfo.hpp>` from `includes:`, and
+`"detail/ppdetail_Printable.hpp"` from `user_hpp_includes:`.
+
+**Regeneration order matters, and cost a build.** The per-type IDLs read
+`idl/Printable.json5` from the INSTALLED share dir, and the generated headers
+are consumed from the INSTALLED include dir. So:
+
+1. edit the IDL, then `xo-build --install xo-printable2` (installs the IDL)
+2. `cmake --build xo-printable2/.build --target xo-printable2-facet-printable`
+3. **`xo-build --install xo-printable2` again** — regenerating does not install
+4. then the 54 per-type targets, then rebuild consumers
+
+Skipping (3) fails in the consumers, not in printable2, with
+`'pretty_deprecated' is not a member of ... IPrintable_DString` — a stale
+INSTALLED `IPrintable_Xfer.hpp`. The 55 targets are enumerable:
+
+```bash
+grep -rn 'xo_add_genfacet\(impl\)\?' -A4 --include=CMakeLists.txt xo-*/ | grep -v '/\.build/'
+# TARGET names whose INPUT matches IPrintable_*.json5 or idl/Printable.json5
+# xo-reader2 21, xo-expression2 11, xo-interpreter2 8, xo-object2 7,
+# xo-procedure2 5, xo-stringtable2 2, xo-printable2 1
+```
+
+### Stripping the phase-C tables: the transform, and two traps
+
+Every `Testcase_*` ctor and every `check*` lambda puts `expect_deprecated`
+**second-to-last**, immediately before `expect_pretty`. Dropping the
+second-to-last argument is therefore uniform, and survives xo-reader2 having
+two same-named `check_parser` lambdas of different arity — an index counted
+from the front would have corrupted one of them.
+
+The transform must split arguments with a real scanner, not a regex:
+
+- **`;` occurs inside string literals.** `xo-object2`'s dictionary expectations
+  contain `"{ k: { a: 1; b: 2; }; n: 3; }"`, so a `[^;]*?;` statement-matcher
+  truncates mid-literal and produces unterminated strings. Cost one revert.
+- **Call sites may carry explicit template arguments.** `Testcase_Leaf<long>(…)`
+  does not match `\bTestcase_Leaf\s*\(`, so a first pass rewrote the ctor and
+  left 12 call sites at the old arity. Cost a second revert.
+
+The tests themselves verify the transform: dropping the wrong argument changes
+a surviving `expect_pretty` and fails loudly. All six suites pass, with counts
+down by exactly the deleted deprecated halves — reader2 1914→1837,
+expression2 361→286, object2 186→159, interpreter2 203→177,
+stringtable2 164→152, procedure2 15→12.
+
+### The four hand-written `ppdetail<>` must go WITH the bodies, not before
+
+`TypeRef`, `ParserResult`, `ParserStack*`, `DSchematikaParser*`. Deleting them
+in this step broke the build: `DIfElseExpr::pretty_deprecated`
+(`xo-expression2/src/expression2/DIfElseExpr.cpp:124`) renders
+`refrtag("tref", tref_)`, which resolves through `ppdetail<TypeRef>`. Without
+it, legacy `pretty` falls to `operator<<`, which `TypeRef` does not have.
+
+So the surviving `pretty_deprecated` **bodies** are live consumers of those
+specializations. They are deleted together in step 2. Reverted here.
+
+### Verified from clean
+
+Per the caveat below — a stale generated file does not self-heal on build —
+"did I regenerate everything" was answered by building, not by inspection:
+
+```bash
+nix-build ci.nix -A xo-printable2 -A xo-object2 -A xo-stringtable2 \
+  -A xo-expression2 -A xo-reader2 -A xo-interpreter2 -A xo-procedure2 -A xo-gc \
+  --no-out-link
+```
+
+all eight green, plus `xo-build --sweep` →
+`62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`.
+
+**Still to do:** 111 files still mention `pretty_deprecated` — the declarations
+and bodies, plus the 4 specializations above (step 2), then the three
+`subsystem-edges` lines (step 3).
+
 ## Phase E checklist — things to delete, not just `pretty_deprecated`
 
 Recorded as they accumulate, because each is easy to leave behind:
