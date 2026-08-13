@@ -2536,6 +2536,104 @@ Verification:
 **Stub count 3 → 1.** The remaining one is `xo-object2`'s `DStruct`, the
 permanent floor. Phase C is otherwise complete.
 
+## Phase D — what the bridge actually feeds, measured (2026-08-12)
+
+Phase C is done; this is phase D's scoping, and it changed the plan.
+
+### The bridge idea is dead
+
+Before starting, this ticket flagged as promising: implement
+`pretty_deprecated(ppindentinfo)` *in terms of* `pretty(PpSink&)`, so converted
+types keep one implementation instead of two. **Dropped.** Two measurements
+killed it:
+
+1. **Nobody maintains the duplicates.** `pretty_deprecated` has 63 textual call
+   sites and essentially no external callers — 54 are generated
+   `IPrintable_D*.cpp` dispatch impls, 4 are hand-written `ppdetail<>` for the
+   non-facet types, 1 is the generated `RPrintable.hpp` proxy, 1 is
+   `DUniqueString` delegating inside its own `pretty_deprecated`, and **1 is the
+   only real entry point**, `ppdetail_Printable.hpp`. A bridge would add
+   indirection to code whose whole purpose is deletion.
+
+2. **The protocols are already fully separated** — verified, not assumed. A
+   temporary tripwire (a depth counter incremented for the duration of every
+   ppsink render, checked on entry to *every* path into `pretty_deprecated`:
+   `ppdetail_Printable.hpp` plus all four hand-written `ppdetail<>`) ran across
+   the cluster: **2866 assertions, zero hits.** stringtable2 164, object2 186,
+   procedure2 15, expression2 384, interpreter2 203, reader2 1914. Nothing
+   bridges new→old today; a bridge would *create* that coupling.
+
+Worth knowing for any future instrumentation of these printers: the first
+tripwire run reported a false positive because the guard was not RAII, and
+`DLocalSymtab-types.throws` asserts `render_pretty()` **throws** — the leaked
+depth then tripped the next legitimate `render_deprecated`. Several phase-C
+tests deliberately assert throws. Use RAII.
+
+### Deleting the bridge is NOT compile-time safe
+
+`ppdetail_Printable.hpp` was removed in a scratch build to let the compiler
+enumerate dependents. It enumerates almost nothing:
+
+- The whole cluster **builds** without it. Only two files broke —
+  `xo-object2/src/object2/DDictionary.cpp` and `.../DRuntimeError.cpp` — and
+  neither *uses* the bridge; their `pretty_deprecated` bodies were getting
+  `<xo/indentlog/print/pretty.hpp>` transitively through it. Fixed by adding the
+  explicit include (correct either way, so landed now).
+
+- **Three production/example sites render an `obj<APrintable>` through legacy
+  `ppstate_standalone::prettyn()` and compiled fine without the bridge.**
+  `ppdetail` falls through to a generic fallback, so they would have started
+  printing garbage with no diagnostic:
+
+  | site | what it prints |
+  |---|---|
+  | `xo-interpreter2/src/interpreter2/DVirtualSchematikaMachine.cpp` read_eval_print | tokenizer error |
+  | same file, run() | **every toplevel value** |
+  | `xo-reader2/example/readerreplxx/readerreplxx.cpp` | every parsed expression |
+
+  All three converted to `xo::pp::PrettySink` + `pp()` + `complete()`.
+  `complete()` is what `prettyn()`'s trailing newline becomes.
+
+  Note the count: an early pass reported **one** site because a `grep -A6 |
+  head -14` truncated the file. The second site in the same file is the one
+  that prints every value. Census greps for this need `-c` or no `head`.
+
+  The readerreplxx case also had a third form — `log(xtag("expr", expr_pr))`
+  on legacy tags, which reaches the printer the same way. That file moved to
+  `xo::pp::scope` / `xo::pp::xtag` wholesale.
+
+**`PpConfig::colored()`, not `PpConfig()`.** The default ctor leaves
+`logbuf_config_` default-constructed, so `LogBuffer::write_span` asserts on the
+first real record — caught by `VirtualSchematikaMachine-const1`. The factories
+(`plain()` / `colored()` / `scratch_*`) are what size the arena. Coloured
+because legacy `tag_config::tag_color_enabled` defaults **true**
+(`xo-indentlog/include/xo/indentlog/print/tag_config.hpp:29`), so these sites
+were already colouring.
+
+### What is left, and where it is not
+
+With those three converted, removing the bridge breaks **only test files**, 44
+assertions in 7 subsystems, in two groups:
+
+| group | files | on the phase E list? |
+|---|---|---|
+| `render_deprecated` scaffolding | the 6 `printable_render.test.cpp` | yes |
+| legacy-protocol per-type tests | expression2's `DApplyExpr` / `DConstant` / `DDefineExpr` / `DIfElseExpr` / `DVariable`, `xo-procedure2/utest/DPrimitive.test.cpp`, **`xo-gc/utest/Object2.test.cpp`** | **no** |
+
+The second group builds a `ppstate_standalone` and calls
+`pps.pretty(obj<APrintable,...>)` directly — they test the deprecated
+*protocol*, not printer content, and are superseded by the phase-C tables.
+**RC's call 2026-08-12: delete them rather than convert.**
+
+`xo-gc` is the one nobody predicted: it is **outside the facet cluster**, so
+"what remains is the facet cluster" does not hold for phase D.
+
+Verification of the three conversions: `xo-build --sweep` →
+`62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`;
+`nix-build ci.nix -A xo-interpreter2 -A xo-object2 -A xo-reader2` green; and
+with the bridge experimentally removed, production **and examples** build clean
+and the only failures are the seven doomed test files.
+
 ## The precedent to copy
 
 `.xo-backlog/xo-expression/issues/01-ppsink-migration-pilot.md` did this exact
