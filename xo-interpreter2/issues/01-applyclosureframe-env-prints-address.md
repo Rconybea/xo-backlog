@@ -1,6 +1,6 @@
 # 01 — DVsmApplyClosureFrame prints its environment as a raw address
 
-Status: diagnosed
+Status: fixed 2026-08-13
 Type: bug
 Progress: grep -rn 'refrtag("env", local_env_)\|field("env", local_env_)' xo-interpreter2/src --include=*.cpp | grep -v '/\.build/' | wc -l
 
@@ -87,6 +87,45 @@ Note the null case is load-bearing: `local_env_` **can** be null in practice
 (the test constructs one that way and it renders), so whatever replaces the
 field must keep a present flag or an explicit null rendering rather than
 dereferencing.
+
+## Fixed 2026-08-13
+
+Done as prescribed, after phase E removed the deprecated protocol:
+
+```cpp
+obj<APrintable,DLocalEnv> env_pr(local_env_);
+...
+field("env", env_pr, bool(env_pr))
+```
+
+`:env` now renders `<DLocalEnv :n_args 1>` where it printed
+`0x7879d025b098`. `scrub_addr()` and its `<cctype>` include are gone from
+`xo-interpreter2/utest/printable_render.test.cpp` — nothing in that file
+renders an address any more.
+
+**One behaviour change beyond the obvious.** A null `local_env_` printed
+`:env 0`; it now **omits the field entirely**, because the present flag drops
+it. That is what `DClosure` does for the same type, and it is deliberate — but
+it is a different rendering from "renders zero", not merely a prettier one, so
+the `null-env` cases pin it explicitly.
+
+Mutation-checked four ways, all caught: forcing the present flag true, forcing
+it false, renaming the tag, and — the one that matters — **reverting the field
+to the raw `local_env_`**, i.e. regressing to the address form.
+
+Verified: interpreter2 suite 177 assertions in 22 test cases;
+`xo-build --sweep` → `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`;
+`nix-build ci.nix -A xo-interpreter2 --no-out-link` green.
+
+### A process note on the edit itself
+
+The first attempt to update the expectations was a **silent no-op**: the
+replacement searched for the two-expectation form (`expect_deprecated` +
+`expect_pretty`), which phase E had already collapsed to one. The script
+reported success and the test then failed against the old `0xADDR` string.
+Cheap to spot here because a test caught it — but the lesson is general and
+recurred several times across phase E: **a scripted source edit must assert
+that its pattern matched**, or it reports success for having done nothing.
 
 ## Wider question
 

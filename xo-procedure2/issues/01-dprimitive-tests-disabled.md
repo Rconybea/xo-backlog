@@ -1,4 +1,4 @@
-# 01 — 5 of 6 DPrimitive tests are compiled out behind `#ifdef OBSOLETE`
+# 01 — 5 disabled DPrimitive tests: restore them, in xo-numeric/ not here
 
 Status: diagnosed
 Type: test-gap
@@ -21,52 +21,100 @@ Disabled:
 
 | test | what it would check |
 |---|---|
-| `DPrimitive-n_args` | `s_mul_gco_gco_pm.n_args() == 2` |
-| `DPrimitive-is_nary` | `s_mul_gco_gco_pm.is_nary() == false` |
+| `DPrimitive-n_args` | `n_args() == 2` |
+| `DPrimitive-is_nary` | `is_nary() == false` |
 | `DPrimitive-apply_nocheck-float-float` | primitive application, both args float |
 | `DPrimitive-apply_nocheck-int-int` | ditto, ints; asserts the result is a `DInteger` of 21 |
-| `DPrimitive-apply_nocheck-int-float` | ditto, mixed — i.e. the numeric-dispatch path |
+| `DPrimitive-apply_nocheck-float-int` | ditto, mixed — i.e. the numeric-dispatch path |
 
-That is the whole behavioural coverage of primitive *application* in this
-subsystem, and none of it runs.
+That is the whole behavioural coverage of primitive *application*, and none of
+it runs.
 
 Found 2026-08-12 while deleting a sixth disabled case, `DPrimitive-pretty`,
 during phase E of `.xo-backlog/xo-printable2/issues/01-aprintable-pretty-ppsink.md`.
 That one was genuinely obsolete — it tested the deprecated print protocol and is
 superseded by `DPrimitive-render` — so it was removed rather than re-enabled.
-The other five are a different question and are not print-related at all.
+The other five are not print-related and **are wanted back** (RC, 2026-08-13).
 
-## Why it was invisible
+## They do not belong in xo-procedure2
 
-The suite reports success. `xo-build --sweep` counts xo-procedure2 among the
-passing subsystems, and nothing distinguishes "6 tests pass" from "1 test passes
-and 5 do not exist". This is the same failure mode as the disabled-tests sweep
-recorded for the nix packages — a suite that runs is not a suite that covers.
+RC, 2026-08-13: restore them in **`xo-numeric/utest/`**.
 
-It also survived a text search: the list of files touching the deprecated print
-protocol was built with `grep -rln ppstate_standalone`, which matches inside
-`#ifdef` blocks, so this file was wrongly counted as an active consumer. Kept
-here per rule 6 — **a grep over source text cannot tell you what compiles.**
+The reason is visible in what they reference. Both symbols they use are gone
+from xo-procedure2:
 
-## What to do
+```bash
+grep -oE '(Primitives|NumericPrimitives)::[a-z_0-9]+' xo-procedure2/utest/DPrimitive.test.cpp | sort -u
+#   NumericPrimitives::s_mul_gco_gco
+#   Primitives::s_mul_gco_gco_pm
 
-Unknown, and that is the point: nobody has established **why** they were
-disabled. `git log -S'ifdef OBSOLETE' -- xo-procedure2/utest/DPrimitive.test.cpp`
-attributes it to the subrepo clone commit (`e2d181dd`), so the decision predates
-this tree's history and its reason did not travel.
+grep -rn 's_mul_gco_gco_pm' --include=*.hpp --include=*.cpp xo-*/ | grep -v '/\.build/'
+#   xo-procedure2/include/xo/procedure2/init_primitives.hpp:24 -- and that
+#   declaration is ITSELF inside #ifdef OBSOLETE, annotated
+#   "see xo-numeric/src/numeric/NumericPrimitives.cpp"
+```
 
-Before re-enabling, check whether they still reflect the API:
+So the tests were disabled because the thing they tested **moved**, not because
+the coverage stopped mattering. xo-procedure2 now owns the primitive
+*machinery* (`DPrimitive_gco_2_gco_gco`, `PrimitiveRegistry`); xo-numeric owns
+the arithmetic primitives themselves, which is what `apply_nocheck-int-float`
+is really exercising — the numeric dispatch.
 
-- `Primitives::s_mul_gco_gco_pm` — does that symbol still exist with that
-  spelling? The type has since been renamed `DPrimitive_gco_2_gco_gco`.
-- `DSimpleRcx` / `ARuntimeContext` construction in the bodies — the runtime
-  context has moved subsystems at least once.
-- `DArray::array(alloc, x, y)` — variadic form still present?
+Direction of dependency is right for the move:
 
-If they compile and pass, delete the `#ifdef`. If they do not, they are stale
-scaffolding and should be deleted outright rather than left looking like
-coverage — but that is a decision to make **after** compiling them, not from
-reading.
+```bash
+xo-deps --why=xo-numeric:xo-procedure2      # xo-numeric -> xo-procedure2, rc=0
+```
 
-Either outcome ends with this file having no `#ifdef OBSOLETE` in it, which is
-what the `Progress:` count measures.
+so a test in xo-numeric/utest can use both; the reverse would not work.
+
+## The complication: no globals, so the fixture must build the primitives
+
+The old tests took a **static**: `Primitives::s_mul_gco_gco_pm`. There is no
+such object now. Primitives are constructed on demand from an allocator and a
+string table:
+
+```bash
+grep -n 'make_.*_pm' xo-numeric/include/xo/numeric/NumericPrimitives.hpp
+#   static DPrimitive_gco_2_gco_gco * make_multiply_pm(obj<AAllocator> mm,
+#                                                      StringTable * stbl);
+#   ... make_divide_pm, make_add_pm, make_subtract_pm, make_cmpeq_pm, ...
+```
+
+`xo-numeric/src/numeric/SetupNumeric.cpp:89` (`register_primitives`) is the
+worked example of the calling convention:
+
+```cpp
+obj<AAllocator> mm = rcx.allocator();
+StringTable * stbl = rcx.stringtable();
+
+PrimitiveRegistry::install_aux(sink,
+                               NumericPrimitives::make_multiply_pm(mm, stbl),
+                               flags & InstallFlags::f_essential);
+```
+
+A test fixture needs the `mm` + `stbl` pair and can call the factory directly —
+it does not need the registry or the install sink, which are about publishing
+primitives into an environment, not about applying one.
+
+Two things to work out when doing it, both **unverified**:
+
+- `xo-numeric/utest/Numeric.test.cpp` already has a `Fixture` holding an
+  `aux_arena_` (`:28`). Whether it also has a `StringTable`, or needs one
+  added, has not been checked.
+- the old tests built an `ARuntimeContext` via `DSimpleRcx` to pass to
+  `apply_nocheck`. Whether that is still the right way to obtain one from a
+  test — as opposed to going through a `DVsmRcx` or the numeric fixture — has
+  not been checked either.
+
+## Do not simply re-enable in place
+
+Deleting the `#ifdef OBSOLETE` in `xo-procedure2/utest/DPrimitive.test.cpp`
+will not compile: the statics are gone. The work is a **port**, not an
+un-comment — rewrite the five against `NumericPrimitives::make_*_pm` in
+xo-numeric/utest, then delete the dead block here.
+
+The `Progress:` count reaching 0 therefore means "the dead block is gone from
+xo-procedure2", which is the correct end state whether the tests are ported or
+abandoned. It does **not** by itself mean the coverage exists — that is
+`xo-numeric/utest` having the five cases, and is worth checking by name.
