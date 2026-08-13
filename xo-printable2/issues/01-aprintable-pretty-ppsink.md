@@ -2009,6 +2009,51 @@ Verified: `xo-build --sweep` →
 `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`, and all eight
 cluster packages green from clean via `nix-build ci.nix`.
 
+## Phase E, step 3 done 2026-08-13 — the declared dependencies, and the graph
+
+The milestone's goal condition:
+
+```bash
+xo-deps --why=xo-printable2:xo-indentlog     # rc=1
+```
+
+**Met.** So are xo-stringtable2 and xo-object2, which is
+`.xo-backlog/xo-object2/issues/01` (now `fixed`); see that ticket for the
+three-declaration-sites-per-subsystem detail and the capture procedure for
+`subsystem-edges`, which is **generated, not authored**.
+
+### Removing a propagated dependency has a blast radius; enumerate it up front
+
+Four subsystems were using legacy indentlog **without declaring it**, reaching
+it transitively through xo-object2 — xo-reader2 (18 files), xo-interpreter2 (7),
+xo-procedure2 (4), and xo-refcnt (1, deliberate and needing nothing). They were
+found one `nix-build` failure at a time before being enumerated properly:
+
+```bash
+# per subsystem: includes <xo/indentlog/...> but declares no indentlog dep?
+```
+
+Declared rather than converted — they genuinely use legacy `scope`/`xtag`
+logging, which is a separate migration. The resulting edges
+`xo-indentlog -> {reader2, procedure2, interpreter2}` are honest and leave the
+printable2/stringtable2/object2 results untouched, since all three are upstream.
+
+`xo-type` was the exception: `src/type/SetupType.cpp` included
+`<xo/indentlog/scope.hpp>` while its Config.cmake.in has
+`find_dependency(xo_indentlog)` **commented out**, so declaring it would have
+contradicted the file. Converted to `xo::pp::scope`.
+
+### The one process lesson from all three steps
+
+**`xo-build --sweep` did not catch a single one of these.** It was green while
+`nix-build` failed at step 2 three times (transitively-supplied `ppdetail`,
+`xtag`/`tostr`, `ppindentinfo`) and at step 3 twice more (`xo-type`,
+`xo-procedure2`). The installed tree keeps headers findable, so a deleted
+include or a dropped declaration is invisible locally.
+
+For any step that removes a widely-included header or a declared dependency,
+`nix-build` is the check and `--sweep` is a smoke test.
+
 ## Phase E checklist — things to delete, not just `pretty_deprecated`
 
 Recorded as they accumulate, because each is easy to leave behind:

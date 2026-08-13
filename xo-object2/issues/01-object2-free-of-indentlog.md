@@ -1,6 +1,6 @@
 # 01 — xo-object2 free of xo-indentlog
 
-Status: diagnosed
+Status: fixed 2026-08-13
 Type: refactor
 Milestone: ppsink-migration
 Progress: grep -rl '#include <xo/indentlog/' --include=*.hpp --include=*.cpp xo-printable2/include xo-printable2/src xo-stringtable2/include xo-stringtable2/src xo-object2/include xo-object2/src 2>/dev/null | grep -v '/\.build/' | wc -l
@@ -188,6 +188,96 @@ gate also defaults on). Pinned as `DArray-at-out-of-range` in
 `DList::at`'s message could **not** be observed, because that function SIGABRTs
 before reaching its own `throw`. Pre-existing, unrelated to this work, filed as
 `.xo-backlog/xo-object2/issues/02-dlist-at-aborts-instead-of-throwing.md`.
+
+## Fixed 2026-08-13
+
+```bash
+for s in xo-printable2 xo-stringtable2 xo-object2; do
+  xo-deps --why=$s:xo-indentlog -q >/dev/null 2>&1 \
+    && echo "$s rc=0" || echo "$s rc=1 FREE"
+done
+#   xo-printable2   rc=1 FREE
+#   xo-stringtable2 rc=1 FREE
+#   xo-object2      rc=1 FREE
+```
+
+The 11 logging/exception sites landed 2026-08-12; phases E step 1 and 2 of
+`.xo-backlog/xo-printable2/issues/01` removed the rest.
+
+### The dependency was declared in THREE places per subsystem
+
+Not one. For each of the three:
+
+| file | form |
+|---|---|
+| `<sub>/src/<sub>/CMakeLists.txt` | `xo_dependency(${SELF_LIB} indentlog)` |
+| `<sub>/cmake/xo_<sub>Config.cmake.in` | `find_dependency(indentlog)` |
+| `pkgs/<sub>.nix` | argument + `propagatedBuildInputs` |
+
+The CMakeLists even carries the warning — `# note: deps here must coord with
+cmake/xo_<sub>Config.cmake.in`. That hand-kept pairing is what the generated
+`find_dependency` work removes (`xo_export_cmake_config` +
+`@XO_FIND_DEPENDENCY_BLOCK@`, piloted in xo-arena, see
+`.xo-backlog/generated-find-dependency/`); none of these three is migrated yet.
+
+### `subsystem-edges` is CAPTURED, not authored — corrected (rule 6)
+
+This ticket originally said the goal was "three lines gone from
+`xo-cmake/etc/xo/subsystem-edges`", implying an edit. Wrong, and worth keeping:
+the file is **generated at configure time and published** from a build tree by
+`xo-reconfigure --capture-subsystem-edges`
+(`xo-cmake/share/xo-macros/xo-reconfigure.in`). Hand-editing it would be undone
+by the next capture, and would make `xo-deps` disagree with the build.
+
+The procedure, since `xo-reconfigure` is installed only as a `.in` template and
+must be instantiated per build dir:
+
+```bash
+cmake -S . -B .build                       # regenerate the graph
+ls .build/subsystem-edges                  # NOT subsystem-partial-edges
+diff xo-cmake/etc/xo/subsystem-edges .build/subsystem-edges
+cp .build/subsystem-edges xo-cmake/etc/xo/subsystem-edges
+xo-build --configure --build --install xo-cmake     # xo-build reads the INSTALLED copy
+```
+
+The **basename is the completeness check**: cmake writes `subsystem-edges` only
+when every guard gating a `xo_dependency()` was on, and
+`subsystem-partial-edges` otherwise. So it is a file-existence test, not a
+switch audit that could drift. This tree's `.build` has
+`XO_ENABLE_EXAMPLES=1 XO_ENABLE_VULKAN=1 ENABLE_TESTING=1`.
+
+### What removing the propagated dependency exposed
+
+Four subsystems were using legacy indentlog **without declaring it**, living on
+propagation through xo-object2:
+
+```bash
+# for each subsystem: does it INCLUDE <xo/indentlog/...> but not DECLARE it?
+```
+
+| subsystem | files | action |
+|---|---|---|
+| xo-reader2 | 18 | declared |
+| xo-interpreter2 | 7 | declared |
+| xo-procedure2 | 4 | declared |
+| xo-refcnt | 1 | **nothing** — `pretty_refcnt.hpp` is a deliberate compat header whose comment already says consumers must declare their own |
+
+Declared rather than converted: they genuinely use legacy `scope`/`xtag` for
+logging, and converting ~30 files is not this ticket. The new edges
+`xo-indentlog -> {reader2, procedure2, interpreter2}` are honest, and do not
+affect xo-object2, which is upstream of all three.
+
+One case did warrant conversion: `xo-type/src/type/SetupType.cpp` included
+`<xo/indentlog/scope.hpp>` while `xo-type/cmake/xo_typeConfig.cmake.in` has its
+`find_dependency(xo_indentlog)` **commented out** — declaring it would have
+contradicted the file. Moved to `xo::pp::scope` / `xo::pp::xtag`.
+
+### `xo-build --sweep` is nearly worthless for this class of change
+
+It stayed green through every failure above; `nix-build` caught all of them.
+The installed tree still has the headers findable, so a dropped *declaration*
+is invisible locally. **For dependency-graph changes, the clean build is the
+only check that means anything.**
 
 ## Ordering
 
