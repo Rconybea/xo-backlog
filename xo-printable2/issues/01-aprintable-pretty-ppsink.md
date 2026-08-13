@@ -1950,6 +1950,65 @@ all eight green, plus `xo-build --sweep` →
 and bodies, plus the 4 specializations above (step 2), then the three
 `subsystem-edges` lines (step 3).
 
+## Phase E, step 2 done 2026-08-12 — the declarations, bodies and specializations
+
+Removed: **55 declarations, 54 definitions** (53 ordinary + 1 templated),
+**4 hand-written `ppdetail<>`** blocks, and the legacy includes and aliases
+they needed. `grep -rn pretty_deprecated` over the tree now returns four
+comments and nothing else.
+
+`xo-deps --why=xo-object2:xo-indentlog` still returns rc=0 — the three
+`subsystem-edges` lines are step 3 — but the include count that
+`.xo-backlog/xo-object2/issues/01`'s `Progress:` measures is **19 -> 0**.
+
+### The local build is not the oracle; the clean build is
+
+`xo-build --sweep` was green **three times** while `nix-build` still failed, in
+three different places. Every failure was the same shape: a symbol that had
+been arriving **transitively through `<xo/indentlog/print/pretty.hpp>`**, which
+this step deleted. Locally some other include still pulled it in; from clean,
+nothing did.
+
+| symbol | site | fix |
+|---|---|---|
+| `ppdetail<TypeDescr>` | `xo-expression2/utest/printable_render.test.cpp` included `<xo/reflect/TypeDescr_ppdetail.hpp>` for `render_deprecated` | include deleted — it was phase-E scaffolding |
+| `xtag` / `tostr` | 4 files, in exception messages and `print(std::ostream&)` bodies | ppsink vocabulary + `<xo/ppsink/tag_ostream.hpp>` |
+| `ppindentinfo` | `using xo::print::ppindentinfo;` — a *namespace-level* using-declaration, not the class-scope `using ppindentinfo = …` alias the sweep targeted | removed, 3 files |
+
+`TypeDescr_ppdetail.hpp` deserves note: it is **deliberately not
+self-contained**. Its header comment says xo-reflect no longer declares an
+xo-indentlog dependency, so a consumer that includes it must declare one. That
+makes it invisible to "does this header compile alone" checks and visible only
+to a from-clean build of a consumer.
+
+**So: after any step that deletes a widely-included legacy header, run
+`nix-build`, not just `--sweep`.** Three rounds here.
+
+### `os << xtag(...)` has a supported bridge
+
+The `print(std::ostream&)` bodies did not need rewriting into PpSink methods.
+`<xo/ppsink/tag_ostream.hpp>` routes an `xo::pp` tag through a FlatSink
+wrapping the ostream, precisely so a site can switch off legacy `xo::xtag`
+without being restructured. Used in `DIfElseExpr.cpp`, `ParserStack.cpp`,
+`ParserResult.cpp`.
+
+ADL bit once more, as it did in the object2 work: `xtag("ssm",
+"*placeholder*")` with `const char[]` arguments still resolves ambiguously
+against a legacy overload, and a using-declaration cannot suppress ADL.
+Qualified at the call site.
+
+### Two spellings of the same removal
+
+The bulk transform matched `\w+::pretty_deprecated`, which misses
+`Primitive<Fn>::pretty_deprecated` — an out-of-class **template** definition in
+`xo-procedure2/include/xo/procedure2/DPrimitive.hpp`. Caught by the build, not
+by grep. Same lesson as `Testcase_Leaf<long>(…)` in step 1: **a name that can
+carry template arguments needs `(?:<[^<>()]*>)?` in the pattern.**
+
+Verified: `xo-build --sweep` →
+`62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`, and all eight
+cluster packages green from clean via `nix-build ci.nix`.
+
 ## Phase E checklist — things to delete, not just `pretty_deprecated`
 
 Recorded as they accumulate, because each is easy to leave behind:
