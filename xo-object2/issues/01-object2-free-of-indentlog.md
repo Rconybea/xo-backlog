@@ -86,9 +86,15 @@ ppindentinfo, `DString.cpp` pretty.hpp). Remaining:
 
 | site | what | move to |
 |---|---|---|
-| `src/stringtable2/DUniqueString.cpp:63` | `scope log(XO_DEBUG(false))` — **disabled**, emits nothing | delete outright |
+| `src/stringtable2/DUniqueString.cpp:63` | `scope log(XO_DEBUG(false))` — disabled, but see below | `xo::pp::scope` |
 | `src/stringtable2/SetupStringtable2.cpp:25` | live `scope log(XO_DEBUG(true))` | `xo::pp::scope` |
 | `src/stringtable2/SetupStringtable2.cpp:46` | live `scope log(XO_DEBUG(true))` | `xo::pp::scope` |
+
+**Corrected 2026-08-12 (rule 6).** This table first said the `DUniqueString`
+scope could be "deleted outright" because `XO_DEBUG(false)` disables it. Wrong,
+and plausibly so: the scope emits nothing, but `log` is *referenced* twelve
+lines later by a live `log && log(xtag(...))`, so deleting the declaration
+breaks the build. Disabled is not unused. Converted like the others.
 
 ### xo-object2 — 8 sites
 
@@ -125,6 +131,63 @@ they are convenient.
 - `src/object2/DList.cpp:118`
 - `src/object2/GCObjectConversion_DInteger.cpp:31`
 - `src/object2/GCObjectConversion_DFloat.cpp:31`
+
+## Done 2026-08-12 — all 11 sites
+
+Converted; `xo-build --sweep` →
+`62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`;
+`nix-build ci.nix -A xo-object2 -A xo-stringtable2 --no-out-link` green. The
+`Progress:` count went **24 → 19**, and all 19 remaining are phase-E
+scaffolding (`ppindentinfo.hpp` declarations, `print/pretty.hpp` bodies).
+
+Three things worth carrying forward:
+
+**Two idioms, not one.** Where the legacy include disappears entirely, the
+namespace-scope using-declaration works — copied from
+`xo-arena/src/arena/mmap_util.cpp:16-20`:
+
+```cpp
+namespace xo {
+    /* the ppsink logging vocabulary, for use below */
+    using xo::pp::scope;
+    using xo::pp::xtag;
+```
+
+Where legacy `print/pretty.hpp` must **stay** until phase E (`DList.cpp`,
+`DArray.cpp` — their `pretty_deprecated` bodies need it), `xo::scope` /
+`xo::xtag` are still visible and the using-declaration is ambiguous. Those
+sites are **qualified** at the call instead, with a comment saying phase E can
+unqualify them.
+
+**ADL still bites.** `xo::pp::xtag("DString.tseq", typeseq::id<DString>())` in
+`SetupStringtable2.cpp` was ambiguous even with the using-declaration in scope,
+because typeseq's associated namespace reaches a legacy overload and **a
+using-declaration cannot suppress ADL**. Qualified at the call. Same trap
+already recorded for `gp<Object>` in `.xo-backlog/xo-alloc/issues/01`.
+
+That site also got simpler: it passed `typeseq::id<DString>().seqno()` as a
+workaround for legacy xtag rendering via `operator<<`, which typeseq has none
+of. On ppsink it renders through `Prettifier<typeseq>`
+(`xo/reflectutil/typeseq_pp.hpp`), which emits the bare seqno — so the
+`.seqno()` call is gone and the output is unchanged.
+
+**The exception messages were unverified, and now one is pinned.**
+`DArray::at` and `DList::at` build their messages with `tostr`/`xtag` and had
+**no coverage at all**:
+
+```bash
+grep -rn 'out-of-range\|REQUIRE_THROWS\|CHECK_THROWS' --include=*.test.cpp xo-object2/utest
+```
+
+returned nothing. `DArray::at`'s message was compared across both vocabularies
+by building each and diffing: **byte-identical, ANSI colour escapes included**
+(legacy gated colour on `tag_config::tag_color_enabled`, default true; ppsink's
+gate also defaults on). Pinned as `DArray-at-out-of-range` in
+`xo-object2/utest/DArray.test.cpp`.
+
+`DList::at`'s message could **not** be observed, because that function SIGABRTs
+before reaching its own `throw`. Pre-existing, unrelated to this work, filed as
+`.xo-backlog/xo-object2/issues/02-dlist-at-aborts-instead-of-throwing.md`.
 
 ## Ordering
 
