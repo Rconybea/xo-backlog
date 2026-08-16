@@ -1,6 +1,6 @@
 # tostr-arena — move xo off `tostr0()` onto xo-indentlog2's arena-backed `tostr()`
 
-Status: open
+Status: done 2026-08-16
 Type: spec
 Progress: grep -rl '#include <xo/ppsink/tostr_xx\.hpp>' --include=*.hpp --include=*.cpp . 2>/dev/null | grep -v '/\.build/' | wc -l
 
@@ -181,3 +181,67 @@ grep -rl 'ppsink/tostr_xx' --include=*.hpp --include=*.cpp xo-object2/ xo-expres
 
 Both are class A, so finishing them is cheap — worth doing early so they stop
 reading as done in the commit log.
+
+## Done 2026-08-16
+
+`tostr_xx.hpp` is deleted. Every remaining `tostr0` user is either named in
+`tostr0.hpp`'s reserved list, or is xo-ppsink which defines it:
+
+```bash
+grep -rl '\btostr0\b' --include=*.hpp --include=*.cpp . | grep -v '/\.build/' \
+  | sed 's|^\./||' | cut -d/ -f1 | sort -u
+#   xo-arena xo-flatstring xo-jit xo-ppsink xo-refcnt xo-subsys xo-testutil
+```
+
+xo-jit's two entries are `src/jit/MachPipeline.{new,orig}.cpp`, which are not in
+`src/jit/CMakeLists.txt` and never compile. They want deleting or marking as
+scratch — see `.xo-backlog/xo-jit/issues/02`, which records the same problem for
+the `activation_record.{new,orig}` copies.
+
+## Class E, which this spec did not predict
+
+The four classes covered every subsystem that *included* `tostr_xx.hpp`. They
+did not cover the six worked examples the recipe was derived from — xo-jit,
+xo-kalmanfilter, xo-reader, xo-ordinaltree (and partially xo-object2,
+xo-expression2). Each of those conversions was **incomplete**, and by exactly
+the mechanism the spec warns about elsewhere:
+
+| subsystem | files | call sites | all free-riding? |
+|---|---|---|---|
+| xo-ordinaltree | 7 | 33 | yes (5 public headers) |
+| xo-kalmanfilter | 6 | 20 | yes |
+| xo-reader | 4 | 20 | yes |
+| xo-jit | 2 | 5 | yes |
+
+Every one of those 19 files named `tostr0` while including no tostr header. The
+original conversions were driven by `grep tostr_xx`, so none of them appeared.
+They surfaced only when the spec's *end-state* check was run — "is every
+remaining `tostr0` user on the reserved list?" — which is a different question
+from "is the counter zero", and the only one that would have caught this.
+
+**The lesson is about the check, not the census.** Each class ticket already
+counted by use after class B taught us to; that was necessary and not
+sufficient, because a per-class counter can only see the subsystems its class
+names. A spec-level invariant is what closes the gap.
+
+Six of the 19 files already carried the indentlog2 include from their original
+partial conversion. The transform had been inserting it unconditionally, so it
+produced duplicate `#include` lines — RC caught this and removed several before
+it was noticed here. Two more (`xo-jit/utest/MachPipeline.test.cpp`, committed,
+and `xo-kalmanfilter/utest/KalmanFilter.test.cpp`) were found and removed
+afterwards, along with a pre-existing duplicate `tag_ostream.hpp` in
+`xo-jit/src/jit/activation_record.cpp` dating from `74ea52af`. A guard now
+skips insertion when the include is already present. **A bulk edit that adds a
+line must ask whether the line is already there** — obvious in retrospect, and it
+survived four classes because until class E no file had both.
+
+## What this spec leaves behind
+
+- **`xo-deps --why` overstates the graph.** `subsystem-edges` records an edge for
+  any target, so a utest-only dependency is indistinguishable from a library one.
+  This produced one wrong reclassification (`issues/03`).
+- **`subsystem-list` is hand-maintained and nothing validates it.** A stale
+  ordering survives both `--sweep` and `nix-build` (`issues/04` carries the
+  validation loop).
+- **`xo_export_cmake_config()` must be called after a target's dependencies**,
+  and nothing enforces it (`issues/03`).

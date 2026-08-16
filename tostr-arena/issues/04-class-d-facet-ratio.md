@@ -1,6 +1,6 @@
 # 04 — class D: xo-facet and xo-ratio — convert, or make them permanent tostr0
 
-Status: open
+Status: fixed 2026-08-16
 Type: decision
 Progress: grep -rl '#include <xo/ppsink/tostr_xx\.hpp>' --include=*.hpp --include=*.cpp xo-facet/ xo-ratio/ 2>/dev/null | grep -v '/\.build/' | wc -l
 
@@ -100,3 +100,78 @@ whole spec that will look alarming and be correct.
   `-A xo-ratio` green, `subsystem-edges` re-captured
 - if not converted: both files move from `tostr_xx.hpp` to `tostr0.hpp`, so
   `Progress:` still returns 0 and the marker header is free to be deleted
+
+## DECIDED and fixed 2026-08-16 — split, not either/or
+
+This ticket framed xo-facet and xo-ratio as one question with one answer. They
+got different answers, for reasons the ticket did not anticipate.
+
+### xo-facet: converted
+
+RC: *"xo-facet already uses xo-arena, I think getting tostr from xo-indentlog2 is
+better in this case."* Verified before acting —
+`xo-facet/CMakeLists.txt:28` is `xo_headeronly_dependency(${SELF_LIB} xo_arena)`,
+and `xo-deps --why=xo-indentlog2:xo-facet` is rc=1, so no cycle.
+
+`FacetRegistry.hpp` converted (3 calls), declared with
+**`xo_headeronly_dependency`** — `xo_facet` is an INTERFACE target, so `PUBLIC`
+linkage is a hard error; same reason `xo_arena` is declared that way beside it.
+`pkgs/xo-facet.nix` gained the input.
+
+This ticket predicted the build **order** would change and "look alarming and be
+correct". It did, but not where expected — see below.
+
+### xo-ratio: library stays off; its utest converted
+
+The recommendation to add xo-ratio to the reserved list was made, then withdrawn
+within the hour. RC: *"since that's already using xo-reflect, we can comfortably
+have it use xo-indentlog2."*
+
+The distinction that resolves it: **xo-ratio's library names no `tostr` at
+all** — only `utest/ratio.test.cpp` does. So the utest declares
+`xo_dependency(${SELF_EXE} xo_indentlog2)` and `pkgs/xo-ratio.nix` lists it
+among `# test-only xo dependencies`, while `xo_ratio` itself gains nothing.
+Same shape as xo-unit. The reserved list is therefore **unchanged** —
+xo-ratio does not appear in it, because nothing in xo-ratio uses `tostr0` any
+more.
+
+`xo-refcnt`, which this ticket flagged as listed-but-not-conforming, had already
+been resolved independently: `Refcounted.hpp:6` includes `tostr0.hpp`.
+
+### The reordering was in subsystem-list, not subsystem-edges
+
+Converting xo-facet added `+xo-indentlog2 xo-facet` to the captured graph — and
+build order **did not move**. Order does not come from `subsystem-edges`; it
+comes from `xo-cmake/etc/xo/subsystem-list`, hand-maintained and described at
+`xo-build.in:564` as "itself a valid topological order". It had silently gone
+stale:
+
+```
+was:  ... xo-arena, xo-facet, xo-printable2, xo-testutil, xo-indentlog2 ...
+now:  ... xo-arena, xo-testutil, xo-indentlog2, xo-facet, xo-printable2 ...
+```
+
+Derived from the constraints rather than guessed —
+`xo-testutil -> xo-indentlog2 -> xo-facet -> xo-printable2`, each checked with
+`xo-deps --why` — then the whole list validated against the whole edge file:
+
+```bash
+python3 - <<'EOF'
+order = {}
+for i, l in enumerate(open("xo-cmake/etc/xo/subsystem-list")):
+    l = l.strip()
+    if l and not l.startswith("#"): order[l] = i
+for line in open("xo-cmake/etc/xo/subsystem-edges"):
+    p = line.split()
+    if len(p) == 2 and p[0] in order and p[1] in order and order[p[0]] > order[p[1]]:
+        print("VIOLATION:", p[1], "depends on", p[0])
+EOF
+# 0 violations
+```
+
+**The sweep was green before this fix and would have stayed green.** Per-subsystem
+builds resolve dependencies from the installed prefix, where indentlog2 was
+already present; only a clean tree or fresh CI would have configured xo-facet
+before indentlog2 existed. Neither `--sweep` nor `nix-build` catches a stale
+`subsystem-list` — the validation loop above is the only thing that does, and it
+costs nothing. Worth running whenever an edge is added.
