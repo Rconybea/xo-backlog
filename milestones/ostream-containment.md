@@ -134,6 +134,94 @@ Naming is not uniform: ten headers spell it `_iostream.hpp` rather than
 doing the sweep — the query currently treats both as conforming, which is a
 choice, not a measurement.
 
+## Where it stands (re-measured 2026-08-17)
+
+Three counters now carry this milestone, each on its own ticket so each has its
+own progress bar. The commands live in the tickets (`CONVENTIONS.md` rule 5);
+the dated numbers live here, because a milestone file is where measurements are
+allowed to be written down and go stale visibly.
+
+| | ticket | 2026-08-17 | target |
+|---|---|---|---|
+| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 0 |
+| **B** production `.cpp` including a `*_ostream.hpp` | `xo-ppsink/issues/14` | 90 files | 0 |
+| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 files / 535 lines | 0 |
+
+C is the invariant; A and B are its tractable decompositions. A was 5 on
+2026-08-16 and both hazardous entries have since been retired (`e2b8978c`,
+`d19d17c3`).
+
+### The `display`-shaped counter misses the largest population
+
+RC undertook on 2026-08-16 that `display(std::ostream&)` reaching zero is a
+necessary victory condition. It is necessary and it is **not** the measure of
+this milestone, because it is not the only spelling:
+
+```bash
+grep -rhoE '[a-z_]+ *\( *std::ostream' --include=*.hpp --include=*.cpp xo-*/ \
+  | grep -v '/\.build/' | sed 's/ *( *std::ostream//' | sort | uniq -c | sort -rn
+#   display 101, print 72, welcome 5, report 5, dump 2, + a tail
+```
+
+**xo-reader and xo-reader2 declare zero `display()`** — every printer in both is
+`print(std::ostream&)` — and they are the two heaviest subsystems in C (81 and
+59 mentions). A `display`-only sweep finishes with them untouched.
+
+So this milestone's criterion is *any* member taking `std::ostream&`, which is
+what counter C measures without having to enumerate method names at all. The
+narrower promise still stands as a sub-goal; it just is not the finish line.
+
+Recorded rather than silently corrected, per rule 6: the `display` reading was
+plausible because it is the dominant spelling, it is what every ticket in
+`ppsink-migration` converted, and grepping it returns a hundred real hits across
+seventeen subsystems. Nothing in that result hints at another seventy-two under
+a different name. The falsifying command was *"grep the printer method in a
+subsystem you believe is unconverted"* — xo-reader, one line, not run.
+
+### Order of attack: per subsystem, in build order, low to high
+
+The unit of work is a subsystem's printer surface, not a counter — all three
+counters plus the printer count move together on one pass. Low-to-high for the
+same reason `tostr-arena` sequenced that way: a high subsystem's `pretty_struct`
+nests low types, and a low type without a Prettifier renders flat (or, since the
+sidecars were retired, fails to compile). High-first means redoing the nesting.
+
+```bash
+xo-build --list          # the order
+```
+
+Ten subsystems carry the bulk. By build position: xo-reflect (17), xo-reader2
+(29), xo-alloc (36), xo-ordinaltree (38), xo-expression (39), xo-tokenizer (41),
+xo-reader (42), xo-printjson (48), xo-reactor (50), xo-kalmanfilter (61).
+
+Per-subsystem recipe, since it repeats ten times:
+
+1. pin the current rendering in a test — measure, do not predict layout
+   (`.xo-backlog/tostr-arena/spec.md` phase-C discipline; two incidents on this
+   migration came from predicting)
+2. printer -> `pretty(PpSink&)`, `Prettifier<>` beside the type (`issues/13`)
+3. drop the `*_ostream.hpp` includes that become unnecessary (`issues/14`)
+4. `xo-build -q --configure --with-utests --with-examples --build --install <sub>`
+5. `xo-build --sweep` — `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
+
+### Two decisions this milestone owes before the sweep can reach zero
+
+**1. The `_iostream.hpp` spelling.** Ten headers use it; the query treats both as
+conforming. Flagged below since 2026-08-10 and still open.
+
+**2. The carve-outs, now that 100% is the bar.** Earlier tickets ruled families
+out of scope on defensible grounds, and a counter cannot reach zero while they
+stand. Either they are in scope, or they become written exclusions in the
+relevant `Progress:` line:
+
+- `GcStatistics` / `ObjectStatistics` (12 decls) — `xo-alloc/issues/01` excluded
+  them as non-virtual and outside the `Object` hierarchy. The sharpest of the
+  four, because the exclusion had a real argument behind it.
+- xo-expression2 / xo-object2 (2) — v2/facet cluster
+- xo-symboltable (2) — dormant, never compiles
+- xo-jit `MachPipeline.{new,orig}.cpp` (2) — never compile; deletion, not
+  conversion (`.xo-backlog/xo-jit/issues/02`)
+
 ## Relationship to `ppsink-migration`
 
 **Downstream of it, not part of it.** That milestone's "done when" is *no
@@ -150,6 +238,12 @@ Do not fold this into `ppsink-migration`. That one is nearly done (`xo-sdlc
 - every `operator<<` for an xo type is declared in a `*_ostream.hpp` header
 - no non-test xo header includes one (excepting xo-ppsink's own machinery)
 - the sweep count above returns 0
+- **counters A, B and C all return 0** (`xo-ppsink/issues/13`, `14`, `15`).
+  C is the one that decides this milestone: it is indifferent to how a mention
+  arrived, so it cannot be satisfied by converting only the printer spellings
+  someone thought to grep for
+- **no member taking `std::ostream &` remains in production code** — `display`
+  AND `print` AND the tail, not `display` alone
 - the naming variant (`_iostream` vs `_ostream`) is resolved one way or the other
 - **`.xo-backlog/xo-ppsink/issues/10-verify-inserters-unused.md` is closed.**
   Containment says where the inserters are; that ticket says whether anything
