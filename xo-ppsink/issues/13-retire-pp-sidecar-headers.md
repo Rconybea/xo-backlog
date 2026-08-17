@@ -94,3 +94,78 @@ xo-deps --why=<sub>:xo-ppsink
   `.xo-backlog/tostr-arena/spec.md`; this refactor changes no output
 - `xo-build --sweep` reads
   `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
+
+## Progress 2026-08-17 — two retired, one is a real decision
+
+`span_pp.hpp` and `Refcounted_pp.hpp` are gone; their Prettifiers now sit in
+`span.hpp` and `Refcounted.hpp`. Build clean, `xo-build --sweep` at
+`62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`.
+
+Neither changed rendered output, for different reasons worth distinguishing:
+
+- **`Refcounted_pp.hpp`** — since `.xo-backlog/xo-refcnt/issues/02` a TU that
+  renders an `rp<T>` without it *fails to compile*, so every such site already
+  included it. Relocation is provably output-neutral, and the ten includes it
+  had become redundant and were removed.
+- **`span_pp.hpp`** — a TU could previously get the flat render. See below.
+
+### CORRECTED: `span_pp.hpp` was a live hazard, and this ticket said it was not
+
+The first version of this ticket listed span under *"no competing path found, so
+these are a straight relocation"*. Wrong. `span_ppdetail.hpp:28-30` declares
+
+```cpp
+        inline std::ostream &
+        operator<<(std::ostream & os,
+                   const span<CharT> & x) {
+```
+
+so a TU including `span_ppdetail.hpp` but not the sidecar took pretty()'s
+operator<< branch while a TU including the sidecar took the Prettifier branch —
+two bodies for `pretty<span<CharT>>`, decided by the linker.
+
+The detection grep required `std::ostream` and `span<` **on one line**. xo's
+dominant style splits the signature across two, so it matched nothing.
+
+**This is the same failure `.xo-backlog/milestones/ostream-containment.md`
+already records**, where the milestone's own first query undercounted by 6x for
+exactly this reason and its correction says: *"match the parameter
+(`operator<<(std::ostream`) rather than the return type, since the parameter
+cannot be split from the function name."* The advice was written down, in the
+milestone this ticket belongs to, and was not followed — the grep here anchored
+on the **argument type** instead, which splits just as easily. Anchor on
+`operator<< *( *std::ostream` and nothing else.
+
+### `ratio_pp.hpp` stays, pending RC
+
+It is the last one, and unlike the other three it costs something real.
+`xo-ratio`'s library declares only `xo_reflectutil` and `xo_flatstring`
+(`xo-ratio/CMakeLists.txt:34-35`); `xo_ppsink` appears **only** in
+`xo-ratio/utest/CMakeLists.txt:23`. So moving `Prettifier<ratio<Int>>` into
+`ratio.hpp` puts xo-ppsink on the xo-ratio library and thence on its consumers:
+
+```bash
+xo-deps --users-of=xo-ratio --format=names -q     # 20 subsystems
+```
+
+`ratio_pp.hpp`'s own header comment argues against precisely this, and it is not
+a stale argument.
+
+Note `xo-deps --why=xo-ratio:xo-ppsink` returns **rc=0**, which reads as "the
+edge already exists, so relocation is free". It is the utest edge —
+`subsystem-edges` records an edge for any target — the overstatement recorded in
+`.xo-backlog/tostr-arena/issues/03`. Read the CMakeLists, not the query.
+
+The mitigating fact: `ratio_pp.hpp` and `ratio_iostream.hpp` are documented as
+byte-identical *on purpose*, for this exact reason. That makes the divergence
+benign today. It is still an ODR violation, and it stays benign only while
+someone keeps checking. Three ways out, all RC's call:
+
+1. relocate and accept the edge — 20 consumers gain a header-only ppsink dep
+2. delete `ratio_iostream.hpp`'s inserter, leaving no competing path — then the
+   sidecar is safe by the same argument that makes `Refcounted_pp.hpp` safe
+3. leave it, and write the exemption into this ticket's `Progress:` so the
+   counter can still reach 0
+
+Option 2 is the one that fits the milestone, since containment wants that
+inserter contained anyway.
