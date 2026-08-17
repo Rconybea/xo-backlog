@@ -1,6 +1,6 @@
 # 02 — move rp<T> / Borrow<T> inserters to Refcounted_ostream.hpp
 
-Status: open
+Status: fixed 2026-08-16
 Type: refactor
 Milestone: ostream-containment
 Progress: grep -c 'operator<<(std::ostream' xo-refcnt/include/xo/refcnt/Refcounted.hpp
@@ -187,3 +187,87 @@ is the cheap version.
   `<xo/ppsink/tostr0.hpp>` so costs nothing new, and which would make the
   structured render the default rather than an opt-in that 25 of 27 includers
   forgot. That reverses this ticket's premise and should be argued, not assumed
+
+## RESOLVED 2026-08-16 — `explicit operator bool`, and the triage it enumerated
+
+RC's suggestion, and it is a better answer than the "put Prettifier in
+Refcounted.hpp" reversal floated above. Making both conversions explicit
+
+```cpp
+/* xo-refcnt/include/xo/refcnt/Refcounted.hpp:134, :299 */
+explicit operator bool() const { return ptr_ != nullptr; }
+```
+
+restores the property the ticket wanted: a site with neither bridge header is a
+compile error, because the `bool` escape hatch is what made it silent.
+
+### Measured blast radius: one test line
+
+`cmake --build .build -j -- -k` with the change, before any triage:
+
+| category | count | what |
+|---|---|---|
+| intended catch | 11 TUs, 8 pointee types | all at `pretty_ostream.hpp:70` |
+| collateral | **1** | `xo-refcnt/utest/intrusive_ptr.test.cpp:79` |
+
+The collateral was `REQUIRE((bool)p1_brw == false)` — the explicit cast is not
+enough, because catch2's decomposer captures the operand before the comparison
+and then wants `Borrow<T> == bool`. Rewritten as `REQUIRE(!p1_brw)`.
+
+**Nothing else in 62 subsystems relied on the implicit conversion.** That is the
+number that makes this cheap, and it was not predictable in advance — `if (p)`,
+`!p`, `p && q` and ternary conditions are all *contextual* conversions, which
+`explicit` still permits. Only the non-contextual uses break, and the tree had
+one.
+
+### The 8 types, now compiler-enumerated rather than probe-inventoried
+
+`rp<>`: `KalmanFilterInput`, `KalmanFilterState`, `KalmanFilterStateExt`,
+`AbstractSink`, `ReactorSource`, `TypeBlueprint`, `Webserver`.
+`bp<>`: `TypeBlueprint`.
+
+That is issue 12's list reproduced from a build rather than from a
+`[[deprecated]]` probe — `Expression` and `Variable` do not appear because
+xo-expression's `pretty_expression.hpp` already includes `Refcounted_pp.hpp`,
+which is the correct outcome, not a miss.
+
+Every one was triaged to **`Refcounted_pp.hpp`** (structured), none to the
+ostream bridge — as predicted, since every pointee named is struct-shaped:
+
+```
+xo-expression/src/expression/typeinf/type_unifier.cpp
+xo-kalmanfilter/src/kalmanfilter/{KalmanFilter,KalmanFilterSpec,KalmanFilterStep}.cpp
+xo-simulator/src/simulator/SourceTimestamp.cpp
+xo-websock/src/websock/Webserver.cpp
+xo-reactor/include/xo/reactor/{Sink,PolyAdapterSink}.hpp    <- public headers
+```
+
+So `Refcounted_ostream.hpp` currently has **zero includers**, which is the right
+result for it: it exists as the paved road for a deliberate flat render, and
+nothing in the tree wants one yet. Keep the utest, which is the only thing
+compiling it.
+
+### One gap this uncovered, belonging to `issues/01`
+
+`xo-websock` did not fix with `Refcounted_pp.hpp` alone. Its forwarder does
+`sink.pp(*p)`, and `Webserver` — converted by `issues/01` — has
+`pretty(PpSink&)` but no `Prettifier`. A virtual member function is not what
+`pretty.hpp`'s dispatch looks for, so it fell through to `operator<<`, which
+`issues/01` had deleted. The error surfaces at `pretty_ostream.hpp:70` naming
+`const xo::web::Webserver`, well away from the cause.
+
+Fixed by a new `xo-refcnt/include/xo/refcnt/Displayable_pp.hpp`:
+
+```cpp
+template <typename T> requires std::derived_from<T, xo::ref::Displayable>
+struct Prettifier<T> { static void print(PpSink & sink, const T & x) { x.pretty(sink); } };
+```
+
+Constrained rather than one specialization per class, so converting a class to
+`Displayable` is sufficient — it does not also have to be registered.
+
+**Generalize this.** Converting a hierarchy to `pretty(PpSink&)` is only half
+the job; without a Prettifier the override is unreachable from `xo::pp::pretty`.
+`xo-alloc/issues/01` got this right for `gp<Object>` and said so; this ticket is
+the second instance, so it is a pattern rather than an oversight — worth stating
+as a rule in whatever `ostream-containment` uses for guidance.
