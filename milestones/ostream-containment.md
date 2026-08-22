@@ -134,7 +134,22 @@ Naming is not uniform: ten headers spell it `_iostream.hpp` rather than
 doing the sweep — the query currently treats both as conforming, which is a
 choice, not a measurement.
 
-## Where it stands (re-measured 2026-08-17)
+## Where it stands (re-measured 2026-08-22)
+
+| | ticket | 2026-08-17 | 2026-08-22 | target |
+|---|---|---|---|---|
+| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 0 |
+| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 0 |
+| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 0 |
+
+**B and C are not comparable across that date.** Both filters were corrected on
+2026-08-22 for the `_iostream.hpp` spelling (decision 1 below), and the
+correction moved them in opposite directions: C fell 10 by filter (ten
+conforming headers had been counted as violations), B rose 13 by filter
+(thirteen production `.cpp` files including a bridge had been invisible) while
+falling 16 by real work. No file in the tree changed on account of the filter.
+
+## Where it stood (re-measured 2026-08-17)
 
 Three counters now carry this milestone, each on its own ticket so each has its
 own progress bar. The commands live in the tickets (`CONVENTIONS.md` rule 5);
@@ -206,8 +221,13 @@ Per-subsystem recipe, since it repeats ten times:
 
 ### Two decisions this milestone owes before the sweep can reach zero
 
-**1. The `_iostream.hpp` spelling.** Ten headers use it; the query treats both as
-conforming. Flagged below since 2026-08-10 and still open.
+**1. The `_iostream.hpp` spelling. SETTLED 2026-08-22 — both spellings conform.**
+RC's decision: the ten `_iostream.hpp` headers stay as they are; no rename. The
+milestone's sweep query already treated both as conforming, but counter C's
+`Progress:` filter (`issues/15`) matched only `_ostream\.hpp`, so the two
+queries disagreed about the same ten files for twelve days and C was the
+stricter by accident, not by decision. Both `Progress:` lines now use
+`_(i)?ostream\.hpp`.
 
 **2. The carve-outs, now that 100% is the bar.** Earlier tickets ruled families
 out of scope on defensible grounds, and a counter cannot reach zero while they
