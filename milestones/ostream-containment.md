@@ -219,7 +219,7 @@ Per-subsystem recipe, since it repeats ten times:
 4. `xo-build -q --configure --with-utests --with-examples --build --install <sub>`
 5. `xo-build --sweep` — `62 attempted: 34 ok, 28 with no tests, 0 failed, 0 skipped`
 
-### Two decisions this milestone owes before the sweep can reach zero
+### Three decisions this milestone owes before the sweep can reach zero
 
 **1. The `_iostream.hpp` spelling. SETTLED 2026-08-22 — both spellings conform.**
 RC's decision: the ten `_iostream.hpp` headers stay as they are; no rename. The
@@ -241,6 +241,47 @@ relevant `Progress:` line:
 - xo-symboltable (2) — dormant, never compiles
 - xo-jit `MachPipeline.{new,orig}.cpp` (2) — never compile; deletion, not
   conversion (`.xo-backlog/xo-jit/issues/02`)
+
+**3. What a carve-out has to argue. SETTLED 2026-08-22 — ostream in the API,
+not ostream in the file.** RC's rule, from clearing xo-arena: a stream mention
+disqualifies a file only when a *caller* can see it. Two consequences.
+
+- A `std::cerr <<` inside a function body whose signature names no stream is an
+  implementation detail. `xo-arena/src/arena/backtrace.cpp:93` is the model
+  case — one `cerr` on the non-Linux branch of a `void`-returning function.
+  Tidy it or don't; it is not this milestone.
+- A file whose *purpose* is the ostream bridge is exempt by construction.
+  `xo-ppsink/FlatSink.hpp`, `xo-ppsink/pretty.hpp`,
+  `xo-indentlog2/PrettySink.hpp`, `xo-arena/arena_streambuf.hpp`: the ostream
+  dependence is in the name. Requiring these to be ostream-free is requiring
+  them not to exist.
+
+This retires the "argued rather than assumed" debt on the `grep -v
+'^xo-ppsink/'` exemption above, and generalises it: the exclusion is not "this
+subsystem is special", it is "this file's job is the boundary". Note it does
+NOT settle decision 2 — those four families all put `std::ostream&` in a
+signature, so they are excluded on other grounds (dormant, never-compiles,
+outside a hierarchy) and still owe their own argument.
+
+**Known limit, stated so it is not rediscovered.** Counters B and C grep
+`std::ostream` and a bridge-header include. Neither sees `std::cerr`,
+`std::cout` or `std::streambuf`. Under this criterion that is correct where
+those sit in a `.cpp` body — and wrong where one reaches an API, e.g. a
+constructor taking `std::streambuf*`. The counters reaching 0 is therefore
+necessary, not sufficient; the per-subsystem check is the wider grep:
+
+```bash
+grep -rn 'std::ostream\|std::cerr\|std::cout\|std::clog\|std::streambuf' \
+     --include=*.hpp --include=*.cpp <sub>/include <sub>/src
+```
+
+**First subsystem cleared under this rule: xo-arena (2026-08-22).** Zero rows in
+B and C. `AllocError` and `cmpresult` gained `pretty(PpSink&)` + `Prettifier<>`
+and `xo/arena/print.hpp` was deleted outright; the surviving `cerr` in
+`backtrace.cpp` and the whole of `arena_streambuf.{hpp,cpp}` are exempt under
+the rule above — the latter additionally having zero users tree-wide
+(`grep -rn arena_streambuf` finds only its own `CMakeLists.txt` line), so it is
+a deletion candidate for unrelated reasons.
 
 ## Relationship to `ppsink-migration`
 
