@@ -3,7 +3,7 @@
 Status: open
 Type: refactor
 Milestone: ostream-containment
-Progress: grep -rl 'std::ostream' --include=*.hpp --include=*.cpp xo-*/ 2>/dev/null | grep -v '/\.build/' | grep -v '/utest/' | grep -v '_ostream\.hpp' | wc -l
+Progress: grep -rl 'std::ostream' --include=*.hpp --include=*.cpp xo-*/ 2>/dev/null | grep -v '/\.build/' | grep -v '/utest/' | grep -vE '_(i)?ostream\.hpp' | wc -l
 
 RC, 2026-08-16: *"eventually we can also [...] grep for `std::ostream` itself."*
 
@@ -15,6 +15,30 @@ Those two are the tractable decompositions; this one is the invariant.
 
 Counted in **files**, not lines: the file is the unit of work, and a file with
 eleven mentions converts once.
+
+## Both bridge spellings count as conforming — decided 2026-08-22
+
+RC settled the naming question the milestone had carried open since 2026-08-10:
+`_iostream.hpp` and `_ostream.hpp` are **both** conforming spellings, and the
+ten headers using the former are not work.
+
+The `Progress:` filter above said `_ostream\.hpp`, which does not match
+`_iostream.hpp` — so all ten were counted as violations:
+
+```
+xo-flatstring  int128_iostream.hpp  flatstring_iostream.hpp
+xo-ratio       ratio_iostream.hpp
+xo-timeutil    timeutil_iostream.hpp
+xo-unit        dim_ natural_unit_ quantity_ xquantity_ scaled_unit_ bpu_iostream.hpp
+```
+
+The milestone's own sweep query already excluded `_(i)?ostream\.hpp$`, so the
+two queries disagreed about the same ten files and this counter was the stricter
+of the two by accident, not by decision. Filter corrected to match; the count
+drops by 10 without any file changing.
+
+**This lowered C and raised B.** The same spelling gap in `issues/14` ran the
+other way — see the matching note there. A filter fix is not a direction.
 
 ## Two exclusions, both deliberate
 

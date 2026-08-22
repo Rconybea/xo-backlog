@@ -3,12 +3,27 @@
 Status: open
 Type: refactor
 Milestone: ostream-containment
-Progress: grep -rl '_ostream\.hpp' --include=*.cpp xo-*/ 2>/dev/null | grep -v '/\.build/' | grep -v utest | wc -l
+Progress: grep -rlE '_(i)?ostream\.hpp' --include=*.cpp xo-*/ 2>/dev/null | grep -v '/\.build/' | grep -v utest | wc -l
 
 RC, 2026-08-16: *"we can have `_ostream.hpp` headers forever, and many unit
 tests will need to include them. But something like `rg -l _ostream.hpp | grep -v
 utest | grep -v '\.hpp'` should go to zero. That's not sufficient, but it's
 better, and better is good."*
+
+## Both bridge spellings count — corrected 2026-08-22
+
+The `Progress:` filter said `_ostream\.hpp`, which does not match
+`_iostream.hpp`, so thirteen production `.cpp` files including a bridge under
+the other spelling were invisible to this counter. Corrected to
+`_(i)?ostream\.hpp` as part of RC's 2026-08-22 decision that both spellings are
+conforming header names (see `issues/15`).
+
+**This raised the count, 74 -> 87.** The identical fix in `issues/15` *lowered*
+C by 10, because there the `_iostream.hpp` files are the headers themselves
+(conforming, wrongly counted as violations) whereas here they are files
+*including* a bridge (real consumers, wrongly missed). Same one-character class
+of bug, opposite signs — worth stating, because a counter that jumps looks like
+work landed or regressed when nothing moved.
 
 The bridges are the paved road **out** of xo — for tests, REPLs, and newcomers
 holding a `std::ostream`. Production xo code renders into the `PpSink` it
