@@ -37,6 +37,12 @@ or in the probe loop. That distinction is the whole point of the second column;
 without it the obvious (wrong) conclusion from the first column alone is that
 `find()` is O(N).
 
+These figures are from a standalone **-O2** build. The in-tree build is
+`CMAKE_BUILD_TYPE=debug` (`-g`, no `-O`), where the same program reports 8.4x /
+31.9x / 116x / 448x — the shape is identical and the magnitude is compressed,
+because the unoptimised mixed baseline is ~16 ns rather than ~12 ns. **Compare
+shapes, not absolute numbers**, unless the build type is stated.
+
 The mixing used, for reproduction:
 
 ```cpp
@@ -50,16 +56,15 @@ struct MixHash {
 };
 ```
 
+This is now a checked-in program, `xo-arena/bench/hash_mixing.cpp`:
+
 ```bash
-g++ -std=c++23 -O2 -fno-strict-aliasing -I xo-arena/include -I ~/local/include \
-    -o /tmp/hash-cmp /tmp/hash-cmp.cpp \
-    -L ~/local/lib -lxo_arena -lxo_ppsink -lxo_indentlog2 -Wl,-rpath,$HOME/local/lib
-/tmp/hash-cmp
+xo-build -q --configure --build --with-examples xo-arena
+./xo-arena/.build/bench/arena_bench_hash_mixing
 ```
 
-`hash-cmp.cpp` instantiates `DArenaHashMap<int,int>` and
-`DArenaHashMap<int,int,MixHash>`, fills each with keys `0..n-1`, and times
-`find()` over all keys. Public API only.
+See `xo-arena/bench/README.md` for the standalone -O2 invocation that produced
+the table above.
 
 ## Sequential integer keys are the normal case, not a corner
 

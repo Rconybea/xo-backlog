@@ -65,8 +65,10 @@ mixed hash: live 1000 churn 400000 | cap after fill 2048 -> final 2048 (growths 
             find churned 14.99 ns   fresh 11.83 ns   ratio 1.268x
 ```
 
-So: **a bounded ~27–33% lookup penalty that does not compound**, not a
-correctness or capacity hazard.
+So: **a bounded lookup penalty that does not compound**, not a correctness or
+capacity hazard. The figures above are a standalone -O2 build; the in-tree
+debug build reports 1.22x / 1.14x for the same runs. Compare shapes, not
+absolute numbers, unless the build type is stated.
 
 **Measure this with a mixing hash, not the default.** With `std::hash<int>` and
 sequential keys the same comparison reads 1.07x — but only because both tables
@@ -104,15 +106,18 @@ because abseil does it — abseil's growth budget also feeds `reserve()` and
 
 ## Reproduction
 
+Both programs are checked in as `xo-arena/bench/tombstone_churn.cpp` (and
+`hash_mixing.cpp` for issue 03):
+
 ```bash
-g++ -std=c++23 -O2 -fno-strict-aliasing -I xo-arena/include -I ~/local/include \
-    -o /tmp/tomb-sat /tmp/tomb-sat.cpp \
-    -L ~/local/lib -lxo_arena -lxo_ppsink -lxo_indentlog2 -Wl,-rpath,$HOME/local/lib
+xo-build -q --configure --build --with-examples xo-arena
+./xo-arena/.build/bench/arena_bench_tombstone_churn
+./xo-arena/.build/bench/arena_bench_tombstone_churn --std-hash   # reproduces the trap
 ```
 
-`tomb-sat.cpp`: fill to `live_target` keys, then repeat { erase a random live
-key; insert a brand-new key }, printing `size()`/`capacity()` whenever capacity
-changes. `tomb-mixed.cpp` additionally builds a second never-churned table with
-the same key set and times `find()` over both, interleaved. Both use only the
-public API (`size()`, `capacity()`, `load_factor()`, `find()`, `insert()`,
-`erase()`), so neither needs friend access.
+`tombstone_churn` fills to a target live-set size, then repeats { erase a random
+live key; insert a brand-new key }, reporting any capacity change, and finally
+times `find()` over a churned and a never-churned table holding the same keys.
+Public API only (`size()`, `capacity()`, `load_factor()`, `find()`, `insert()`,
+`erase()`), so no friend access to `HashMapStore` is needed. See
+`xo-arena/bench/README.md`.
