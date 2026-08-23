@@ -136,11 +136,14 @@ choice, not a measurement.
 
 ## Where it stands (re-measured 2026-08-22)
 
-| | ticket | 2026-08-17 | 08-22 am | 08-22 pm | 08-23 | target |
-|---|---|---|---|---|---|---|
-| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 1 | 1 | 0 |
-| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 73 | 59 | 0 |
-| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 182 | 150 | 0 |
+| | ticket | 2026-08-17 | 08-22 am | 08-22 pm | 08-23 am | 08-23 pm | target |
+|---|---|---|---|---|---|---|---|
+| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 1 | 1 | 1 | 0 |
+| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 73 | 59 | **48** | 0 |
+| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 182 | 150 | **105** | 0 |
+
+Of the 105, **22 are counted-but-not-work** (xo-indentlog 20, xo-ppsink 2) --
+see decisions 3 and 5. The effective remainder is 83.
 
 The `08-22 pm` column is after three subsystems were cleared in one session --
 xo-arena, xo-reflect (17) and xo-expression (39), the latter two being the first
@@ -461,6 +464,87 @@ catches.
   the standing `example/` question (see below), not on any conversion.
 - 3 `.cpp` bridge includes (`apply_xs`, `envframestack`,
   `expect_formal_arglist_xs`).
+
+**Cleared 2026-08-23: xo-process (59).** Small and clean: `UpxEvent` converted,
+`RealizationSource`'s two overriders handled by the reactor cascade below.
+
+**Converted 2026-08-23, awaiting deletion: xo-reader2 (29), xo-kalmanfilter (61),
+xo-reactor (50), xo-websock (52), xo-simulator (57).**
+
+### The AbstractEventProcessor cascade -- the one change that could not be staged
+
+Every previous subsystem converted independently. This one could not: xo-reactor
+declares **two** pure-virtual printer roots, and changing either breaks every
+implementor in every dependent subsystem at once.
+
+```bash
+grep -rn 'display *( *std::ostream[^)]*) *const *= *0' --include=*.hpp xo-*/ | grep -v '/\.build/'
+#   xo-reactor/../AbstractEventProcessor.hpp:36
+#   xo-reactor/../Reactor.hpp:66            <- Reactor : public ref::Refcount, NOT an AEP
+```
+
+Nine implementors across five subsystems, converted in a single pass because the
+tree is red from the moment the pure virtual changes until the last one lands:
+
+| root | implementors |
+|---|---|
+| `AbstractEventProcessor` | `EventStoreImpl`, `FifoQueue`, `PolyAdapterSink`, `SinkToFunction`, `SinkToConsole`, `TestSink`/`TestSink2` (utest), `WebsocketSinkImpl` (xo-websock), `RealizationSourceBase`/`RealizationSource` (xo-process), `KalmanFilterSvc` (xo-kalmanfilter) |
+| `Reactor` | `PollingReactor`, `Simulator` (xo-simulator) |
+
+**This is why doing the subsystem-local `pretty()` work FIRST was right** (RC's
+call): each leaf already had a `pretty()` to delegate to, so the cascade was a
+signature change rather than a signature change plus ten new printers.
+
+### Pattern: a polymorphic hierarchy wants a CONSTRAINED Prettifier
+
+Every earlier subsystem specialized `Prettifier<T>` on a concrete leaf type.
+That fails for a hierarchy, and the failure is structural rather than
+incidental: an `rp<T>` renders through `Prettifier<intrusive_ptr<T>>`, which
+needs `Prettifier<T>` for the **static** `T` -- and that `T` is routinely an
+intermediate abstract class (`ReactorSource`, `AbstractSink`, `Sink1<U>`), never
+the concrete sink. Exact specializations mean chasing each intermediate as it
+surfaces; the first attempt here died on `rp<ReactorSource>` immediately.
+
+```cpp
+template <typename T>
+    requires std::derived_from<T, xo::reactor::AbstractEventProcessor>
+struct Prettifier<T> { static void print(PpSink & sink, const T & x) { x.pretty(sink); } };
+```
+
+NOT a new invention -- `xo-refcnt/include/xo/refcnt/Displayable.hpp` has had this
+shape all along, with the comment that matters: *"Must live here to insure that
+it's consistently applied (else ODR violation!)"* -- i.e. the specialization
+belongs in the BASE's header, so every TU that knows a derived type has seen it.
+
+**Cost, now tracked:** the tree has three such specializations
+(`Displayable`, `AbstractEventProcessor`, `Reactor`), disjoint only because no
+class derives from two of those hierarchies. Overlap is an ambiguous partial
+specialization with an error message naming none of them. Unifying them under
+Displayable is blocked -- see
+`.xo-backlog/xo-reactor/issues/01-aep-inherit-displayable.md`, which records the
+`EventStoreImpl` two-Refcount-path obstacle and RC's expectation that the fix
+lands in a future xo-reactor2 rather than here.
+
+### `#ifdef OBSOLETE` makes the old implementation UNRUNNABLE
+
+Found while trying to give xo-kalmanfilter the comparison test that
+`ostream_baseline.test.cpp` gave xo-reflect -- old and new printers side by
+side, asserting their text agrees.
+
+**It cannot be done.** `OBSOLETE` is a tree-wide marker: defining it to expose a
+retired `display()` also un-guards unrelated code elsewhere (xo-reflect's
+`StructMember.hpp:85` `member_tp()` override), which then fails to compile. So
+a subsystem retired behind `#ifdef OBSOLETE` cannot be compared against its
+replacement, and comparing implementations is exactly what a migration wants.
+
+Consequence for the subsystems already converted this way: their rendering pins
+(`xo-kalmanfilter/utest/kalmanfilter_pretty.test.cpp`) record what `pretty()`
+produces TODAY, read off the build -- **nothing proves the conversion was
+text-preserving, because nothing can.** Read a failure as "the rendering
+changed", not "the rendering regressed".
+
+A per-subsystem marker (`XO_KALMANFILTER_OBSOLETE`) would have preserved the
+option. Worth considering for the subsystems still to come.
 
 **`example/` -- DEFERRED by decision, 2026-08-23 (RC).** Not "unsettled": the
 ordering is the answer. *Nothing that can reach across subsystems is finished,
