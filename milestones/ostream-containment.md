@@ -419,10 +419,27 @@ catches.
 - 3 `.cpp` bridge includes (`apply_xs`, `envframestack`,
   `expect_formal_arglist_xs`).
 
-**Open question this makes urgent: does `example/` count?** It was raised on
-2026-08-17 and never settled. It is now a visible share of both counters, and
-xo-reader cannot reach 0 either way without an answer. Decide it before the next
-subsystem, not after.
+**`example/` -- DEFERRED by decision, 2026-08-23 (RC).** Not "unsettled": the
+ordering is the answer. *Nothing that can reach across subsystems is finished,
+so nothing with a narrower blast radius gets attention yet.* An `example/`
+translation unit is a leaf -- no other subsystem includes it, so its `<ostream>`
+cannot propagate into anyone else's TUs, and propagation is the harm this
+milestone exists to stop (reason 2 in Why). Headers are the opposite extreme and
+go first; `src/*.cpp` next; `example/` last.
+
+Recorded because the reviewing pressure ran the other way: `example/` was
+flagged as urgent on the grounds that it is a visible share of both counters and
+blocks reaching 0. That is a property of the bookkeeping, not of the code. **A
+counter is a proxy for blast radius, and where the two disagree, blast radius
+wins** -- the same reasoning that makes `arena_streambuf` (zero users) and a
+`.cpp`-body `cerr` exempt under decision 3, and the same reason
+`xo-indentlog`'s 20 files are not real work. Do not let counter arithmetic
+reorder the queue.
+
+Consequence for reading the table above: **A, B and C cannot reach 0 until the
+`example/` tail is picked up at the end.** A subsystem showing a small nonzero
+count made up entirely of `example/` files is DONE for sequencing purposes.
+xo-reader is the first to be in that state (2 of its 4 C, 1 of its 4 B).
 
 ## Relationship to `ppsink-migration`
 
