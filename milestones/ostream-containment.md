@@ -249,6 +249,35 @@ relevant `Progress:` line:
 - xo-jit `MachPipeline.{new,orig}.cpp` (2) — never compile; deletion, not
   conversion (`.xo-backlog/xo-jit/issues/02`)
 
+**4. Protocol payload sinks are IN SCOPE. SETTLED 2026-08-23 — there is no
+branch where `std::ostream*` is the right type.** Proposed as a third exemption
+class alongside decision 3's two, on the grounds that
+`DynamicEndpoint::http_response(uri, std::ostream*)` and
+`Webserver::dynamic_http_response(..)` (xo-websock) emit an HTTP body to a
+socket rather than rendering an xo value for a reader, so a PpSink's
+line-breaking has nothing to decide. RC rejected it, and the reasoning
+generalises:
+
+- The payload is HTML or JSON, and **it is read by humans** -- in
+  DynamicEndpoint's case it appears verbatim in browser devtools. Line-breaking
+  that makes it readable there is wanted, so PpSink is not the wrong instrument
+  after all.
+- And where line-breaking genuinely does not apply, the answer is still not an
+  ostream: it is an arena-backed `std::streambuf *`.
+
+So both branches lead away from `std::ostream*`, which is why this is not an
+exemption but deferred work. Consistent with `xo-printjson/issues/01`, which
+already makes the same argument for the JSON serialiser: *"JSON has real nested
+structure, and indented/wrapped JSON is a thing people actually want."*
+
+**Affected, and PARKED (RC 2026-08-23) rather than exempted:** xo-websock
+`DynamicEndpoint.{hpp,cpp}` + `Webserver.cpp` (3 files), and by the same
+argument `xo-printjson`'s `print_json(TaggedPtr, std::ostream*)` -- whose
+overriders include `xo-kalmanfilter/src/kalmanfilter/EigenUtil.cpp`. Do not
+absorb these into a subsystem pass; they are an interface change spanning
+xo-printjson and its implementors, which is what `xo-printjson/issues/01`
+already tracks.
+
 **3. What a carve-out has to argue. SETTLED 2026-08-22 — ostream in the API,
 not ostream in the file.** RC's rule, from clearing xo-arena: a stream mention
 disqualifies a file only when a *caller* can see it. Two consequences.
