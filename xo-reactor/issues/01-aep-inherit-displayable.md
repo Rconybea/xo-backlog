@@ -57,22 +57,38 @@ That is also what its own comment asks for: *"Must live here to insure that it's
 consistently applied (else ODR violation!)"* — three overlapping definitions of
 the same idea is the situation that comment is trying to prevent.
 
-## Two complications, neither resolved here
+## `display_string()` is NOT a complication — corrected 2026-08-23
 
-1. **`display_string()` disagrees.** `Displayable.hpp:21` declares it
-   `= 0`; `AbstractEventProcessor.hpp:44` declares it non-pure and defines it
-   (`AbstractEventProcessor.cpp`) as `tostr(*this)`. Inheriting Displayable
-   makes the base's pure declaration visible, so either AEP's definition
-   satisfies it (fine) or every leaf must supply one (not fine). Check before
-   starting.
+This ticket first flagged a purity conflict: `Displayable.hpp:21` declares
+`display_string()` `= 0` while `AbstractEventProcessor.hpp:44` declares it
+non-pure and defines it as `tostr(*this)`.
 
-2. **Virtual vs non-virtual base.** `AbstractEventProcessor : virtual public
+**That is the intended arrangement, not a clash.** RC: Displayable *cannot*
+implement it, because `tostr()` lives in xo-indentlog2 and xo-refcnt does not
+depend on it — verified 2026-08-23:
+
+```bash
+xo-deps --deps-of=xo-refcnt --format=names
+#   xo-ppsink  xo-refcnt  xo-reflectutil  xo-timeutil       <- no xo-indentlog2
+grep -rn indentlog2 xo-refcnt/ --include=*.hpp --include=*.cpp | grep -v '/\.build/'
+#   Displayable.hpp:20: // implement display_string() in derived classes that also have xo-indentlog2
+```
+
+So the pure virtual states a contract that only subsystems carrying
+xo-indentlog2 can satisfy, and AEP's definition satisfies it. Nothing to
+reconcile. Recorded rather than deleted per rule 6: the conflict reading is
+plausible from the two declarations alone, and the refuting fact is a
+dependency edge, not something visible in either file.
+
+## One real complication
+
+**Virtual vs non-virtual base.** `AbstractEventProcessor : virtual public
    ref::Refcount` but `Displayable : public Refcount` (non-virtual). Swapping in
    Displayable changes the inheritance shape for every event processor, and
    several use multiple inheritance —
-   `KalmanFilterSvc : Sink1<..>, DirectSourcePtr<..>` is the sharpest case.
-   Whether Displayable needs `virtual public Refcount` is the real design
-   question in this ticket.
+`KalmanFilterSvc : Sink1<..>, DirectSourcePtr<..>` is the sharpest case.
+Whether Displayable needs `virtual public Refcount` is the real — and only —
+design question in this ticket.
 
 ## Done when
 
