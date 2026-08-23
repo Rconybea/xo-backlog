@@ -249,6 +249,20 @@ relevant `Progress:` line:
 - xo-jit `MachPipeline.{new,orig}.cpp` (2) — never compile; deletion, not
   conversion (`.xo-backlog/xo-jit/issues/02`)
 
+**5. xo-indentlog STAYS for now. RECORDED 2026-08-23 (RC).** It has zero
+dependents and could be deleted today, but its documentation has not been
+carried across to xo-indentlog2 -- 14 files / 372K against xo-indentlog2's 2
+files / 12K, including eight reference documents with no v2 counterpart. RC is
+keeping the subsystem until they are mined:
+`.xo-backlog/xo-indentlog2/issues/08-mine-indentlog-docs.md`.
+
+**Consequence for counter C:** its 20 files are permanent non-work while it
+stays -- 19% of the 105 remaining on 2026-08-23. Together with xo-ppsink's own
+2 machinery files (decision 3), **22 of 105 are counted-but-not-work**. C cannot
+reach 0 until both get exclusions in `issues/15`'s `Progress:` line, or until
+xo-indentlog is deleted. Do not read a stalled C as a stalled migration; re-read
+this note first.
+
 **4. Protocol payload sinks are IN SCOPE. SETTLED 2026-08-23 — there is no
 branch where `std::ostream*` is the right type.** Proposed as a third exemption
 class alongside decision 3's two, on the grounds that
