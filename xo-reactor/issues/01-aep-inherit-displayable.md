@@ -1,6 +1,6 @@
 # 01 — AbstractEventProcessor should inherit ref::Displayable, not ref::Refcount
 
-Status: open
+Status: open — DEFERRED, probably permanently (see disposition)
 Type: refactor
 Milestone: ostream-containment
 
@@ -80,17 +80,81 @@ reconcile. Recorded rather than deleted per rule 6: the conflict reading is
 plausible from the two declarations alone, and the refuting fact is a
 dependency edge, not something visible in either file.
 
-## One real complication
+## The real obstacle: EventStoreImpl reaches Refcount by two paths
 
-**Virtual vs non-virtual base.** `AbstractEventProcessor : virtual public
-   ref::Refcount` but `Displayable : public Refcount` (non-virtual). Swapping in
-   Displayable changes the inheritance shape for every event processor, and
-   several use multiple inheritance —
-`KalmanFilterSvc : Sink1<..>, DirectSourcePtr<..>` is the sharpest case.
-Whether Displayable needs `virtual public Refcount` is the real — and only —
-design question in this ticket.
+Measured 2026-08-23. `AbstractEventProcessor`'s `virtual public ref::Refcount`
+is **load-bearing**, and not for the reason it looks like:
 
-## Done when
+```bash
+grep -n 'class EventStoreImpl' -A3 xo-reactor/include/xo/reactor/EventStore.hpp
+#   class EventStoreImpl : public SinkEndpoint<Event>,
+#                          public AbstractEventStore,
+#                          ReducerBase<Event, EventTimeFn>
+grep -n 'class AbstractEventStore' xo-reactor/include/xo/reactor/EventStore.hpp
+#   class AbstractEventStore : virtual public ref::Refcount
+```
+
+So:
+
+```
+EventStoreImpl -> SinkEndpoint -> .. -> AbstractSink
+                                     -> virtual AbstractEventProcessor
+                                     -> virtual public ref::Refcount    (path 1)
+               -> AbstractEventStore -> virtual public ref::Refcount    (path 2)
+```
+
+Path 2 does **not** go through AbstractEventProcessor. So AEP's virtual
+inheritance of Refcount is not made redundant by
+`AbstractSink : public virtual AbstractEventProcessor` — both paths must be
+virtual for EventStoreImpl to have ONE Refcount subobject.
+
+`Displayable : public Refcount` is non-virtual. Inheriting it non-virtually from
+AEP therefore gives EventStoreImpl a non-virtual Refcount on path 1 and a
+virtual one on path 2: **two subobjects, two reference counts on one object**,
+and ambiguous conversions to `Refcount*`. For an intrusively refcounted type
+that is a lifetime bug, not merely a compile error.
+
+Three ways out, none free:
+
+1. **`Displayable : virtual public Refcount`** — smallest edit, preserves the
+   lattice. Costs every Displayable a virtual base; xo-refcnt is build position
+   15, so the cost is felt widely.
+2. **`AbstractEventProcessor : virtual public ref::Displayable`** — keeps the
+   virtualness where it already is, at the cost of more virtual inheritance.
+3. **Untangle EventStoreImpl** so `AbstractEventStore` does not independently
+   inherit Refcount. Then path 2 disappears and non-virtual works. Much larger.
+
+## Disposition (RC, 2026-08-23): deferred, expect to carry to xo-reactor2
+
+RC's read is that xo-reactor's multiple inheritance was a mistake in hindsight,
+and that **this refactor will probably never land in xo-reactor** — the fix
+worth having is option 3, and it is not worth doing to a subsystem that a
+future `xo-reactor2` would replace. Non-virtual `AEP <- Displayable` is the
+design RC wants; xo-reactor cannot have it without option 3.
+
+**So treat this ticket as a design record for xo-reactor2, plus a live hazard
+notice for xo-reactor.** The hazard below does not go away by deferring.
+
+## THE HAZARD STAYS LIVE
+
+Because the fix is deferred, the tree keeps **three** constrained partial
+specializations of `Prettifier<T>`, disjoint only by accident:
+
+```bash
+grep -rn 'requires std::derived_from' --include=*.hpp xo-*/ | grep -v '/\.build/'
+#   xo-refcnt/../Displayable.hpp                  derived_from<ref::Displayable>
+#   xo-reactor/../AbstractEventProcessor.hpp      derived_from<reactor::AbstractEventProcessor>
+#   xo-reactor/../Reactor.hpp                     derived_from<reactor::Reactor>
+```
+
+Deriving any class from two of the three makes both constraints match, neither
+more specialized: **ambiguous partial specialization**, a hard error whose
+message names neither `Displayable` nor `Reactor`. The most likely trigger is
+exactly the edit this ticket describes — giving an event processor a
+`display_string()` by inheriting Displayable. Anyone who tries it should read
+this ticket first.
+
+## Done when — IF it is ever done (xo-reactor2, most likely)
 
 - `AbstractEventProcessor` and `Reactor` inherit `ref::Displayable`
 - xo-reactor declares no `pretty()` pure virtual and no `Prettifier<T>` of its own

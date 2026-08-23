@@ -110,3 +110,13 @@ implemented — costs a branch on the fallback path, so it wants RC's call.
 - a rule is written down for where `Prettifier<T>` may live, and the existing
   `_pp.hpp` headers are checked against it
 - decided whether the reentrancy tripwire is worth its cost
+
+## Related: how many Prettifiers may claim one type (2026-08-23)
+
+This ticket asks WHERE a `Prettifier<T>` may be declared. The other half —
+how many may claim the same type — turned up when xo-reactor gained constrained
+partial specializations for its two roots, bringing the tree to three
+(`Displayable`, `AbstractEventProcessor`, `Reactor`). They are disjoint only
+because no class derives from two of those hierarchies; overlap is an ambiguous
+partial specialization. See `.xo-backlog/xo-reactor/issues/01-aep-inherit-displayable.md`,
+which also records why unifying them under Displayable is blocked.
