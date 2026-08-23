@@ -136,11 +136,11 @@ choice, not a measurement.
 
 ## Where it stands (re-measured 2026-08-22)
 
-| | ticket | 2026-08-17 | 08-22 am | 08-22 pm | target |
-|---|---|---|---|---|---|
-| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 1 | 0 |
-| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 73 | 0 |
-| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 182 | 0 |
+| | ticket | 2026-08-17 | 08-22 am | 08-22 pm | 08-23 | target |
+|---|---|---|---|---|---|---|
+| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 1 | 1 | 0 |
+| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 73 | 59 | 0 |
+| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 182 | 150 | 0 |
 
 The `08-22 pm` column is after three subsystems were cleared in one session --
 xo-arena, xo-reflect (17) and xo-expression (39), the latter two being the first
@@ -373,6 +373,56 @@ TEMPORARY, and is a counter-B hit in **xo-reader**
 own pass -- now the heaviest remaining subsystem at B=18 / C=36.  The other two
 bridges (`type_unifier_ostream.hpp`, `TypeBlueprint_ostream.hpp`) are ordinary
 opt-in surface with test-only consumers.
+
+**In flight: xo-reader (2026-08-23), build position 42.** Was the heaviest
+remaining subsystem (C=36 / B=18 on 08-22); now **C=4 / B=4**. Not cleared --
+what is left is listed below, and three of the eight are the `examples/`
+question rather than work.
+
+This pass introduced tree-wide machinery, in `xo-ppsink`:
+
+- **`prettifier_broken<T>` + a `static_assert` at the top of `pretty()`**
+  (`Prettifier.hpp`, `pretty.hpp`). Turns "Prettifier<T> specialized but
+  unusable" from a silent fallback into a one-line compile error. The assert
+  MUST sit before the `if constexpr` chain: the pre-existing terminal
+  static_assert is unreachable in this failure, because `pp_streamable` is
+  unconstrained and swallows any T once the TU has seen `pretty_ostream.hpp`.
+  Verified against the real failure shape.
+- **`XO_PRETTIFIER_DECLARE` / `_VIA_PRETTY_METHOD` / `_VIA_CONVERSION`.**
+  13 call sites in xo-reader. NOTE the pairing constraint, documented at the
+  macro definition: DECLARE in the header, VIA_* in exactly one .cpp. The VIA_
+  expansion is an out-of-line member of an explicit specialization and is
+  therefore NOT implicitly inline -- putting it in a header gives
+  `multiple definition` at link. Marking it `inline` does not fix this, it
+  inverts it: an inline function must be defined in every TU that odr-uses it,
+  so the definition-in-one-cpp arrangement then fails with
+  `undefined reference` instead. Both failure modes were checked; the two
+  spellings genuinely cannot share one macro.
+
+A third silent-Prettifier failure mode surfaced here, distinct from the two in
+the xo-reflect entry: `template <> class Prettifier<T> { static void print(..) };`
+-- a `class` specialization with no `public:`. Access checking is part of a
+requires-expression, so `has_prettifier<T>` is false and dispatch falls through
+exactly as if no specialization existed. That is what `prettifier_broken` now
+catches.
+
+**Still open in xo-reader:**
+
+- `reader_error.hpp:41,44` -- `print(os)` AND `report(os)`, both forwarding to
+  `tk_error_`. Gated on **xo-tokenizer** (position 41), not on xo-reader.
+  `report()` is user-facing error reporting rather than diagnostics
+  (`reader.cpp:101-117`), which is a different contract from `pretty()` and
+  wants a deliberate decision rather than a reflex conversion.
+- `formal_arg.hpp:34` -- legacy `print(std::ostream&)`, defined inline.
+- `examples/exprrepl` and `examples/exprreplxx` -- 2 of C and 1 of B. Blocked on
+  the standing `example/` question (see below), not on any conversion.
+- 3 `.cpp` bridge includes (`apply_xs`, `envframestack`,
+  `expect_formal_arglist_xs`).
+
+**Open question this makes urgent: does `example/` count?** It was raised on
+2026-08-17 and never settled. It is now a visible share of both counters, and
+xo-reader cannot reach 0 either way without an answer. Decide it before the next
+subsystem, not after.
 
 ## Relationship to `ppsink-migration`
 

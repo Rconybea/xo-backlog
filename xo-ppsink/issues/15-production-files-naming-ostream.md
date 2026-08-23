@@ -72,6 +72,12 @@ grep -rhoE '[a-z_]+ *\( *std::ostream' --include=*.hpp --include=*.cpp xo-*/ \
 — together roughly a third of this ticket. A `display`-shaped counter reads them
 as clean.
 
+**Label rotted, 2026-08-23 (rule 2).** The *lesson* above stands and is left as
+written. The *membership claim* in it no longer holds: xo-reader was converted
+on 2026-08-23 and is now 4 files, so "the two heaviest, together roughly a
+third" describes xo-reader2 alone. Re-derive before quoting it — the phrase was
+accurate when coined and is exactly the kind of group label rule 2 exists for.
+
 Plausible and wrong, which is why it is recorded rather than quietly fixed: the
 `display` spelling really is the dominant one, it really is what every ticket in
 `ppsink-migration` converted, and a grep for it returns a hundred real hits in
