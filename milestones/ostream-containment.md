@@ -136,11 +136,18 @@ choice, not a measurement.
 
 ## Where it stands (re-measured 2026-08-22)
 
-| | ticket | 2026-08-17 | 2026-08-22 | target |
-|---|---|---|---|---|
-| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 0 |
-| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 0 |
-| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 0 |
+| | ticket | 2026-08-17 | 08-22 am | 08-22 pm | target |
+|---|---|---|---|---|---|
+| **A** `_pp.hpp` sidecar headers | `xo-ppsink/issues/13` | 3 | 1 | 1 | 0 |
+| **B** production `.cpp` including a bridge | `xo-ppsink/issues/14` | 90 | 87 | 73 | 0 |
+| **C** production files naming `std::ostream` | `xo-ppsink/issues/15` | 236 | 224 | 182 | 0 |
+
+The `08-22 pm` column is after three subsystems were cleared in one session --
+xo-arena, xo-reflect (17) and xo-expression (39), the latter two being the first
+two of the ten listed under "Order of attack". Two same-day columns because the
+morning figures are what the `_iostream.hpp` filter correction produced, before
+any of that work; keeping both is what makes the filter change and the real work
+separable, per the note below.
 
 **B and C are not comparable across that date.** Both filters were corrected on
 2026-08-22 for the `_iostream.hpp` spelling (decision 1 below), and the
@@ -325,6 +332,47 @@ rendered nothing through `Prettifier<TypeDescr>` (preserving legacy
 the inserter would have made silence the default by omission rather than by
 decision. RC chose `"<nullptr>"`. Every other rendering in xo-reflect passed
 through the conversion byte-identical.
+
+**Third: xo-expression (2026-08-22), build position 39.** B and C both 0;
+verified `xo-build --sweep` green (`62 attempted: 34 ok, 28 with no tests,
+0 failed, 0 skipped`, and the `--sweep ok (build and utest)` line -- read that
+line, not the totals, per the note in CONVENTIONS.md).
+
+Two patterns worth copying, neither of which appears in the recipe below.
+
+- **A temporary bridge should be `os << tostr(x)`, not a second printer.**
+  `SymbolTable::print(std::ostream&)` was a pure virtual with overrides in
+  GlobalSymtab and LocalSymtab, and could not simply be deleted: an
+  `rp<SymbolTable>` streamed in xo-reader reaches it through
+  `xo-refcnt/Refcounted_ostream.hpp`'s `operator<<(ostream&, intrusive_ptr<T>)`,
+  which no grep for `->print(os)` finds.  RC retired the pure virtual anyway and
+  segregated the inserter into a new `SymbolTable_ostream.hpp` implemented as
+  `os << tostr(x)` -- i.e. routed through the existing Prettifier.  So there is
+  ONE implementation, and the drift that made xo-reflect's
+  `ostream_baseline.test.cpp` necessary cannot arise.  Prefer this to a
+  hand-written `x.print(os)` body in any bridge this milestone creates.
+
+- **`xtag` in a `scope log(..)` needs `tag.hpp`, NOT `tag_ostream.hpp`.**  Nine
+  of xo-expression's counter-B hits were dead bridge includes that survived the
+  conversion because `xtag` was still visible in the file, so the include looked
+  load-bearing.  It is not: `xtag` comes from `tag.hpp`; `tag_ostream.hpp` is
+  needed only to stream a tag TO an ostream, which a `scope log(..)` does not
+  do.  Expect this in every remaining subsystem -- it is the difference between
+  counter B falling and counter B looking stuck after the real work is done.
+
+**A leftover the counters cannot see:** `exprtype.hpp` kept `#include <ostream>`
+after its `operator<<` was removed, with nothing in the file using it.  Counter
+C matches `std::ostream`, not the include, so this would have sat in a widely
+included header indefinitely -- the reason-2 propagation case surviving the
+conversion meant to end it.  Worth a grep for orphaned `<ostream>` / `<iostream>`
+includes at the end of each subsystem pass.
+
+**Still owed by xo-expression:** `SymbolTable_ostream.hpp` is explicitly
+TEMPORARY, and is a counter-B hit in **xo-reader**
+(`src/reader/envframestack.cpp`), not here.  Retiring it belongs to xo-reader's
+own pass -- now the heaviest remaining subsystem at B=18 / C=36.  The other two
+bridges (`type_unifier_ostream.hpp`, `TypeBlueprint_ostream.hpp`) are ordinary
+opt-in surface with test-only consumers.
 
 ## Relationship to `ppsink-migration`
 
