@@ -283,6 +283,49 @@ the rule above — the latter additionally having zero users tree-wide
 (`grep -rn arena_streambuf` finds only its own `CMakeLists.txt` line), so it is
 a deletion candidate for unrelated reasons.
 
+**Second: xo-reflect (2026-08-22), build position 17.** The heaviest of the ten
+subsystems listed under "Order of attack" below, and the first of them done.
+B and C both 0; verified `xo-build --sweep` green (`62 attempted: 34 ok, 28
+with no tests, 0 failed, 0 skipped`).
+
+What it took, since the recipe below understates two of the steps:
+
+- `pretty(PpSink&)` + `Prettifier<>` for `TypeDescrBase`, `TypeDescr`, `TypeId`,
+  `Metatype` (new `metatype2str`, matching `comparison2str` /
+  `AllocError::error_description`) and `TaggedRcptr`.
+- `print_reflected_types(std::ostream&)` -> `(PpSink&)`, and its three callers
+  (`xo-pyreflect/src/pyreflect/pyreflect.cpp`, `xo-ratio` and `xo-process`
+  utests) rebuilt around `FlatSink sink(PpStyle::colored(), std::cout.rdbuf())`
+  rather than a `pp_to_stream` bridge. Worth copying: the bridge would have put
+  `pretty_ostream.hpp` into a production .cpp and moved the violation from
+  xo-reflect to xo-pyreflect. A `streambuf` in a function body is exempt under
+  decision 3; a bridge include is not.
+
+Two lessons, per rule 6:
+
+- **`#ifdef OBSOLETE` does not reduce either counter.** Guarding the old
+  `display()` / `operator<<` left 12 counter-C lines standing in code that does
+  not compile, and blocked removing `<iostream>` from `TypeDescr.hpp` (a header
+  with 34 consumers, i.e. the reason-2 case in this milestone's Why). Delete;
+  do not guard. Same blind spot as the `FacetRegistry::dump()` incident: a text
+  grep cannot see preprocessor state.
+- **A wrong `Prettifier<T>` is indistinguishable from no `Prettifier<T>`.** A
+  specialization supplying `pretty()` instead of `print()` fails
+  `has_prettifier` silently, and dispatch falls through to the operator<<
+  fallback -- which compiles wherever `pretty_ostream.hpp` happens to be in
+  scope. That is thesis 1 of this milestone reproducing itself inside the
+  conversion meant to fix it. It becomes a hard error only once the inserter is
+  actually deleted, which is the argument for deleting inserters EARLY in a
+  subsystem rather than last.
+
+**Output-visible change, recorded because this milestone promised text
+preservation:** a null `TypeDescr` now renders `"<nullptr>"`. It previously
+rendered nothing through `Prettifier<TypeDescr>` (preserving legacy
+`ppdetail<TypeDescr>`) and `"<nullptr>"` through the ostream inserter; retiring
+the inserter would have made silence the default by omission rather than by
+decision. RC chose `"<nullptr>"`. Every other rendering in xo-reflect passed
+through the conversion byte-identical.
+
 ## Relationship to `ppsink-migration`
 
 **Downstream of it, not part of it.** That milestone's "done when" is *no
