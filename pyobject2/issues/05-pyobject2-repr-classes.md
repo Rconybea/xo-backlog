@@ -3,7 +3,7 @@
 Status: open
 Type: feature
 Milestone: pyobject2
-Depends: 08 (per-facet recovery), 03 (installed binder headers)
+Depends: 03 (installed binder headers)
 
 The module the rest of this milestone exists for. One pybind class per
 `xo-object2` representation, each assembled from binders:

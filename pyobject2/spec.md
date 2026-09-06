@@ -42,7 +42,8 @@ needs no generator.
 template <typename DRepr, typename PyCls>
 void bind_printable(PyCls & cls) {
     cls.def("pretty", [](const H<DRepr> & h, PpSink & sink) {
-        h.template _native_as<APrintable>().pretty(sink);
+        obj<APrintable, DRepr>(static_cast<DRepr *>(h._impl_handle()->opaque_data()))
+            .pretty(sink);
     });
 }
 ```
@@ -97,14 +98,20 @@ template <typename DRepr> using H = DObjectHandle<ATop, DRepr>;
 
 This is legal even though `obj<ATop,DRepr>` does not exist, because members of a
 class template instantiate lazily: `_native()` is simply never called on an
-`ATop`-keyed handle. Each binder instead recovers its own facet through a
-template member (ticket 08):
+`ATop`-keyed handle. Each binder instead recovers its own facet from the slot,
+which needs nothing added to the handle -- `_impl_handle()` is already public:
 
 ```cpp
-template <typename AOther> obj<AOther,DRepr> _native_as() const;
+obj<AOther, DRepr>(static_cast<DRepr *>(h._impl_handle()->opaque_data()))
 ```
 
 Verified to compile against `DFloat` + `APrintable` on 2026-09-06.
+
+Note a single-facet class does not need even this: keyed on the facet it uses,
+`_native()` returns the right `obj` directly, and plain representation members
+are reachable through `_native().data()` whatever the key. Folding the cast into
+the handle becomes worthwhile only once a second binder would duplicate it --
+deferred as ticket 08.
 
 ## Lifetime
 
