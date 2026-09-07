@@ -46,5 +46,8 @@ a trap set for the v2 collector work.
 
 **Done when:**
 - dropping a handle returns its slot, and `strong_root_count()` falls
+- the python suite (`xo-pyobject2/utest`, added by `06`) asserts it: `del x`
+  followed by a collection lowers the count.  `06` could not include this,
+  having nothing to release and nothing to observe
 - creating and dropping N handles in a loop, N far above the root set's element
   capacity, does not exhaust it
