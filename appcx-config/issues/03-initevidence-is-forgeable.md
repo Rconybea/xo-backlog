@@ -1,6 +1,6 @@
 # 03 — InitEvidence is forgeable, so it documents intent rather than proving it
 
-Status: open
+Status: fixed 2026-09-07
 Type: refactor
 
 `InitEvidence` has a public converting constructor:
@@ -28,8 +28,17 @@ evidence.
 
 ## Shape
 
-- make `InitEvidence(std::uint64_t)` private, with `InitSubsys` (or a single
-  named factory) its only friend
+- make `InitEvidence(std::uint64_t)` private, with **`SubsystemImpl<Tag>`** its
+  only friend.
+
+  NB not `InitSubsys<Tag>`, as this ticket first said.  No `InitSubsys`
+  specialization constructs evidence -- they only XOR what
+  `Subsystem::provide<Tag>()` returns, and the two producers are both in
+  Subsystem.hpp.  It matters because each subsystem writes its own
+  `InitSubsys<Tag>` specialization in its own header (that is the extension
+  point), so befriending that template would have granted forging rights to
+  anyone who declares a tag.  Befriending `SubsystemImpl` keeps the producer
+  single and closed.
 - keep the default ctor if a "no evidence yet" value is needed, or replace it
   with a named `InitEvidence::none()` so the empty case is deliberate
 - `operator^=` stays: combining attestations is the useful operation and cannot
@@ -41,5 +50,13 @@ evidence.
 grep -rn "\.evidence()" --include=*.cpp xo-*/utest | grep -v '/\.build/' | wc -l
 ```
 
-**Done when:** a translation unit outside xo-subsys cannot construct an
-`InitEvidence` carrying a non-zero value except by way of `InitSubsys`.
+**Done when:** met 2026-09-07.  Verified by compile probe -- an outside TU
+writing `xo::InitEvidence(42)` is rejected:
+
+```
+error: 'xo::InitEvidence::InitEvidence(uint64_t)' is private within this context
+```
+
+while `InitEvidence()` and `a ^ b` still compile, and
+utest.{indentlog2,facet,object2,interpreter2,expression2} all pass -- the last
+of which is where most of the 61 `.evidence()` assertions live.
