@@ -6,18 +6,18 @@ Type: refactor
 `FooConfig` constructors run subsystem initialization:
 
 ```bash
-grep -rn "init_evidence_{InitSubsys" xo-*/src/*/[A-Z]*Config.cpp
+# NB header AND source: Interpreter2Config's ctor is inline in its header, so a
+# src/-only grep under-reports and would call this ticket done early
+grep -rn "InitSubsys" --include=*Config.hpp --include=*Config.cpp xo-*/ | grep -v '/\.build/'
 ```
 
-One remaining as of 2026-09-07: `FacetConfig`.  `Indentlog2Config` has already
-been converted -- its ctor now only stores its arguments, and the
-`InitEvidence` moved to `Indentlog2Appcx`
-(`Indentlog2Appcx.cpp:11`, `Indentlog2Appcx.hpp:51`), which is exactly the shape
-this ticket argues for.  It is the worked example, and it builds:
+One remaining as of 2026-09-07: `Interpreter2Config`, whose ctor is inline in
+its header.  `FacetConfig` and `Indentlog2Config` have both been converted -- its ctor now only stores its arguments, and the
+`InitEvidence` moved to the appcx in each case, which is exactly the shape this
+ticket argues for.  They are the worked examples:
 
 ```bash
-grep -rn "init_evidence_{InitSubsys" xo-*/src/*/[A-Z]*Config.cpp   # FacetConfig only
-grep -n "init_evidence_" xo-indentlog2/src/indentlog2/Indentlog2Appcx.cpp
+grep -rn "init_evidence_{InitSubsys" xo-*/src/*/[A-Z]*Appcx.cpp
 ```
 
 So
@@ -79,10 +79,9 @@ this, the appcx ctor is solely responsible.  The utest mains are the callers
 that would notice if it were dropped, so they are the regression surface.
 
 **Files:**
-- Modify: `xo-facet/{include/xo/facet/cx/FacetConfig.hpp, src/facet/FacetConfig.cpp}`
-  and `src/facet/FacetAppcx.cpp` -- the remaining pair
-- Check: `xo-interpreter2` has a third config/appcx pair; same treatment
-- Reference: `xo-indentlog2` is done, and shows the target shape
+- Modify: `xo-interpreter2/include/xo/interpreter2/cx/Interpreter2Config.hpp`
+  and its appcx -- the remaining pair
+- Reference: `xo-facet` and `xo-indentlog2` are done, and show the target shape
 
 **Done when:**
 - constructing any `FooConfig` has no observable effect beyond storing its
