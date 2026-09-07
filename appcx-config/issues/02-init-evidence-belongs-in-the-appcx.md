@@ -1,6 +1,6 @@
 # 02 — InitEvidence lives in the config, so constructing a description performs an action
 
-Status: open
+Status: fixed 2026-09-07
 Type: refactor
 
 `FooConfig` constructors run subsystem initialization:
@@ -11,8 +11,9 @@ Type: refactor
 grep -rn "InitSubsys" --include=*Config.hpp --include=*Config.cpp xo-*/ | grep -v '/\.build/'
 ```
 
-One remaining as of 2026-09-07: `Interpreter2Config`, whose ctor is inline in
-its header.  `FacetConfig` and `Indentlog2Config` have both been converted -- its ctor now only stores its arguments, and the
+**All three pairs are converted as of 2026-09-07** -- `FacetConfig`,
+`Indentlog2Config`, `Interpreter2Config` each store only their arguments, and
+the `InitEvidence` moved to the corresponding appcx ctor -- its ctor now only stores its arguments, and the
 `InitEvidence` moved to the appcx in each case, which is exactly the shape this
 ticket argues for.  They are the worked examples:
 
@@ -90,7 +91,7 @@ that would notice if it were dropped, so they are the regression surface.
 - the utest suites still pass, and `utest.facet` still initializes in the order
   `facet_utest_main.cpp` establishes
 
-## Related
+## Related -- NOT done here, see `03`
 
 `InitEvidence` is currently forgeable -- `InitEvidence(std::uint64_t)` is a
 public converting ctor (`xo-subsys/include/xo/subsys/Subsystem.hpp`), so anyone
