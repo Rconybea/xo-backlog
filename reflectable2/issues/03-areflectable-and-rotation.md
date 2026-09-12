@@ -39,6 +39,29 @@ grep -rn 'self_tp' xo-alloc/include xo-interpreter/include | head
    Cost is an arena-hashmap probe plus a virtual call, paid once per fomo node
    rather than per field.
 
+   **Use the THROWING form** -- `variant<AReflectable>`, not
+   `try_variant<AReflectable>`. A representation that has not opted in is a
+   programming error, not a data-dependent condition, so it should not
+   silently render as empty. Both forms already exist; this is a choice
+   between them, not new machinery:
+
+   ```bash
+   sed -n '138,162p' xo-facet/include/xo/facet/FacetRegistry.hpp   # variant() throws
+   ```
+
+   The stock message names `AFrom`/`ATo` by typeseq AND name, but reports the
+   representation as a bare typeseq number (`xtag("DRepr", from._typeseq())`).
+   For this failure the representation is the thing the reader needs, so
+   resolve it:
+
+   ```bash
+   grep -n 'id2name' xo-facet/include/xo/facet/TypeRegistry.hpp
+   ```
+
+   Either the thrown message names the D-type, or `FomoTdx` catches and
+   rethrows with it added. "DRepr 47 does not implement AReflectable" makes a
+   reader go look up 47.
+
 3. Nothing else. `most_derived_self_tp` is a hook reflect ALREADY calls when
    descending into a struct member, so a `DRepr` holding erased fomo members is
    walked correctly with no change to printjson or to reflect:
@@ -59,8 +82,11 @@ this ticket should not depend on it.
   whose `td()` is the concrete representation's
 - a struct holding an erased fomo member reflects through to that member's
   representation, via the existing `StructMember` path
-- a type that does NOT implement `AReflectable` degrades visibly rather than
-  crashing — decide and pin the behaviour (null `TaggedPtr` vs throw); the
-  rotation returning failure is the observable, per `try_variant` returning
-  null rather than throwing
+- a type that does NOT implement `AReflectable` **throws**, and the exception
+  names the representation by name rather than by typeseq number
+- the partial-output consequence is understood and pinned by a test: throwing
+  mid-traversal leaves whatever the consumer had already written. For printjson
+  that means a truncated JSON document plus an exception, which is the intended
+  trade -- a programming error surfaces loudly rather than producing
+  well-formed JSON that quietly omits an object
 - `xo-reflect` still unmodified
