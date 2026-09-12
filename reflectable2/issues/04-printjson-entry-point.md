@@ -48,8 +48,11 @@ through the struct-member path — so if this ticket seems to require changes to
 `print_aux` or the `Metatype` switch, something in `02`/`03` is wrong and that
 is the thing to fix.
 
-xo-printjson gains a dependency on xo-reflectable2. It does not depend on
-xo-facet today:
+xo-printjson gains a LIBRARY dependency on xo-reflectable2. A test-only one
+already exists as of `02`, in `xo-printjson/utest/CMakeLists.txt` and in
+`pkgs/xo-printjson.nix` under `doCheck` -- so the edge to add here is the one
+in `src/printjson/CMakeLists.txt`, and both nix inputs then collapse to one.
+printjson does not depend on xo-facet today:
 
 ```bash
 xo-deps --why=xo-printjson:xo-facet -q; echo "exit=$?"     # expect 1 before this ticket

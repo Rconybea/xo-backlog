@@ -166,7 +166,7 @@ with `-q -k` over `--all`.
 
 ```
 stage 1 (configure, build, install):  70 attempted: 70 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      70 attempted: 38 ok, 32 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      70 attempted: 39 ok, 31 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
 
@@ -179,8 +179,12 @@ changed count is a prompt to find out what was added — not a regression by
 itself. This line read `62 attempted: 34 ok, 28 with no tests` from 2026-08-11
 until 2026-09-08, then `68 attempted: 37 ok, 31 with no tests` until
 2026-09-12, then `69 attempted: 38 ok, 31 with no tests` within that same day —
-the step to 70 is `xo-reflectable2`, scaffolded for milestone `reflectable2`.
-The seven subsystems added over the first of those steps are
+the step to 70 is `xo-reflectable2`, scaffolded for milestone `reflectable2`,
+which then moved from the no-tests column to the ok column when it acquired a
+utest, leaving the attempted total alone. Note those two kinds of movement look
+alike in the ok count and are not: one is a subsystem appearing, the other a
+subsystem gaining tests. The seven subsystems added over the first of those
+steps are
 
 ```bash
 comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort) \

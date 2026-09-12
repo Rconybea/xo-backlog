@@ -61,7 +61,10 @@ grep -rn 'self_tp' xo-alloc/include xo-interpreter/include | head    # implement
 refcounted, so validity is the owning flywheel's. Fine for synchronous
 traversal; a caller must not retain one past the arena.
 
-**2. `FomoTdx : TypeDescrExtra`** — overrides `most_derived_self_tp()` to rotate
+**2. `FopTdx : TypeDescrExtra`** — "fop" is a faceted object pointer, today
+spelled `obj<AFacet,DRepr>` and expected to be renamed `fop<AFacet,DRepr>`.
+Deliberately not "Fomo": that names the whole collection of features, not this
+one pointer-shaped thing. Overrides `most_derived_self_tp()` to rotate
 the object through `FacetRegistry` to `AReflectable`, then return what
 `self_tp()` gives. This is the erased path, and it lands on a hook reflect
 ALREADY calls when descending into a struct member:

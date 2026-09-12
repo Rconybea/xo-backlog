@@ -37,7 +37,7 @@ grep -rn 'self_tp' xo-alloc/include xo-interpreter/include | head
    traversal; callers must not retain one past the arena. State this in the
    header — it is the kind of constraint that is invisible at the call site.
 
-2. `FomoTdx` overrides `TypeDescrExtra::most_derived_self_tp()` to rotate
+2. `FopTdx` overrides `TypeDescrExtra::most_derived_self_tp()` to rotate
    through `FacetRegistry` to `AReflectable` and return its `self_tp()`.
 
    The rotation already exists and is keyed on typeseq; nothing new is needed
@@ -69,7 +69,7 @@ grep -rn 'self_tp' xo-alloc/include xo-interpreter/include | head
    grep -n 'id2name' xo-facet/include/xo/facet/TypeRegistry.hpp
    ```
 
-   Either the thrown message names the D-type, or `FomoTdx` catches and
+   Either the thrown message names the D-type, or `FopTdx` catches and
    rethrows with it added. "DRepr 47 does not implement AReflectable" makes a
    reader go look up 47.
 
