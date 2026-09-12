@@ -17,6 +17,16 @@ find xo-*/include -name 'IPrintable_*.hpp' | head   # e.g. IPrintable_DString in
 
 so each is `IReflectable_D<Foo>.hpp` beside its `IPrintable_D<Foo>.hpp`.
 
+**The header is only half of it.** A `FacetImplementation` specialization is a
+compile-time mapping; the rotation `03` added is a runtime lookup, so each type
+also needs `FacetRegistry::register_impl<AReflectable, D<Foo>>()` in its
+subsystem's `register_facets()`. Without it the type compiles, constructs and
+erases, then fails the rotation at runtime -- see `03`'s outcome.
+
+```bash
+grep -n 'register_impl' xo-object2/src/object2/SetupObject2.cpp
+```
+
 ## Candidates
 
 ```bash
