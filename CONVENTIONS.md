@@ -162,11 +162,11 @@ That is the whole recipe, as of 2026-08-10. It runs two stages — configure /
 build / install with `--with-utests --with-examples`, then `--utest` — both
 with `-q -k` over `--all`.
 
-**Expect, as of 2026-09-08:**
+**Expect, as of 2026-09-12:**
 
 ```
-stage 1 (configure, build, install):  68 attempted: 68 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      68 attempted: 37 ok, 31 with no tests, 0 failed, 0 skipped
+stage 1 (configure, build, install):  69 attempted: 69 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      69 attempted: 38 ok, 31 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
 
@@ -177,7 +177,8 @@ so a green stage-2 total on its own does not mean the tree built.
 The other totals track the subsystem list and move whenever one is added, so a
 changed count is a prompt to find out what was added — not a regression by
 itself. This line read `62 attempted: 34 ok, 28 with no tests` from 2026-08-11
-until 2026-09-08; the seven subsystems added in between are
+until 2026-09-08, then `68 attempted: 37 ok, 31 with no tests` until
+2026-09-12; the seven subsystems added over the first of those steps are
 
 ```bash
 comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort) \
@@ -185,19 +186,30 @@ comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort
 # xo-callback2 xo-pyarena xo-pyfacet xo-pyindentlog2 xo-pyobject2 xo-pyreactor2 xo-reactor2
 ```
 
-**68 swept, 70 listed, and only one of the two gaps is deliberate.** `--all`
-excludes the `xo-cmake` bootstrap by design. It also skipped `xo-callback2`,
-because xo-build reads the INSTALLED list, not the one in the source tree:
+**69 swept, 70 listed, and that one gap is deliberate:** `--all` excludes the
+`xo-cmake` bootstrap by design.
+
+There were two gaps until 2026-09-12. `--all` also skipped `xo-callback2`,
+because xo-build reads the INSTALLED subsystem list, not the one in the source
+tree, and the entry had not reached the installed copy. That is what the
+2026-09-08 → 2026-09-12 step in the totals above is: not a subsystem added, but
+one that started being swept.
 
 ```bash
 comm -13 <(grep '^xo-' ~/local/share/etc/xo/subsystem-list | sort) \
-         <(grep '^xo-' xo-cmake/etc/xo/subsystem-list | sort)   # xo-callback2
+         <(grep '^xo-' xo-cmake/etc/xo/subsystem-list | sort)   # empty as of 2026-09-12
 ```
 
-A subsystem added to `xo-cmake/etc/xo/subsystem-list` is therefore not swept
-until xo-cmake is installed, and the sweep says nothing about the omission — it
-reports green over a smaller set. Run that `comm` when a sweep is meant to cover
-something newly added.
+Keep running that `comm` when a sweep is meant to cover something newly added.
+A subsystem added to `xo-cmake/etc/xo/subsystem-list` is not swept until
+xo-cmake is installed, and the sweep says nothing about the omission — it
+reports green over a smaller set.
+
+Note how the gap closed, because nothing announced it: xo-cmake was installed
+for an unrelated change (a new macro), which carried the current list along
+with it. **A sweep's coverage can widen or narrow as a side effect of
+installing some other subsystem**, so a moved total is worth explaining even
+when no subsystem was added and nothing went red.
 
 **The tree has been fully green since 2026-08-11.** Before that this line read
 "33 ok, 1 failed", the failure being `utest.jit`, described here and in its
