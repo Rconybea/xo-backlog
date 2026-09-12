@@ -232,6 +232,35 @@ Only the seven carry the initializer. Of the other utest mains, ~20 use bare
 nothing. **Do not convert them as part of this.** The value here is removing an
 obscure idiom where it exists, not uniformity for its own sake.
 
+### Converting one anyway, when there is a reason (2026-09-12)
+
+`xo-printjson` was one of the bare-`CATCH_CONFIG_MAIN` group and was converted
+by RC, which is consistent with the note above rather than against it: the
+trigger was a need, not tidiness. Its tests render through `tostr()`, which
+uses a thread-local scratch arena, so the main has to build an
+`Indentlog2Appcx` -- and that is impossible without owning `main()`.
+
+The transferable part is what a conversion costs beyond the .cpp, because the
+umbrella build catches none of it:
+
+- the utest target gains `xo_dependency(<exe> xo_testutil)`, plus
+  `xo_indentlog2` when the main builds an appcx
+- `pkgs/<name>.nix` needs the SAME inputs under `lib.optionals doCheck` --
+  including `cli11`, since UtestAppStart parses with it. In-tree headers are
+  reachable regardless, so a missing input shows up ONLY under
+  `nix-build ci.nix -A <subsystem>`
+- `PpStyle::default_style() = PpStyle::plain()` if the tests pin rendered text.
+  printjson does not today, but `.xo-backlog/xo-printjson/issues/01` moves it
+  onto a PpSink, at which point it would
+
+Check the conversion actually bought something, rather than trusting a green
+`ok`:
+
+```bash
+<utest-exe> --help       # xo options ahead of catch2's
+<utest-exe> --announce   # names each test -- proves the listener registered
+```
+
 **Files:**
 - `xo-alloc2/utest/alloc2_utest_main.cpp` — the pattern, with the
   `CATCH_CONFIG_EXTERNAL_INTERFACES` rationale
