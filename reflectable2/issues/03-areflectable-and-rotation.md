@@ -21,6 +21,17 @@ grep -rn 'self_tp' xo-alloc/include xo-interpreter/include | head
 1. `AReflectable` gains its method: `self_tp(data) -> TaggedPtr`, named to match
    `SelfTagging::self_tp()`.
 
+   Added as a `const_methods` entry in `xo-reflectable2/idl/Reflectable.json5`,
+   NOT by editing the headers -- those are generated, and an edit to them is
+   overwritten on the next build. `01` left the entry list empty with a TODO
+   pointing here. The return type needs `<xo/reflect/TaggedPtr.hpp>` in the
+   IDL's `includes`, which `01` also left empty:
+
+   ```bash
+   grep -n 'includes\|const_methods' xo-reflectable2/idl/Reflectable.json5
+   grep -n 'includes' xo-printable2/idl/Printable.json5   # a designed facet, for the shape
+   ```
+
    `TaggedPtr`, not `TaggedRcptr`: fomo objects are arena-allocated, not
    refcounted, so validity belongs to the owning flywheel. Fine for synchronous
    traversal; callers must not retain one past the arena. State this in the

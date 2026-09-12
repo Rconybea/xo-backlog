@@ -1,6 +1,6 @@
 # 01 — scaffold xo-reflectable2
 
-Status: open
+Status: done 2026-09-12
 Type: task
 Milestone: reflectable2
 
@@ -58,3 +58,53 @@ ls xo-equable2 xo-equable2/include/xo/equable2/detail
   See the sweep section of `CONVENTIONS.md`.
 - the sweep's `attempted` total rises by one; that is the confirmation, and a
   total that does NOT move means the entry did not reach the installed list
+
+## Outcome (2026-09-12)
+
+Done. Two things the ticket did not anticipate, recorded because they change
+what a reader should do next time:
+
+**The file set is generated, not hand-written.** `xo_add_genfacet` runs the
+jinja2 generator in `xo-facet/codegen/` over an IDL file, and there is a
+purpose-built scaffolder whose usage text cites equable2 verbatim:
+
+```bash
+xo-cmake/bin/scaffold-subdir --mode=shared --with-facet=Reflectable reflectable2
+```
+
+The quartet it produced matches what the ticket predicted, plus the public
+umbrella header `Reflectable.hpp`. The generated sources do not exist at first
+configure, so cmake fails with "No SOURCES given to target" until genfacet has
+been run once by hand:
+
+```bash
+cd xo-reflectable2 && ../xo-facet/codegen/genfacet --input idl/Reflectable.json5
+```
+
+The generated files are checked in, as they are for equable2/hashable2.
+
+**Namespace is `xo::reflect`**, shared with xo-reflect rather than separate --
+the facet is part of reflection and `self_tp()` will sit beside
+`SelfTagging::self_tp()`. Precedent: xo-ppsink and xo-indentlog2 share
+`xo::pp`. Set via `namespace2` in the IDL, so it is generator input, not
+something to edit in the generated headers.
+
+Two smaller notes:
+
+- the library target for xo-reflect is spelled `reflect`, not `xo_reflect`
+  (legacy naming), so the dependency reads `xo_dependency(${SELF_LIB} reflect)`
+- the scaffolder now emits `@XO_FIND_DEPENDENCY_BLOCK@` in `Config.cmake.in`,
+  so unlike equable2 there is no parallel find_dependency list to maintain; the
+  scaffolded comment saying otherwise was dropped
+
+**Verified:** sweep green, and the totals rose by exactly one in both stages --
+`69 attempted: 69 ok` to `70 attempted: 70 ok` (stage 1), `38 ok, 31 with no
+tests` to `38 ok, 32 with no tests` (stage 2). xo-reflectable2 is named in the
+log, so it was swept rather than merely listed:
+
+```bash
+grep -n 'reflectable2' <sweep log>   # "ok (configure build install)" and "ok (utest:no-tests)"
+```
+
+xo-cmake had to be installed BEFORE the sweep for that to happen, exactly as
+the ticket warned.

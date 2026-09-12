@@ -165,8 +165,8 @@ with `-q -k` over `--all`.
 **Expect, as of 2026-09-12:**
 
 ```
-stage 1 (configure, build, install):  69 attempted: 69 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      69 attempted: 38 ok, 31 with no tests, 0 failed, 0 skipped
+stage 1 (configure, build, install):  70 attempted: 70 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      70 attempted: 38 ok, 32 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
 
@@ -178,7 +178,9 @@ The other totals track the subsystem list and move whenever one is added, so a
 changed count is a prompt to find out what was added — not a regression by
 itself. This line read `62 attempted: 34 ok, 28 with no tests` from 2026-08-11
 until 2026-09-08, then `68 attempted: 37 ok, 31 with no tests` until
-2026-09-12; the seven subsystems added over the first of those steps are
+2026-09-12, then `69 attempted: 38 ok, 31 with no tests` within that same day —
+the step to 70 is `xo-reflectable2`, scaffolded for milestone `reflectable2`.
+The seven subsystems added over the first of those steps are
 
 ```bash
 comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort) \
@@ -186,7 +188,7 @@ comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort
 # xo-callback2 xo-pyarena xo-pyfacet xo-pyindentlog2 xo-pyobject2 xo-pyreactor2 xo-reactor2
 ```
 
-**69 swept, 70 listed, and that one gap is deliberate:** `--all` excludes the
+**70 swept, 71 listed, and that one gap is deliberate:** `--all` excludes the
 `xo-cmake` bootstrap by design.
 
 There were two gaps until 2026-09-12. `--all` also skipped `xo-callback2`,
