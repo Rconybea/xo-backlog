@@ -122,6 +122,15 @@ rendering, here the printer is the only thing that carries the characters.
 is not member-addressable, the atom-plus-printer shape is the answer, and the
 ticket's four-row table reads as at most four.
 
+#### Python binding, as the companion this ticket allows for
+
+`xo.stringtable2.String` (2026-09-13), mirroring `xo.object2.Float`.  Note
+it is keyed on `APrintable`, NOT the `AReflectable` this ticket just added:
+`make_strong_ref` needs a facet the repr implements and `pretty()` wants the
+printable one, so the opt-in and the binding are independent -- which is
+what "not a gate on the printjson goal" means in practice.  See
+`.xo-backlog/pyobject2/spec.md`, `## Python surface`.
+
 #### A green test that was not testing its subject
 
 `with_facet<AFacet>::mkobj(p)` returns a **typed** `obj<AFacet,DRepr>`

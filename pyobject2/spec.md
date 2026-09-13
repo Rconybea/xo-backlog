@@ -169,6 +169,27 @@ DFloat::_box(alloc, x);
 
 `AllocFlywheel` needs no change for this — `storage()` already returns `DArena&`.
 
+**The class follows the repr, not this module.** `DString` lives in
+xo-stringtable2, so `String` is bound from `xo-pystringtable2`, not here —
+the same 1:1 convention that puts each binder with the subsystem owning its
+facet (ticket `04`). Done 2026-09-13, and it is the worked example of the
+shape above from outside object2:
+
+```bash
+grep -n 'HString\|py::class_<HString>' xo-pystringtable2/src/pystringtable2/pystringtable2.cpp
+```
+
+Two things it added to the Float template, both forced by the repr rather
+than chosen:
+
+- a byte-string repr needs its EXTENT read from `size()`, never from the
+  null terminator (`DString::operator std::string_view()` stops at the
+  first null). `value()` reads `(chars(), size())`, so an embedded NUL
+  survives into python.
+- `__len__` then reports BYTES while `len(s.value())` reports codepoints.
+  They agree for ascii, which is exactly why a test needs a multibyte case
+  to keep the distinction honest.
+
 - `ScmRuntimeError`, not `RuntimeError`: the REPL habit is
   `from xo_pyobject2 import *`, and shadowing the builtin with a class that is
   not even raisable is a trap.
