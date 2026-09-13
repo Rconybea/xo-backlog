@@ -1,6 +1,6 @@
 # 03 — ten subsystems are never built by the nix CI
 
-Status: diagnosed (2026-09-13)
+Status: fixed 2026-09-13
 Type: coverage gap
 Raised: found while verifying `python-packaging/01`, which named a nix attribute
 that turned out not to exist.
@@ -95,19 +95,146 @@ be checked that way, because they have no derivation.
 
 ## Done when
 
-- [ ] `pkgs/*.nix` + `xo.nix` entries exist for the seven with no derivation
-- [ ] `ci.yaml`'s step list covers every subsystem `ci.nix` exports
-- [ ] `ci-cmake.yaml` regenerated so `xo-reflectable2` is built
-- [ ] the membership check below prints nothing, and something runs it —
+- [x] `pkgs/*.nix` + `xo.nix` entries exist for the seven with no derivation
+- [x] `ci.yaml`'s step list covers every subsystem `ci.nix` exports
+- [x] `ci-cmake.yaml` regenerated so `xo-reflectable2` is built
+- [x] the membership check below prints nothing, and something runs it —
       a hand-maintained list that nobody diffs against `subsystem-list` is what
       produced this ticket
 
 Progress: `grep -oP 'nix-build ci.nix -A \K[a-z0-9-]+' .forgejo/workflows/ci.yaml | sort -u > /tmp/ci; comm -13 /tmp/ci <(grep '^xo-' xo-cmake/etc/xo/subsystem-list | sort) | wc -l`
 
-## Notes
+## Fixed 2026-09-13
 
-The obvious fix for the drift is to generate `ci.yaml` the way `ci-cmake.yaml`
-is generated — same `subsystem-list`, same `xo-gen-ci` target. That is more than
-this ticket needs to claim, though: the nix workflow's steps carry per-subsystem
+Seven derivations written, and `ci.yaml` is now generated rather than
+hand-maintained.
+
+### Correction: the Notes below were wrong, and it changed the fix
+
+This ticket originally said the nix workflow's steps "carry per-subsystem
 gc-root handling that the cmake one does not, so whether the template can
-express them is unverified. Worth settling before hand-adding ten more steps.
+express them is unverified", and recommended hand-adding ten steps. Measured
+instead:
+
+```bash
+python3 - <<'EOF'
+import re, pathlib
+s = pathlib.Path(".forgejo/workflows/ci.yaml").read_text()
+b = re.findall(r"      - name: build (xo-[a-z0-9-]+)\n        run: \|\n((?:          .*\n)+)", s)
+print(len(b), "steps,", len({body.replace(sub,"<SUB>") for sub,body in b}), "distinct shapes")
+EOF
+#   61 steps, 1 distinct shape
+```
+
+The gc-root handling is entirely uniform — `$XO_GCROOTS/<sub>` — so a template
+expresses it trivially. Kept here because it is the kind of claim that sounds
+like it came from reading the file and did not, and because believing it would
+have produced the worse fix: ten hand-added steps and the drift mechanism left
+running.
+
+`.forgejo/workflows/ci.yaml.j2` now renders from `subsystem-list` through a
+third `COMMAND` in the `xo-gen-ci` target, beside the two cmake templates —
+bringing the nix pipeline under the principle `CMakeLists.txt:221` already
+stated for the others. No exclusions, unlike ci-cmake: this job runs on `host`
+(so xo-imgui's OpenGL is present) and nix builds xo-cmake as an ordinary
+derivation.
+
+**Generation turns a silent omission into a loud failure.** `xo.nix` and
+`ci.nix` are still hand-maintained, so a subsystem added to `subsystem-list`
+without a derivation now produces a step that fails:
+
+```bash
+nix-build ci.nix -A xo-notasubsystem; echo $?   # 1
+```
+
+That is the real answer to the last done-when. The check does not need a
+runner — the drift now breaks the build instead of shrinking the set silently.
+
+### The hazard in converting a hand-written workflow to a generated one
+
+The first generated `ci.yaml` **dropped `xo-docs-site`** and the entire
+`publish docs` step, including its external `curl --fail` check against
+https://conybeare.us/xo-docs/. `xo-docs-site` is a nix attribute with no entry
+in `subsystem-list`, so a template built from "everything before the first
+build step" silently discards everything after the last one. The template keeps
+a head *and* a tail; the step list is the only generated part. Caught by
+diffing attribute sets rather than eyeballing:
+
+```bash
+comm -23 <(grep -oP 'nix-build ci.nix -A \K[a-z0-9-]+' ci.yaml.before | sort -u) \
+         <(grep -oP 'nix-build ci.nix -A \K[a-z0-9-]+' .forgejo/workflows/ci.yaml | sort -u)
+#   empty -- nothing lost
+```
+
+### xo-pyobject2's 25 python tests run under nix
+
+They import `xo.arena`, `xo.indentlog2`, `xo.facet` and `xo.object2`, but only
+`xo.object2` is built in that derivation. A `preCheck` composes the rest from
+sibling store paths:
+
+```nix
+preCheck = ''
+  export PYTHONPATH=${xo-pyfacet}/lib/python:${xo-pyindentlog2}/lib/python:${xo-pyarena}/lib/python
+'';
+```
+
+**This works only because `xo` is a PEP 420 namespace package** — each store
+path contributes a portion and python merges them. With an `__init__.py` the
+first would shadow the rest and the tests could not run here at all. It is the
+first load-bearing use of that property (`python-packaging/01`).
+
+Falsified rather than assumed:
+
+```bash
+nix-build --no-out-link -E '(import ./ci.nix {}).xo-pyobject2.overrideAttrs (o: { preCheck = ""; })'
+#   utest.pyobject2 ...***Failed
+#   ModuleNotFoundError: No module named 'xo.arena'
+```
+
+And the tests genuinely run rather than ctest finding none — `Ran 25 tests, OK`
+locally, `utest.pyobject2 ... Passed 0.19 sec` in nix, the same suite.
+
+### A grep that looked complete and was not
+
+`xo-callback2` was the one derivation that failed to build first time:
+
+```
+utest.callback2] find_package(callback) (xo_dependency_helper)
+CMake Error: Could not find a package configuration file provided by "callback"
+```
+
+Because the survey used
+
+```bash
+grep -ohP 'xo_(dependency|pybind11_dependency|pybind11_header_dependency)\(...'
+```
+
+which misses `xo_headeronly_dependency` — the form xo-callback2 uses for all
+three of its library deps (`xo-callback2/CMakeLists.txt:38-40`). The pattern
+that covers every form:
+
+```bash
+grep -rhoP 'xo_[a-z_0-9]*dependency\(\s*\$?\{?[A-Za-z_]*\}?\s+\K[a-zA-Z_0-9:]+' <sub> --include=CMakeLists.txt
+```
+
+Re-run across all seven it changed exactly one answer, which is why the other
+six built on the first try — and why the miss was easy not to notice.
+
+## Still open, deliberately out of scope
+
+**22 packages have `doCheck` without `-DENABLE_TESTING=1`**, so ctest runs and
+finds nothing while reporting success — the defect `CONVENTIONS.md` already
+counts:
+
+```bash
+for f in pkgs/xo-*.nix; do grep -q doCheck $f || continue
+  grep -q ENABLE_TESTING $f || echo -n "$(basename $f .nix) "; done
+#   xo-callback xo-pydistribution xo-pyexpression xo-pyjit xo-pykalmanfilter
+#   xo-pyprintjson xo-pyprocess xo-pyreactor xo-pysimulator xo-pyunit xo-pyutil
+#   xo-pywebsock xo-pywebutil xo-randomgen xo-reader xo-reflectutil xo-simulator
+#   xo-statistics xo-subsys xo-tokenizer xo-websock xo-webutil
+```
+
+Not touched here — the seven new derivations simply do not repeat it. Worth its
+own ticket: unlike this one, fixing it will surface tests that have never run
+and may not pass.
