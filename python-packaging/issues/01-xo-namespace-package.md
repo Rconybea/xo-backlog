@@ -19,7 +19,7 @@ import xo.facet, xo.object2
 `xo_pyfoo` is a *build* identifier — it exists so the cmake target is globally
 unique and so `xo_pybind11_dependency()` has something to key on. Leaking it
 into the import namespace makes python users say the internal name, and makes
-the stack look like 17 unrelated libraries rather than one package.
+the stack look like 18 unrelated libraries rather than one package.
 
 ## What python actually requires
 
@@ -61,7 +61,35 @@ grep -rl PYBIND11_MODULE xo-py*/src/*/*.cpp | wc -l   # 17, 2026-09-13
 ls xo-py*/src/*/*.hpp.in | wc -l                       # 17
 ```
 
-`xo-pyutil` is INTERFACE-only and defines no module — it is not one of the 17.
+**That count is 17, and the answer is 18.** `xo-pyutil` is INTERFACE-only and
+defines no module of its own — but it *builds* one, from `example/ex1/`, through
+the same macro, and installs it:
+
+```bash
+ls ~/local/lib/ | grep pyutilexample
+#   xo_pyutilexample.cpython-312-x86_64-linux-gnu.so
+```
+
+Every count in this ticket is 18. The `xo-py*/src/*` glob that produced 17 is
+recorded here because it is the obvious one to reach for and it is wrong — a
+module built from an `example/` directory is still a module, and it goes through
+`xo_pybind11_library()` like the rest.
+
+### The C++ import sites need no edits
+
+Every live cross-module import already routes through the generated macro, so
+changing the template changes all of them at once:
+
+```bash
+grep -rn 'module_::import' xo-py*/src/*/*.cpp | grep -v '//'
+#   xo-pyfacet/src/pyfacet/pyfacet.cpp:104:  import(PYINDENTLOG2_MODULE_NAME_STR);
+```
+
+One genuine literal, and it reads the macro. The bare-name calls that a naive
+grep finds — `py::module_::import("pyreflect")` in six subsystems — are trailing
+**comments** recording the pre-macro spelling, e.g.
+`xo-pyreactor/src/pyreactor/pyreactor.cpp:29`. Left alone they would each be a
+plausible-looking edit to a dead string.
 
 ## Decided 2026-09-13 (RC): `xo` is a PEP 420 namespace package
 
@@ -157,8 +185,17 @@ for d in xo-py*/; do s=${d%/}; grep -q PYBIND11_MODULE $s/src/*/*.cpp 2>/dev/nul
 ```
 
 It stays a header-only C++ subsystem with no packaging role. The work in this
-ticket lands in `xo-cmake` (two macros) and in 17 `.hpp.in` templates; none of
+ticket lands in `xo-cmake` (two macros) and in 18 `.hpp.in` templates; none of
 it lands in `xo-pyutil`.
+
+## Decisions (RC, 2026-09-13)
+
+| question | decision | why |
+|---|---|---|
+| install destination | `${PREFIX}/lib/python/xo` | version-agnostic. Safe to share across python versions because the ABI tag is already in each filename and CPython accepts only the running interpreter's exact tag. `xo-python` sets `PYTHONPATH` explicitly, so nothing needs site-packages auto-discovery, and a version-stamped path would add a cmake-time query for no reader. |
+| `xo_pyutilexample` | follows the rule → `xo.utilexample` | it is a demo of `xo_pybind11_library`; a demo that does not demonstrate the real layout teaches the wrong thing. Keeps the macro with one behaviour and no escape hatch. |
+| staging | one commit, all 18 | the macro is a single switch and every C++ import site reads from it, so a half-converted tree protects no consumer and costs more than the whole change. |
+| `xo_pyfoo` compatibility | break cleanly, no shims | nothing outside this tree imports them. Leaves nothing to deprecate later. |
 
 ## What changes
 
@@ -170,7 +207,7 @@ All of it inside `xo_pybind11_library()` — no subsystem `CMakeLists.txt` edits
   untouched by pybind11: both of its tool paths set only `PREFIX`,
   `DEBUG_POSTFIX` and `SUFFIX` (`pybind11Tools.cmake:149` and
   `pybind11NewTools.cmake:334`, pybind11 2.13.6), so the two do not collide.
-- install destination moves from `lib/` to a real site dir. Today the `.so`
+- install destination moves from `lib/` to `lib/python/xo/`. Today the `.so`
   sits beside `libxo_facet.so`:
 
   ```bash
@@ -182,10 +219,11 @@ All of it inside `xo_pybind11_library()` — no subsystem `CMakeLists.txt` edits
   directory** on `PYTHONPATH` (`~/local/bin/xo-python:16`). That is worth fixing
   regardless of this ticket.
 - `xo_emit_python_wrapper()` gets simpler: one `PYTHONPATH` entry (the parent of
-  `xo/`) instead of one per module. In the umbrella that is 17 → 1. Its existing
+  `xo/`) instead of one per module. In the umbrella that is 18 → 1. Its existing
   comment about a partial `PYTHONPATH` failing outright still applies and should
   survive the edit.
-- 11 python import lines across the utests.
+- 11 python import lines across the utests. These are the only import sites
+  needing a hand edit; see above.
 
 ## Feasibility probe (2026-09-13, pybind11 2.13.6, python 3.12)
 
@@ -239,7 +277,7 @@ probe.
 ## Done when
 
 - [ ] `xo_pybind11_library()` emits `xo/<name>.cpython-*.so` in build and install trees
-- [ ] all 17 `.hpp.in` templates carry the `@SELF_MODULE@` / `@SELF_QUALNAME@` split
+- [ ] all 18 `.hpp.in` templates carry the `@SELF_MODULE@` / `@SELF_QUALNAME@` split
 - [ ] no `__init__.py` is installed anywhere under `xo/`, and nothing in the tree
       creates one — this is the settled decision, not a default to revisit
 - [ ] `xo-build --sweep` green, and `nix-build ci.nix -A xo-pyobject2` green —
@@ -248,7 +286,7 @@ probe.
       its installed dependencies in the same interpreter (the split-portion case
       measured above)
 
-Progress: `ls xo-py*/src/*/*.hpp.in | xargs grep -L SELF_QUALNAME | wc -l`
+Progress: `ls xo-py*/src/*/*.hpp.in xo-pyutil/example/*/*.hpp.in | xargs grep -L SELF_QUALNAME | wc -l`
 
 ## Notes
 
