@@ -345,12 +345,58 @@ Also updated, beyond the plan: 16 READMEs, including their
 `PYTHONPATH=~/local2/lib` instructions, which would otherwise have sent a
 reader to a directory holding no python modules.
 
-Deliberately NOT done: collapsing the 18 near-identical `.hpp.in` templates into
-one shared template beside `xo-cmake/share/xo-macros/python-utest.in`. It is the
-obvious follow-on and it would have fixed real drift (xo-pyexpression's header
-comment names a path, `src/xo_xo_pyexpression/`, that has never existed), but it
-forces normalizing the macro prefixes — `PYJIT_` vs `XO_PYJIT_`, `PYEXPRESSION_`
-vs `XO_PYEXPRESSION_` — which is a separate change with its own blast radius.
+### Follow-on, landed same day: one template, one macro prefix
+
+The 18 near-identical `.hpp.in` files are gone, replaced by
+`xo-cmake/share/xo-macros/pymodule-hpp.in` — one template for every module,
+beside `python-utest.in` and located the same way (umbrella source dir in a
+submodule build, `xo-cmake-config --pymodule-template` otherwise, a new flag
+alongside the existing four).
+
+This was initially deferred because it forces a decision the collapse cannot
+avoid: fifteen templates used `PYFOO_` and three used `XO_PYFOO_`, and a shared
+template must pick one. **RC chose `XO_`, because macros are always global.**
+The rationale is in the macro:
+
+```cmake
+# XO_-prefixed because these are preprocessor macros, which have no scope
+# -- every one of them is global to every translation unit that includes
+# the header.  Keyed on the SUBSYSTEM (pyfacet) rather than the module
+# (facet), so that xo-pyfacet's macros cannot be mistaken for, or collide
+# with, macros belonging to xo-facet itself.
+string(TOUPPER ${PROJECT_INCLUDE_STEM_DIR} _stem_upper)
+```
+
+The `XO` comes from `PROJECT_INCLUDE_STEM_DIR` — the same variable that supplies
+the `xo.` in `xo.facet` — rather than being hardcoded, so the macro namespace and
+the python namespace cannot drift apart.
+
+Verified: `xo-build --sweep` green both stages at the baseline, and
+`nix-build ci.nix -A {xo-pyutil,xo-pyreflect,xo-pyprintjson,xo-pyjit}` green.
+`xo-pyjit` is deliberately in that list — it is one of the three that already
+used `XO_`, so both sides of the rename are covered. (Editing `xo-cmake`
+rebuilds every derivation downstream of it, so those four are not cheap checks;
+they exercise the whole chain from scratch.)
+
+33 use sites renamed across 16 `.cpp` files. The drift that motivated this is
+gone with the copies: xo-pyexpression's header comment named a source path,
+`src/xo_xo_pyexpression/`, that has never existed. The shared template also
+carries a `#pragma once`, which none of the 18 had.
+
+**A generated-header macro rename propagates through the INSTALL tree, not the
+source tree.** Renaming and rebuilding one subsystem cannot work:
+
+```
+pyfacet.cpp:104: error: 'XO_PYINDENTLOG2_MODULE_NAME_STR' was not declared
+                        did you mean 'PYINDENTLOG2_MODULE_NAME_STR'?
+```
+
+`xo-pyfacet` reads `<xo/pyindentlog2/pyindentlog2.hpp>` from `~/local/include`,
+so the new macro name does not exist anywhere it can see until xo-pyindentlog2 is
+*reinstalled*. The dependency-ordered `--install` in `xo-build --sweep` is what
+resolves it; a per-subsystem build never would. Same species as the
+two-wrappers problem above: source tree and install tree disagreeing, with only
+one of them visible from where you are standing.
 
 Not covered by nix, and not coverable: `xo-pyfacet` and `xo-pyobject2` have no
 nix derivation, along with five other subsystems. See
