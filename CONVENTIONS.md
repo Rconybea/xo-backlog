@@ -166,7 +166,7 @@ with `-q -k` over `--all`.
 
 ```
 stage 1 (configure, build, install):  70 attempted: 70 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      70 attempted: 40 ok, 30 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      70 attempted: 41 ok, 29 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
 
@@ -188,6 +188,11 @@ suite was re-enabled. Its `add_subdirectory(utest)` had been commented out since
 2026-06-06 (`# test failing, temporarily removing`), so ~120 passing assertions
 in `parser.test.cpp` sat dark alongside the one genuinely failing case in
 `reader.test.cpp`. See `.xo-backlog/xo-reader/issues/01`.
+
+The 40/30 -> 41/29 step later the same day is `xo-pyreflect`, and it is the
+ordinary kind: a subsystem that had no tests acquiring some, when
+`xo.reflect.configure()` gained a subsystem-configuration contract worth
+asserting.
 
 Note these kinds of movement look alike in the ok count and are not: a subsystem
 appearing, a subsystem gaining tests, and a subsystem's tests being switched
