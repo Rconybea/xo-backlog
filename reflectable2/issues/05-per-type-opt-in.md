@@ -85,6 +85,76 @@ two-stage sweep is what distinguishes them, and its closing line
 `--sweep ok (build and utest)` is the thing to read. Stage 2 ran here and
 reported `0 failed` while stage 1 was broken.
 
+### Done: DString (2026-09-13)
+
+Renders as `"hello"`, from `xo-stringtable2` -- so the facet is proved to work
+from a subsystem other than object2, which is why DString was worth doing
+before `DList`.  Pinned in `xo-stringtable2/utest/json_render.test.cpp`.
+
+Two new edges, both measured legal first (`xo-deps --why` exit 1 in each
+direction before the change):
+
+```bash
+xo-deps --why=xo-stringtable2:xo-reflectable2   # was 1, now prints a path
+xo-deps --why=xo-printjson:xo-stringtable2      # 1 -- what makes the printer legal
+```
+
+Blast radius is small and worth recording, because the instinct is to assume
+otherwise: of the 13 subsystems downstream of xo-stringtable2, only
+`xo-tokenizer2` and `xo-pystringtable2` gain `xo-reflect`; the other 11 already
+had it.  `xo-printjson` reaches four (`xo-tokenizer2`, `xo-reactor2`,
+`xo-pyreactor2`, `xo-pystringtable2`).
+
+#### The recipe is FOUR pieces, not always four -- and which ones varies
+
+DString ends in a flexible array member (`char chars_[]`), whose type is
+incomplete, so `StructReflector` cannot take `&DString::chars_`.  The most a
+member-wise description could say is `{capacity_, size_}` -- the header,
+without the payload.
+
+So DString has **no `reflect_self()`**.  It reflects as the unreflected default
+(`AtomicTdx` -> `mt_atomic`, `xo-reflect/include/xo/reflect/Reflect.hpp:33`), a
+leaf, which is what `std::string` already reflects as.  That inverts DFloat's
+pairing: there the printer was a PREFERENCE overriding a faithful struct
+rendering, here the printer is the only thing that carries the characters.
+
+`DUniqueString` and `DStruct` will hit the same wall.  When a D-type's payload
+is not member-addressable, the atom-plus-printer shape is the answer, and the
+ticket's four-row table reads as at most four.
+
+#### A green test that was not testing its subject
+
+`with_facet<AFacet>::mkobj(p)` returns a **typed** `obj<AFacet,DRepr>`
+(`xo-facet/include/xo/facet/obj.hpp:165`), which `FopTdx` resolves at compile
+time via `fixed_child_td` and which therefore never reaches the rotation.
+
+`xo-object2/utest/json_render.test.cpp`'s `erased-DFloat-renders-the-same` used
+it, so despite its name it exercised the concrete path.  Measured, not
+inferred: commenting out `register_impl<AReflectable, DFloat>()` left it green.
+Erasure needs the conversion to `vt<AFacet>`:
+
+```cpp
+vt<AGCObject> gco = with_facet<AGCObject>::mkobj(DFloat::_box(alloc, 1.5));
+```
+
+Both tests corrected, and both falsified afterwards -- removing the
+`register_impl` line now throws `FacetRegistry::variant failed`, naming the
+representation, which is `03`'s intended failure.
+
+Worth generalising: **the falsification is the test of the test.** A rotation
+case that passes without its registration is not covering the rotation, and the
+name is the only thing that says otherwise.
+
+#### Escaping: a stale TODO and a real bug, neither stringtable2's
+
+`PrintJson.cpp:367` says `TODO: escapes special characters`.  It is stale --
+`JsonPrinter_string` renders through `quot()`, which escapes via ppsink.  But
+ppsink's vocabulary is not JSON's: an embedded NUL comes back as `\x00`, where
+JSON requires `\u0000`, so a strict parser rejects the output.  Pinned as
+OBSERVED in `DString-json-uses-size-not-nul` with a note saying a failure there
+means printjson grew a json escape, not that DString broke.  Filed as
+`.xo-backlog/xo-printjson/issues/04-json-string-escapes.md`.
+
 ## Candidates
 
 ```bash
@@ -96,8 +166,9 @@ Suggested order, chosen so nesting is proved early rather than last:
 
 1. `DFloat` — a leaf; proves the path end to end with the least surface
 2. `DList` — proves nesting, since its members are erased `obj<AGCObject>`
-3. `DString`, `DUniqueString` (xo-stringtable2) — proves the facet works from a
-   different subsystem than object2
+3. `DString` (DONE 2026-09-13), `DUniqueString` (xo-stringtable2) — proves the
+   facet works from a different subsystem than object2.  `DUniqueString` will
+   hit the same flexible-array wall; see the DString section above
 4. `DInteger`, `DArray`, `DDictionary`, `DStruct`, `DBoolean`, `DRuntimeError`
 
 Re-derive that list rather than trusting it; the D-type set moves.
