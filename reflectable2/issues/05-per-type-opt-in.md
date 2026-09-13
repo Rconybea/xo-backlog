@@ -27,6 +27,64 @@ erases, then fails the rotation at runtime -- see `03`'s outcome.
 grep -n 'register_impl' xo-object2/src/object2/SetupObject2.cpp
 ```
 
+**And usually a third piece: a json printer.** Reflection describes the
+representation faithfully, so a box reflects as a struct; whether it should
+READ as one in JSON is the printer's call. See the spec's "Where a type's json
+printer lives" — `xo-printjson` was levelled below xo-object2 on 2026-09-12 so
+that `SetupObject2::provide_json_printers` is possible at all.
+
+So, per type, up to four things:
+
+| | |
+|---|---|
+| `IReflectable_D<Foo>.hpp`/`.cpp` | generated from `idl/IReflectable_D<Foo>.json5` via `xo_add_genfacetimpl(... FACET_PKG xo_reflectable2 ...)`; delegates to a method ON the D-type, so the D-type gains `self_tp()` |
+| `D<Foo>::reflect_self()` | a `StructReflector`, which must live INSIDE the type -- `REFLECT_MEMBER` takes `&D<Foo>::member_`, and those are private |
+| `register_impl<AReflectable, D<Foo>>()` | in `SetupObject2::register_facets` |
+| a `JsonPrinter` | in `SetupObject2::provide_json_printers`, only where the faithful rendering is not the one you want |
+
+### Done: DFloat (2026-09-12)
+
+Renders as `1.5`. Both halves pinned in
+`xo-object2/utest/json_render.test.cpp`, and the pairing falsified: disabling
+the printer registration leaves `{"_name_": "DFloat", "value": 1.5}` -- which
+is reflection being honest, and the reason the printer exists.
+
+One thing the facet needed, found here: an implementation's generated header
+aliases only the types its FACET idl declares in `types:`, so
+`xo-reflectable2/idl/Reflectable.json5` had to declare `TaggedPtr` before
+`IReflectable_DFloat` would compile. Any later facet method with a non-builtin
+return type needs the same.
+
+#### The sweep earned its keep here
+
+Adding `xo_dependency()` lines to `src/object2/CMakeLists.txt` is not enough:
+xo-object2's `Config.cmake.in` was the HAND-maintained kind, so the two new
+dependencies never reached the exported config. The umbrella build is fine
+either way -- everything is in one cmake context -- and only the standalone
+build breaks:
+
+```
+ld: cannot find -lxo_reflectable2: No such file or directory
+ld: cannot find -lprintjson: No such file or directory
+```
+
+in xo-gc and xo-type, taking five more subsystems down as skipped. Fixed by
+converting xo-object2 to the generated `@XO_FIND_DEPENDENCY_BLOCK@` form rather
+than by adding two lines, so the parallel list cannot drift again:
+
+```bash
+grep -n 'find_dependency' ~/local/lib/cmake/xo_object2/xo_object2Config.cmake
+```
+
+**Every remaining type in this ticket touches the same file**, and most will
+add no new dependency -- but the first one that does would have hit this. See
+`.xo-backlog/generated-find-dependency/`.
+
+Worth stating plainly because a green umbrella build looks like success: the
+two-stage sweep is what distinguishes them, and its closing line
+`--sweep ok (build and utest)` is the thing to read. Stage 2 ran here and
+reported `0 failed` while stage 1 was broken.
+
 ## Candidates
 
 ```bash

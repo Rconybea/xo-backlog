@@ -52,6 +52,18 @@ three pieces.
 match `xo::reflect::SelfTagging::self_tp()`, which solves the same problem for
 non-fomo objects:
 
+**`self_tp()` is faithful to the REPRESENTATION, not to how the type should
+read.** A boxed `DFloat` hands back a TaggedPtr for the DFloat, describing a
+struct with a `value` member — it does NOT hand back its `double` to make the
+JSON prettier. Reflection says what is there; a consumer that wants a boxed
+float to read as a bare number installs its own `JsonPrinter`, which is where
+that judgement belongs. Settled 2026-09-12 (RC), against the alternative of
+letting each D-type choose what reflection sees: that alternative is cheaper
+per type and needs no printer, but it makes reflection lie about layout, and
+the lie is invisible at the point that matters. `xo-object2/utest/
+json_render.test.cpp` pins both halves — the struct shape AND the `1.5` —
+precisely because they say different things.
+
 ```bash
 cat xo-reflect/include/xo/reflect/SelfTagging.hpp
 grep -rn 'self_tp' xo-alloc/include xo-interpreter/include | head    # implementors
@@ -152,6 +164,28 @@ facet:
 find xo-*/include -name 'IPrintable_*.hpp' | head    # e.g. in xo-stringtable2, not xo-printable2
 grep -n '^xo-reflect$\|^xo-stringtable2$\|^xo-object2$' xo-cmake/etc/xo/subsystem-list
 ```
+
+## Where a type's json printer lives
+
+A printer is installed by calling `PrintJson::provide_printer`, which only a
+subsystem levelled ABOVE xo-printjson can do — that is how
+`xo::eigen::EigenUtil::provide_json_printers` works, xo-kalmanfilter being far
+above it. The fomo D-types sat BELOW printjson and so could not.
+
+Resolved 2026-09-12 by levelling `xo-printjson` down to just above
+xo-reflectable2, so xo-object2 and xo-stringtable2 register printers for their
+own types beside the types themselves — already the convention for facet
+implementations. The move cost nothing:
+
+```bash
+xo-deps --deps-of=xo-printjson --format=names -q    # deepest is xo-reflectable2
+xo-deps --users-of=xo-printjson --format=names -q   # shallowest user far above
+```
+
+Rejected: putting the D-type printers inside xo-printjson (points a serializer
+at the object model, and drags object2/gc/stringtable2 into every printjson
+consumer), and a glue subsystem above both (exists only to glue, grows with
+every D-type, and something has to call its init).
 
 ## Scope
 
