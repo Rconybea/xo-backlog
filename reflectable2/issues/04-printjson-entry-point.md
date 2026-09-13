@@ -1,6 +1,6 @@
 # 04 — printjson accepts a fomo object directly
 
-Status: open
+Status: done 2026-09-12
 Type: feature
 Milestone: reflectable2
 
@@ -73,3 +73,73 @@ grep -n '^xo-printjson$' xo-cmake/etc/xo/subsystem-list    # well above reflecta
   print alone
 - a struct with an erased fomo member round-trips to JSON with no printjson
   change beyond this entry point
+
+## Outcome (2026-09-12)
+
+Done. Both entry points, plus the library edge; xo-reflect still unmodified.
+
+### Templated on the facet, not fixed to AReflectable
+
+The ticket said `print_obj(obj<AReflectable>, ostream*)`. Changed after checking
+what callers actually hold, which is never that:
+
+```bash
+grep -n 'obj<AGCObject>' xo-object2/include/xo/object2/DList.hpp
+grep -n 'DObjectHandle<' xo-pyobject2/src/pyobject2/pyobject2.cpp
+#   DObjectHandle<APrintable, DFloat>
+```
+
+Fixing the signature to `obj<AReflectable>` would make every caller rotate
+through FacetRegistry by hand -- work of exactly the kind the entry point
+exists to remove. So:
+
+```cpp
+template <typename AFacet, typename DRepr>
+void print_obj(xo::facet::obj<AFacet, DRepr> x, std::ostream * p_os) const;
+```
+
+TWO template parameters, not one: `obj<AFacet>` means
+`obj<AFacet, DVariantPlaceholder>` and will not match a typed fop.
+
+### Fast path (RC), and what it costs
+
+`if constexpr (std::is_same_v<AFacet, AReflectable>)` goes straight to
+`x.self_tp()`: such an object already carries an AReflectable implementation in
+its iface, so no FacetRegistry probe and no pointer hop.
+
+**It needs a null guard.** An EMPTY `obj<AReflectable>` carries
+`IReflectable_Any`, whose `self_tp()` calls `_fatal()` -> `std::terminate()`.
+Guarded by `if (x.data())`, falling through to the generic path, which renders
+`{}` -- so the two agree on empty. Pinned by its own test.
+
+The two paths are NOT equivalent in one respect, which is what makes the fast
+path testable at all: comparing their OUTPUT cannot show it is taken, since
+agreeing is the point. They differ in that `self_tp()` needs no registry entry
+while the rotation does, so the discriminating test uses a representation that
+has the `FacetImplementation` mapping and deliberately NO `register_impl<>()`:
+the fast path prints it, the generic route throws.
+
+Falsified by replacing the condition with `if constexpr (false)`: that test goes
+red with `DRepr.tname _%sentinel%_`, the unregistered type's name.
+
+### Validation entry point
+
+`validate_tp(TaggedPtr)` plus `validate_obj`, body a no-op visitor over
+`TaggedPtr::visit_tree_preorder` -- a reuse of reflect's walker, not a second
+traversal. The partial-output problem it solves is pinned both ways in one test:
+`validate_obj` on a bad graph throws having written nothing, while `print_obj`
+on the same graph throws with a NON-empty stream.
+
+### Edges
+
+The library edge `printjson -> xo_reflectable2` replaces `02`'s test-only one,
+and printjson's Config.cmake.in is already the generated
+`@XO_FIND_DEPENDENCY_BLOCK@` form, so one `xo_dependency` line covers cmake and
+the exported config alike. In nix that moves xo-reflectable2 from `doCheck`
+inputs to `propagatedBuildInputs`.
+
+The utest keeps a test-only xo-printable2 dependency, for the
+printable-but-not-reflectable representation.
+
+**Verified:** 19 assertions in 12 cases; `nix-build ci.nix -A xo-printjson` and
+`-A xo-pyprintjson` green, check phase running.
