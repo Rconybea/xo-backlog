@@ -162,11 +162,11 @@ That is the whole recipe, as of 2026-08-10. It runs two stages — configure /
 build / install with `--with-utests --with-examples`, then `--utest` — both
 with `-q -k` over `--all`.
 
-**Expect, as of 2026-09-12:**
+**Expect, as of 2026-09-13:**
 
 ```
 stage 1 (configure, build, install):  70 attempted: 70 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      70 attempted: 39 ok, 31 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      70 attempted: 40 ok, 30 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
 
@@ -181,9 +181,18 @@ until 2026-09-08, then `68 attempted: 37 ok, 31 with no tests` until
 2026-09-12, then `69 attempted: 38 ok, 31 with no tests` within that same day —
 the step to 70 is `xo-reflectable2`, scaffolded for milestone `reflectable2`,
 which then moved from the no-tests column to the ok column when it acquired a
-utest, leaving the attempted total alone. Note those two kinds of movement look
-alike in the ok count and are not: one is a subsystem appearing, the other a
-subsystem gaining tests. The seven subsystems added over the first of those
+utest, leaving the attempted total alone. The 39/31 -> 40/30 step on 2026-09-13
+is `xo-reader`, and it is a THIRD kind of movement again: not a subsystem
+appearing, not one gaining tests as they were written, but one whose existing
+suite was re-enabled. Its `add_subdirectory(utest)` had been commented out since
+2026-06-06 (`# test failing, temporarily removing`), so ~120 passing assertions
+in `parser.test.cpp` sat dark alongside the one genuinely failing case in
+`reader.test.cpp`. See `.xo-backlog/xo-reader/issues/01`.
+
+Note these kinds of movement look alike in the ok count and are not: a subsystem
+appearing, a subsystem gaining tests, and a subsystem's tests being switched
+back on. Only the last of the three means the number was previously LYING about
+coverage rather than reporting it. The seven subsystems added over the first of those
 steps are
 
 ```bash

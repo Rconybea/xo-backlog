@@ -235,6 +235,24 @@ for f in pkgs/xo-*.nix; do grep -q doCheck $f || continue
 #   xo-statistics xo-subsys xo-tokenizer xo-websock xo-webutil
 ```
 
-Not touched here — the seven new derivations simply do not repeat it. Worth its
-own ticket: unlike this one, fixing it will surface tests that have never run
-and may not pass.
+**But only 3 of those 22 lose anything.** The other 19 register no tests even
+with `ENABLE_TESTING` on, so the flag would change nothing there. Measured
+against the sweep's own no-tests list rather than against the presence of a
+`utest/` directory:
+
+```
+has tests, nix runs them         : 36
+has tests, nix runs NONE         :  3  -> xo-randomgen xo-tokenizer xo-webutil
+no tests, flag missing, harmless : 19
+```
+
+Correcting an earlier reading in this ticket, which said 22 and implied all of
+them were losing coverage. 22 is the count of a *pattern*; 3 is the count of a
+*defect*.
+
+Not touched here — the seven new derivations simply do not repeat it, and
+`xo-reader` was kept out of the set when its suite was restored
+(`.xo-backlog/xo-reader/issues/01`). Worth its own ticket, together with
+`xo-websock`, whose `utest/` is still commented out of its build
+(`xo-websock/CMakeLists.txt:23`) with no reason recorded — the same shape as the
+xo-reader ticket, and quite possibly the same story.
