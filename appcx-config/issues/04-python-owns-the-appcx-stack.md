@@ -1,6 +1,6 @@
 # 04 — python should own its appcx stack, not a module-level static
 
-Status: open
+Status: open (python side done 2026-09-13; the named singletons remain)
 Type: refactor
 
 Each py module keeps its context in a process-global `unique_ptr`, reachable
@@ -94,10 +94,10 @@ right.
 
 ## Consequences to handle
 
-- **`AllocFlywheel::make_app` needs `py::keep_alive<0,1>`.** It takes
-  `const FacetAppcx &` and flywheels retain it. Safe today only because the
-  static guarantees the appcx outlives everything; once python owns the appcx,
-  dropping `cx` while a flywheel lives dangles.
+- **`AllocFlywheel::make_app` needs `py::keep_alive<0,1>`.** DONE. It stores
+  `const FacetAppcx & facet_appcx_`, so a flywheel must not outlive the context
+  it came from. This was latent until the conversion and became live with it --
+  while the module owned the context it outlived everything by construction.
 - **Never two owners for one Appcx.** One living inside a c++ `AppContext`
   reaches python by `reference`/`reference_internal` only, never
   `take_ownership`. The current code draws this line correctly; keep it.
@@ -147,11 +147,62 @@ the route.
 `xo-pyfacet/src/pyfacet/pyfacet.cpp`, and any py module that grows an appcx
 after them.
 
+## What landed, 2026-09-13
+
+Both `xo-pyindentlog2` and `xo-pyfacet` converted; the `appcx_` grep is empty.
+Each module's `configure_once()` returns `std::unique_ptr<Appcx>`, both
+`appcx()` accessors are gone, and what remains of the one-shot is a
+function-local `bool` -- module OWNERSHIP eliminated, module state reduced to a
+flag.
+
+The guard's comment now names the singletons that make it necessary
+(`PpSinkFactory`/`TempArena` for indentlog2, `FacetRegistry`/`TypeRegistry` for
+facet), which is the concrete retirement condition: the flag goes when THOSE
+go.
+
+**`configure_all` had a dangling bug the moment pyindentlog2 converted.** It
+cast a TEMPORARY `py::object` to `Indentlog2Appcx &`; once that object owns the
+context, it dies at the end of the full expression. Fixed by holding the
+`py::object` in a local and calling `py::detail::keep_alive_impl(f_obj, il_obj)`
+by hand -- the patient is a local here, not an argument, so the declarative form
+does not apply.
+
+### Testing keep_alive: two wrong ways first
+
+Worth recording, because the obvious tests are worthless:
+
+1. **Reading the context after dropping the handle passes either way.** Without
+   the keep_alive the c++ object is freed, and reading it is a use-after-free
+   that returns the right bytes. Measured, not assumed.
+2. **python's gc cannot see the reference.** pybind stores the patient in its
+   own internals map, so `gc.get_objects()` and `gc.get_referents(cx)` show
+   nothing.
+
+What discriminates is a **weakref on the python object**: alive with the
+mechanism, collected without. Each keep_alive now has a test that goes red when
+that one mechanism is removed, and only that one -- checked for all three
+(`configure`, `configure_all`, `make_app`).
+
+A third failure mode is worth naming: while xo_pyindentlog2 still owned its
+context, a correct test of pyfacet's keep_alive STILL passed, because dropping
+a non-owning wrapper collects nothing. Converting one module without the other
+leaves a mechanism that cannot be verified -- which is why they went together.
+
 **Done when:**
-- the `appcx_` grep above returns empty
-- `configure()` returns a holder; the module-level `appcx()` accessor is gone,
-  along with the test that only exercised its error path
-- a python test builds TWO independent stacks in one process and shows their
-  contexts are distinct objects -- the property the static made impossible, and
-  therefore the proof this was worth doing
-- `FacetRegistry::instance(capacity)` rejects a second, different capacity
+- ~~the `appcx_` grep above returns empty~~ -- done
+- ~~`configure()` returns a holder; the module-level `appcx()` accessor is
+  gone~~ -- done; the test that only exercised its error path is replaced by one
+  asserting neither module has the accessor
+- ~~each keep_alive has a test that fails without it~~ -- done, via weakref
+- `FacetRegistry::instance(capacity)` rejects a second, different capacity.
+  STILL OPEN, and the last item: a c++ caller gets no warning today, and the
+  python guard is what hides it.
+
+**Not achievable at this layer, and removed from scope:** a python test building
+two INDEPENDENT stacks. `FacetAppcx` is a view over `FacetRegistry::instance()`
+/ `TypeRegistry::instance()`, so a second context would be a second view of one
+registry with its config silently ignored -- which is exactly what
+`configure_once` refuses. Independent stacks are gated on those singletons
+going, not on anything in this ticket. Recorded rather than quietly dropped:
+the original done-when assumed python ownership implied independence, and it
+does not.
