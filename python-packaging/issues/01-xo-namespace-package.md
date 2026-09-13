@@ -1,6 +1,6 @@
 # 01 — python extension modules should be `xo.foo`, not `xo_pyfoo`
 
-Status: open (design settled 2026-09-13; mechanism probed 2026-09-13, works)
+Status: fixed 2026-09-13
 Type: design / build
 Raised: RC, 2026-09-13
 
@@ -276,17 +276,85 @@ probe.
 
 ## Done when
 
-- [ ] `xo_pybind11_library()` emits `xo/<name>.cpython-*.so` in build and install trees
-- [ ] all 18 `.hpp.in` templates carry the `@SELF_MODULE@` / `@SELF_QUALNAME@` split
-- [ ] no `__init__.py` is installed anywhere under `xo/`, and nothing in the tree
+- [x] `xo_pybind11_library()` emits `xo/<name>.cpython-*.so` in build and install trees
+- [x] all 18 `.hpp.in` templates carry the `@SELF_MODULE@` / `@SELF_QUALNAME@` split
+- [x] no `__init__.py` is installed anywhere under `xo/`, and nothing in the tree
       creates one — this is the settled decision, not a default to revisit
-- [ ] `xo-build --sweep` green, and `nix-build ci.nix -A xo-pyobject2` green —
-      nix is the only check that exercises an installed layout as a consumer would
-- [ ] a satellite build of one py subsystem imports its own fresh module *and*
+- [x] `xo-build --sweep` green, and a nix build green — nix is the only check
+      that exercises an installed layout as a consumer would.
+      **Not `-A xo-pyobject2`:** that attribute does not exist. The five newest
+      py subsystems have no nix package at all —
+
+      ```bash
+      comm -13 <(nix-instantiate --eval -E '(builtins.attrNames (import ./ci.nix {}))' \
+                   | tr -d '[]"' | tr ' ' '\n' | grep '^xo-py' | sort) \
+               <(grep '^xo-py' xo-cmake/etc/xo/subsystem-list | sort)
+      #   xo-pyarena xo-pyfacet xo-pyindentlog2 xo-pyobject2 xo-pyreactor2
+      ```
+
+      so use `xo-pyutil` (it builds the example module through the changed
+      install path) plus `xo-pyreflect` and `xo-pyprintjson`
+- [x] a satellite build of one py subsystem imports its own fresh module *and*
       its installed dependencies in the same interpreter (the split-portion case
       measured above)
 
 Progress: `ls xo-py*/src/*/*.hpp.in xo-pyutil/example/*/*.hpp.in | xargs grep -L SELF_QUALNAME | wc -l`
+
+## Landed 2026-09-13
+
+Verified:
+
+```
+xo-build --sweep
+#   stage 1: 70 attempted: 70 ok, 0 with no tests, 0 failed, 0 skipped
+#   stage 2: 70 attempted: 39 ok, 31 with no tests, 0 failed, 0 skipped
+#   --sweep ok (build and utest)
+
+for a in xo-pyutil xo-pyreflect xo-pyprintjson; do nix-build ci.nix -A $a --no-out-link; done
+#   all ok; e.g. lib/python/xo/reflect.cpython-312-x86_64-linux-gnu.so
+
+./xo-pyfacet/.build/xo-python -c 'import xo.facet, xo.object2'
+#   facet   from xo-pyfacet/.build/python/xo/   (fresh build wins)
+#   object2 from ~/local/lib/python/xo/         (install tree)
+#   portions: 2
+```
+
+Three things the plan did not anticipate:
+
+**There are two wrappers, not one.** `xo_emit_python_wrapper()` generates the
+build-tree `xo-python`, but `xo-cmake/bin/xo-python.in` is a separate
+hand-written template for the *installed* one, and it hardcoded `lib`. Its own
+comment warned about exactly this — *"Move both together, or neither."* Moved
+both. A change that touched only the generated one would have left every
+installed `xo-python` pointing at a directory with no modules in it.
+
+**The C++ call sites needed no edits.** `PYBIND11_MODULE(PYFACET_MODULE_NAME(), m)`
+and `PYFACET_IMPORT_MODULE()` are unchanged text that now expands differently:
+
+```
+#define PYFACET_MODULE_NAME()   facet        /* init symbol */
+#define PYFACET_MODULE_NAME_STR "xo.facet"   /* import name */
+```
+
+**Six module docstrings named things that did not exist** — `xo.filter` for
+xo-pykalmanfilter, `xo.web_util` for xo-pywebutil, `xo-reflect`/`xo-jit`/
+`xo-expression` in dash form. Harmless while nothing read them as names; wrong
+about a real name now. Corrected.
+
+Also updated, beyond the plan: 16 READMEs, including their
+`PYTHONPATH=~/local2/lib` instructions, which would otherwise have sent a
+reader to a directory holding no python modules.
+
+Deliberately NOT done: collapsing the 18 near-identical `.hpp.in` templates into
+one shared template beside `xo-cmake/share/xo-macros/python-utest.in`. It is the
+obvious follow-on and it would have fixed real drift (xo-pyexpression's header
+comment names a path, `src/xo_xo_pyexpression/`, that has never existed), but it
+forces normalizing the macro prefixes — `PYJIT_` vs `XO_PYJIT_`, `PYEXPRESSION_`
+vs `XO_PYEXPRESSION_` — which is a separate change with its own blast radius.
+
+Not covered by nix, and not coverable: `xo-pyfacet` and `xo-pyobject2` have no
+nix derivation, along with five other subsystems. See
+`.xo-backlog/nix-packaging/issues/03`, raised from this work.
 
 ## Notes
 
