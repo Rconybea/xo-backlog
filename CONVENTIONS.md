@@ -165,8 +165,8 @@ with `-q -k` over `--all`.
 **Expect, as of 2026-09-13:**
 
 ```
-stage 1 (configure, build, install):  70 attempted: 70 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      70 attempted: 42 ok, 28 with no tests, 0 failed, 0 skipped
+stage 1 (configure, build, install):  71 attempted: 71 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      71 attempted: 43 ok, 28 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
 
@@ -206,8 +206,11 @@ comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort
 # xo-callback2 xo-pyarena xo-pyfacet xo-pyindentlog2 xo-pyobject2 xo-pyreactor2 xo-reactor2
 ```
 
-**70 swept, 71 listed, and that one gap is deliberate:** `--all` excludes the
-`xo-cmake` bootstrap by design.
+**71 swept, 72 listed, and that one gap is deliberate:** `--all` excludes the
+`xo-cmake` bootstrap by design. The 70 -> 71 step on 2026-09-13 is
+`xo-pystringtable2`, and it is the fourth kind of movement again: a subsystem
+APPEARING, which moves the attempted total -- the three earlier steps that day
+all left it at 70.
 
 There were two gaps until 2026-09-12. `--all` also skipped `xo-callback2`,
 because xo-build reads the INSTALLED subsystem list, not the one in the source
