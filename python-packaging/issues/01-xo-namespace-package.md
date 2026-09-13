@@ -1,6 +1,6 @@
 # 01 — python extension modules should be `xo.foo`, not `xo_pyfoo`
 
-Status: open (design settled 2026-09-13; implementation unverified)
+Status: open (design settled 2026-09-13; mechanism probed 2026-09-13, works)
 Type: design / build
 Raised: RC, 2026-09-13
 
@@ -166,9 +166,10 @@ All of it inside `xo_pybind11_library()` — no subsystem `CMakeLists.txt` edits
 
 - cmake **target** name stays `xo_pyfacet`. Only the artifact moves:
   `OUTPUT_NAME facet`, `LIBRARY_OUTPUT_DIRECTORY <bindir>/python/xo`.
-  Unverified: that `pybind11_add_module` respects `OUTPUT_NAME` cleanly
-  alongside the `SUFFIX` it sets. Check this first on one module — it is the
-  cheapest thing that could sink the approach.
+  **Verified 2026-09-13** — see the feasibility probe below. `OUTPUT_NAME` is
+  untouched by pybind11: both of its tool paths set only `PREFIX`,
+  `DEBUG_POSTFIX` and `SUFFIX` (`pybind11Tools.cmake:149` and
+  `pybind11NewTools.cmake:334`, pybind11 2.13.6), so the two do not collide.
 - install destination moves from `lib/` to a real site dir. Today the `.so`
   sits beside `libxo_facet.so`:
 
@@ -185,6 +186,55 @@ All of it inside `xo_pybind11_library()` — no subsystem `CMakeLists.txt` edits
   comment about a partial `PYTHONPATH` failing outright still applies and should
   survive the edit.
 - 11 python import lines across the utests.
+
+## Feasibility probe (2026-09-13, pybind11 2.13.6, python 3.12)
+
+Built two throwaway modules to test the three mechanisms this ticket depends on
+at once. All three work; nothing had to be worked around.
+
+```cmake
+pybind11_add_module(xo_pyfacet MODULE mod.cpp)     # target keeps the build name
+set_target_properties(xo_pyfacet PROPERTIES
+    OUTPUT_NAME facet
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/python/xo)
+```
+
+with `PYBIND11_MODULE(facet, m)` in `mod.cpp`, and a second module
+`PYBIND11_MODULE(object2, m)` whose body does
+`py::module_::import("xo.facet")` **at init**, emitted into a *different*
+directory (`python2/xo`) to reproduce the split-portion case.
+
+```
+build/python/xo/facet.cpython-312-x86_64-linux-gnu.so     <- OUTPUT_NAME honoured
+```
+
+```bash
+PYTHONPATH=build/python python3 -c 'import xo.facet; print(xo.facet.__name__)'
+#   xo.facet
+
+# the satellite-build shape: two portions, sibling import at module init
+PYTHONPATH=build/python2:build/python python3 -c \
+  'import xo.object2; print(xo.object2.sibling_says, len(list(__import__("xo").__path__)))'
+#   xo.facet speaking 2
+```
+
+Confirmed by this:
+
+1. **`OUTPUT_NAME` and `LIBRARY_OUTPUT_DIRECTORY` both apply** to a
+   `pybind11_add_module` target, and the cmake target name stays free to remain
+   `xo_pyfacet`.
+2. **`PYBIND11_MODULE(facet, m)` is enough** — the `xo.` prefix comes from the
+   directory, and `__name__` reports the full dotted `xo.facet`.
+3. **A sibling import at module-init time crosses portions.** `xo.object2` in
+   one portion imported `xo.facet` in another, during its own initialisation.
+   That is the exact shape of `pyfacet.cpp:104` under a satellite build, and it
+   was the mechanism most likely to fail.
+
+Still inferred, not measured: that pybind11's cross-module type registry and
+identity map are unaffected (see above) — the probe modules share no C++ types.
+The existing `test_context_keeps_its_dependency_alive` spans two modules and
+would notice, so this resolves itself at pilot time rather than needing its own
+probe.
 
 ## Done when
 
