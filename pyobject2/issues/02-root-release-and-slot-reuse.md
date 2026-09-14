@@ -183,13 +183,38 @@ to undo a falsification.** It restores from HEAD, which discards the work in
 progress; two of the three falsifications above were first run against a stale
 binary and proved nothing. Copy the file aside first.
 
-### Pool report: three -> five
+### The weak set was retired instead of being made symmetric
 
-`["store", "strong", "strong-free", "weak", "weak-free"]`. The free lists take
-their names from the sets they serve, so a caller that named its root sets gets
-matching names without being told the rule. `test_reports_the_three_pools_in_order`
-renamed and updated; `xo-pyobject2/example/ex1/ex1.py` pins nothing but its
-comment said "three", and was corrected.
+The design said "strong and weak are treated symmetrically", and it was
+implemented that way -- then the weak half was deleted outright (`802ddce5`),
+along with `weak_refs_` itself, not merely its free list.
+
+That is the better answer, and the symmetry is what exposed it: writing
+`add_weak_ref`/`remove_weak_ref`/`weak_root_count` and a second free list made
+it plain that nothing anywhere called any of them. The weak set was dead code
+with a promise attached ("sent to a well-defined sentinel state whenever
+storage_ is reclaimed"), and nothing implemented the promise either.
+
+So `AllocFlywheel::make_app` now takes two ArenaConfigs, not three.
+
+Worth generalising alongside the `remove_*_ref` finding above, because it is the
+same shape seen from the other side: **both halves of this ticket's surface
+turned out to be uninstantiated code that read as working.** One did not
+compile; the other compiled and was unreachable. A doc comment was the only
+evidence for either.
+
+### Pool report: three pools, different ones
+
+`["store", "strong", "strong-free"]` -- the count is unchanged from before this
+ticket, but `weak` has been replaced by `strong-free`. The free list takes its
+name from the set it serves, so a caller that named its root set gets a matching
+name without being told the rule.
+
+`test_reports_the_three_pools_in_order` updated in place. Three places carried
+prose that had to follow the same path twice -- to five, then back to three:
+`AllocFlywheel::visit_pools`'s doc comment, pyfacet's `visit_pools` docstring,
+and `xo-pyobject2/example/ex1/ex1.py`'s comment. None is pinned by a test, which
+is exactly why all three went stale; re-read them if the pool set moves again.
 
 ### Not fixed here: exhaustion is still UB
 

@@ -77,9 +77,6 @@ it in passing:
 (1) looks right for now — the set is configurable, so a caller that hits the
 limit has a knob — but it should be decided rather than defaulted into.
 
-Whatever is chosen, `add_weak_ref` has the same shape and wants the same
-treatment.
-
 ## Done when
 
 - the script above raises, or returns a handle the caller can test, instead of
