@@ -75,32 +75,154 @@ does not happen yet. The frame in `xo-object2/utest/flywheel_frame.test.cpp`
 was the first thing to compare an id computed in a pybind module against a name
 registered outside one.
 
-## Directions, none settled
+## Design — settled 2026-09-14
 
-1. **Export the symbol from the modules.** Annotate `typerecd::require_next_id`
-   (or the whole `typeseq` machinery) with
-   `__attribute__((visibility("default")))` so `-fvisibility=hidden` does not
-   demote it. Smallest change; needs checking that it survives on macOS too,
-   where the fleet has a second host (`.xo-backlog/` host topology note).
-2. **Move id allocation behind a compiled boundary.** Give `typeseq` a
-   non-inline `require_next_id()` defined in a library, so there is nothing for
-   a module to copy. Costs `xo-reflectutil`'s header-only property, which is
-   deliberate — see the reflectutil-vs-reflect note.
-3. **Allocate ids through `TypeRegistry`**, which is already shared and already
-   the thing that maps id to name. Largest change, and arguably where this
-   belongs: the counter and the registry are the same concern.
+Both statics are duplicated, not just the counter:
 
-(3) looks most correct, (1) is the one-line stopgap. Do not pick by size alone:
-whichever is chosen has to hold for every pybind module, so the check below
-belongs in the tree either way.
+```bash
+nm -C .build/python/xo/object2*.so | grep -E "typerecd::recd<.*DFloat>"
+#   b ...::id          d ...::s_armed      <- per-module
+nm -C .build/xo-object2/src/object2/libxo_object2.so | grep -E "typerecd::recd<.*DFloat>"
+#   u ...::id          u ...::s_armed      <- merged
+```
+
+So a partial fix is worse than none. Sharing only `s_next_id` would leave the
+per-type memo private, `DFloat` would arm once per module and draw TWO ids from
+one counter, and the same type would have two ids in one process. Today each
+module is at least self-consistent.
+
+The fix therefore has to stop identity depending on symbol merging at all,
+rather than repair the merging.
+
+### Shape
+
+**A shared table keyed by type NAME is the source of truth; the per-type static
+is demoted to a cache.** A duplicated cache is then harmless -- it caches the
+same answer.
+
+1. **`xo-reflectutil` gains a `src/`** -- its first compiled part.
+   - `int32_t typeseq_id_for(std::string_view name)`, non-inline.
+   - the installable implementation pointer, defined THERE, not in a header.
+   - phase (a): a bootstrap `std::vector`, O(n) lookup, no arena, usable during
+     dynamic initialization.
+   - `typeseq_install_registry(fn)` to swing the pointer.
+
+2. **`recd<T>()` becomes a cache:**
+
+   ```cpp
+   template <typename T>
+   static typerecd recd() {
+       static const int32_t id = typeseq_id_for(xo::reflect::type_name<T>());
+       return typerecd(id, xo::reflect::type_name<T>());
+   }
+   ```
+
+3. **`TypeRegistry` moves from `xo-facet` to `xo-arena`**, and gains a
+   `DArenaHashMap` for name -> id beside its existing id -> name vector. The move
+   is clean: its includes are `typeseq`, `DArenaVector` and three ppsink
+   headers, all at or below arena. `FacetRegistry` includes it and simply
+   reaches down.
+
+4. **`xo-arena` acquires appcx machinery** for TypeRegistry setup. Cheap:
+   `AppConfig`/`AppContext` live in `xo-subsys`, which arena already depends on.
+   `ArenaAppcx` becomes the bottom of the context chain, displacing
+   `Indentlog2Appcx` -- about 10 tag-list sites across 7 files, mostly test
+   mains plus `xo-interpreter2/src/skrepl/skreplxx.cpp`.
+   `FacetConfig::type_registry_capacity()` moves to arena's config, which is a
+   better home for an arena-backed structure anyway.
+
+5. **Upgrade at `ArenaAppcx` construction:** copy every (name, id) the bootstrap
+   already assigned into the hashmap VERBATIM, then swing the pointer.
+
+### Invariants
+
+1. **Ids are never reassigned.** The upgrade is additive. Measured: a trivial
+   program linking libxo_object2 draws 12 ids before `main()` begins --
+
+   ```bash
+   # first id drawn inside main() was 12, not 0
+   ```
+
+   all of them already cached in per-type statics. Reassignment would silently
+   invalidate every one.
+
+2. **The upgrade precedes threads.** Stated as the model, so the pointer needs
+   no atomic.
+
+3. **Ids stay dense and sequential**, so `TypeRegistry::_id2name`'s
+   `DArenaVector` indexing by `seqno()` keeps working.
+
+4. **The table owns its keys.** `type_name_holder<T>::value` is itself a
+   per-module header static, so names live at different addresses in different
+   modules. The table copies into its own arena rather than storing a borrowed
+   `string_view`.
+
+5. **Internal-linkage types are not name-keyed.** A name containing
+   `{anonymous}` draws from the counter WITHOUT being inserted. Two TUs'
+   anonymous types share a spelling but are different types:
+
+   ```
+   TU a:  namespace { struct Widget { int a; }; }        -> "{anonymous}::Widget"
+   TU b:  namespace { struct Widget { double x, y; }; }  -> "{anonymous}::Widget"
+   ```
+
+   Measured 2026-09-14, same key. Excluding them preserves today's behaviour,
+   which is CORRECT for them -- a type with internal linkage cannot be the same
+   type in two modules, so it does not need a global id. 12 test files use the
+   pattern with the facet machinery, so this is not hypothetical.
+
+### The trap this design exists to avoid
+
+**The implementation pointer must not be a static in a header.** It would be
+duplicated per module under `-fvisibility=hidden` exactly as `s_next_id` is
+today: each module would get its own pointer and its own bootstrap vector,
+module A would upgrade while module B never did, and the original bug would
+return wearing a different hat -- with everything looking correct.
+
+That is the whole reason reflectutil gains a compiled part. The note that
+"reflectutil stays header-only by design (no static tables)" is the premise this
+bug falsifies: header statics do NOT stay single across pybind modules, so
+header-only-with-statics was never delivering what it promised.
+
+### Rejected, with reasons
+
+- **Default-visibility annotations.** Would restore `u`, header-only preserved,
+  one line. But correctness stays a linker property: every new pybind module is
+  hidden-by-default again and nothing notices -- which is how this went
+  unobserved since the first python module. Also needs separate verification on
+  the macOS host, where Mach-O has no `u` binding, and interacts with python
+  loading modules `RTLD_LOCAL`. Reasonable as a stopgap, not as the fix.
+- **`TypeRegistry` allocates, staying in xo-facet.** Right concept, wrong
+  direction: `xo-facet` depends on `xo-reflectutil`, so typeseq calling
+  TypeRegistry inverts levelization. Moving the registry down is what makes the
+  concept available.
+- **Hash the name instead of allocating.** No shared table needed, but breaks
+  the dense-id property `TypeRegistry` indexes on, and trades a visible
+  collision for a silent one.
+- **Key identity on `std::type_index`.** Already considered and rejected by the
+  author -- `typeseq.hpp:30` records that "built-in typeinfo may return false
+  negatives across library boundaries when using clang".
 
 ## Done when
 
-- `nm -C` shows no local copy of the counter in any `.build/python/xo/*.so`
 - the same type reports the same `typeseq` from C++ and from python
-- a frame from python names its types instead of `_%sentinel%_`
-- a test asserts it, at a level where both a library and a pybind module are
-  loaded -- which is a python test, e.g. in `xo-pyobject2/utest`
+- a frame from python names its types instead of `_%sentinel%_`, asserted in a
+  python test -- the level where both a library and a pybind module are loaded
+  (e.g. `xo-pyobject2/utest`)
+- **ids survive the upgrade**: draw an id, install the hashmap, assert the same
+  number comes back. The bootstrap is not observable any other way, and this is
+  the invariant whose violation is silent
+- an anonymous-namespace type in two TUs of one binary still gets two ids
+- the regression check is in the tree, because neither the fix nor a review
+  stops a future module hiding something else:
+
+  ```bash
+  nm -C .build/python/xo/*.so | grep -E "^.* b .*(require_next_id|typerecd::recd).*"
+  ```
+
+  Empty is the passing condition. Note this must keep passing even after the
+  fix -- the per-type cache is still duplicated, deliberately; what must not
+  reappear is a duplicated SOURCE of ids
 
 ## Provenance
 
