@@ -1,6 +1,6 @@
 # 02 — a handle never drops its root, and slots are never reused
 
-Status: open
+Status: done
 Type: bug
 Milestone: pyobject2
 
@@ -112,6 +112,90 @@ grep -n 'bool contains' -A 2 xo-facet/include/xo/facet/handlestore/DHandleStore.
 Any member that walks `strong_refs_`/`weak_refs_` is a candidate; those two are
 the ones present as of 2026-09-12, so re-run that grep rather than trusting
 this list.
+
+
+## Outcome (2026-09-13)
+
+Implemented as designed, with two corrections to the design's premises and one
+addition it did not anticipate.
+
+### Correction: `remove_*_ref` did not compile
+
+The ticket read the release half as present-but-incomplete ("it only nulls the
+slot"). That is true of the source text and false of the code: `obj<>` has no
+`clear()`, only `reset()`. Both `remove_strong_ref` and `remove_weak_ref` are
+non-template members of a class template, so they were never instantiated --
+nothing called them -- and the mismatch sat there unreported.
+
+```bash
+grep -rn 'remove_strong_ref' --include=*.cpp --include=*.hpp xo-*/   # only DHandleStore, before this change
+```
+
+So item 6's premise was doubly wrong: the emptiness predicate it proposed to
+ADD already existed (`OObject::operator bool`, data_ != nullptr), and the
+`.clear()` it assumed present did not. Net effect on `obj<>`: **no change at
+all**. `DHandleStore` now calls `reset()`, and its documented contract says
+`reset()` + contextual-bool rather than `clear()`.
+
+Worth generalising: a method on a class template that nothing calls is not
+tested, not compiled, and not evidence of anything. The doc comment describing
+its requirements was the only thing anyone had read.
+
+### Addition: the handle is move-only
+
+Not in the design, and necessary. `~ObjectHandleBase` now releases
+`object_ix_`, so a COPY releases the same index twice. The second release can
+land after the slot has been reused, handing one slot to two live handles --
+and `DHandleStore`'s guard cannot see it, because by then the slot is
+legitimately occupied.
+
+The per-index guard (item 6) and move-only ownership answer different halves:
+the guard catches a repeated release of a slot still free, move-only prevents a
+second releaser existing. Both are needed; neither substitutes.
+
+pybind11 needs only the move, for by-value returns from the `make` factories.
+
+### Free list sizing is derived from capacity(), not from the config
+
+Item 3 said the capacity is derived from the ArenaConfig. It has to be derived
+from the constructed vector's `capacity()` instead: an arena rounds its
+reservation up to a page, so `DArenaVector::capacity()` (`reserved()/sizeof(T)`)
+exceeds what the requested size implies. Sizing off the request leaves the free
+list short by that rounding, and release stops being infallible.
+
+### Falsified, each guard separately
+
+Removing any one of these breaks a test, and restoring it makes them green
+again:
+
+| removed | result |
+|---|---|
+| the emptiness guard in `_remove_ref` | `double-release-does-not-share-a-slot` fails |
+| the release in `~ObjectHandleBase` | 3 of 4 C++ cases fail; the python suite SEGFAULTS |
+| disarming the source in the move ctor | `objecthandle-move-does-not-double-release` fails |
+
+The python segfault is the ticket's bug reproduced exactly: the 20000-iteration
+loop exhausts the root set, `add_strong_ref` returns a null slot pointer, and
+`_native()` dereferences it.
+
+Method note, learned the hard way here: **do not use `git checkout -- <file>`
+to undo a falsification.** It restores from HEAD, which discards the work in
+progress; two of the three falsifications above were first run against a stale
+binary and proved nothing. Copy the file aside first.
+
+### Pool report: three -> five
+
+`["store", "strong", "strong-free", "weak", "weak-free"]`. The free lists take
+their names from the sets they serve, so a caller that named its root sets gets
+matching names without being told the rule. `test_reports_the_three_pools_in_order`
+renamed and updated; `xo-pyobject2/example/ex1/ex1.py` pins nothing but its
+comment said "three", and was corrected.
+
+### Not fixed here: exhaustion is still UB
+
+Holding more live handles than the root set has slots silently truncates and
+then segfaults on read. Measured pre-existing (identical crash with this
+change stashed), so out of scope: `.xo-backlog/pyobject2/issues/09`.
 
 **Files:**
 - Modify: `xo-facet/include/xo/facet/handlestore/DHandleStore.hpp` (free lists,
