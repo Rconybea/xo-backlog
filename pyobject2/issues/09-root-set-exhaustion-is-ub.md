@@ -1,4 +1,4 @@
-# 09 — filling the root set truncates silently, then segfaults
+# 09 — exhausting a flywheel's memory is UB, in two places
 
 Status: open
 Type: bug
@@ -58,6 +58,34 @@ unexamined, and `DObjectHandle::_native()` reads through it:
 grep -n '_native' -A 3 xo-facet/include/xo/facet/ObjectHandle.hpp
 ```
 
+## The same shape in the STORAGE arena (found 2026-09-15)
+
+`DFloat::_box` -- and every other `_box` -- does not check its allocation:
+
+```cpp
+void * mem = mm.alloc(typeseq::id<DFloat>(), sizeof(DFloat));
+return new (mem) DFloat(x);          // placement-new on nullptr when the arena is full
+```
+
+So overrunning the storage arena segfaults, exactly as overrunning the root set
+does. Two resources, one failure mode, and neither reports.
+
+Found by making `DHandleStore` require alloc headers on its storage arena. That
+costs 8 bytes per allocation, which DOUBLES the cost of a boxed double (8 -> 16)
+and halves what a default 256KB store holds (~32768 -> 16381). A python test
+looping 20000 times had been inside the old bound and was outside the new one:
+
+```bash
+.build/xo-python -m unittest test_pyobject2.RootReleaseTestCase   # Segmentation fault
+```
+
+The test now derives its bound from a measured per-object cost rather than
+hardcoding one, so it cannot silently fall outside the arena again. That is a
+workaround for the test, not a fix for the defect.
+
+Worth stating plainly: a hardcoded limit that happens to fit is indistinguishable
+from a checked one until something changes the denominator.
+
 ## The decision this needs
 
 Three options, and the choice is not obvious — which is why `02` did not settle
@@ -81,6 +109,9 @@ limit has a knob — but it should be decided rather than defaulted into.
 
 - the script above raises, or returns a handle the caller can test, instead of
   crashing
+- `_box` on a full arena raises rather than placement-new'ing onto nullptr --
+  whatever answer is chosen for the root set should be the same answer here,
+  since a caller cannot usefully distinguish the two exhaustions
 - a C++ case beside the `[freelist]` cases in `xo-facet/utest/objectmodel.test.cpp`
   fills a deliberately small root set and asserts the chosen behaviour
 - `handle-loop-reuses-slots` still passes: it detects capacity by filling the
