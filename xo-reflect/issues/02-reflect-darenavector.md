@@ -1,6 +1,6 @@
 # 02 — reflect `DArenaVector<T>` as a vector
 
-Status: open
+Status: done 2026-09-21
 Type: feature
 
 `xo::mm::DArenaVector<T>` has no `EstablishTdx` specialisation, so it falls to
@@ -74,7 +74,7 @@ plus the forward declaration beside the other `EstablishTdx` specialisations
 (`xo-reflect/include/xo/reflect/Reflect.hpp:57` is the `std::vector` one).
 
 Expected to need no printjson change at all, since `print_generic_vector`
-handles `mt_vector` — **unverified**, as the probe above stopped at the Tdx.
+handles `mt_vector`. **Confirmed on implementation** — see below.
 
 ## Home: xo-reflect, but it needs a declared dependency
 
@@ -110,6 +110,52 @@ Relevant machinery: `.xo-backlog/generated-find-dependency`, which generates
 `find_dependency()` from the `xo_deps` property, so an undeclared dep is also a
 missing `find_dependency` in the installed Config.cmake.
 
+## What landed
+
+`xo-reflect/include/xo/reflect/Reflect.hpp` gains the declaration beside the
+other container specialisations and the definition beside `std::vector`'s, plus
+a FORWARD DECLARATION of `xo::mm::DArenaVector` rather than an include:
+
+```cpp
+namespace mm { template <typename T> struct DArenaVector; }
+```
+
+`EstablishTdx`'s specialisation needs only the name declared; `make()` is a
+template, so `DArenaVector` has to be complete only where someone calls
+`Reflect::require<DArenaVector<T>>()`, and there they have necessarily included
+the real header. Including `xo/arena/DArenaVector.hpp` from `Reflect.hpp` would
+put it on the include path of every TU that reflects anything.
+
+`xo_dependency(${SELF_LIB} xo_arena)` added as planned. The installed
+Config.cmake picked it up with no further work — xo-reflect is already on the
+generated path:
+
+```bash
+grep -n find_dependency ~/local/lib/cmake/reflect/reflectConfig.cmake
+#   refcnt, xo_ppsink, xo_indentlog2, xo_arena, subsys
+```
+
+Tests: three cases in `xo-reflect/utest/VectorTdx.test.cpp` (`[darenavector]`)
+covering empty, two elements with address and value recovery, and a STRUCT
+element to pin that `Reflect::require<Element>()` runs; two in
+`xo-printjson/utest/PrintJson.test.cpp` (same tag) pinning `[1.5, 2.25, -3]`
+and `[]`.
+
+### Falsified
+
+Reverting `make()` to `AtomicTdx::make()` — the pre-ticket behaviour — fails
+all five, and printjson reproduces exactly the error this ticket opened with:
+
+```
+<error-json-printer-not-found :type xo::mm::DArenaVector<double> :metatype mt_atomic>
+```
+
+So the printjson cases are load-bearing rather than incidental: they are what
+shows that describing the container was the whole of the work.
+
+Verified with `xo-build --sweep` (71 attempted: 43 ok, 0 failed, both stages)
+and umbrella ctest 44/44.
+
 ## Incidental findings, not required by this ticket
 
 **`StdVectorTdx<Element>` duplicates `StlVectorTdx<std::vector<Element>>`.**
@@ -143,16 +189,23 @@ function was one of the nine sites in `.xo-backlog/xo-arena/issues/05` — eleme
 Fixed, but reflection would become a second consumer of it, so a regression
 there would surface here too.
 
-## Done when
+## Done when — all met 2026-09-21
 
-- `Reflect::require<DArenaVector<double>>()->metatype() == Metatype::mt_vector`
-- a populated `DArenaVector` renders as a json array, with element count and
+- [x] `Reflect::require<DArenaVector<double>>()->metatype() == Metatype::mt_vector`
+- [x] a populated `DArenaVector` renders as a json array, with element count and
   values matching, and an empty one as `[]`
-- `Reflect::require<DArenaVector<Foo>>()` establishes `Foo` as the element type
-  for a struct element, not just a scalar
-- xo-reflect declares xo_arena, and the installed `reflectConfig.cmake` carries
-  the matching `find_dependency`
-- `xo-build --sweep` ok in both stages
+- [x] `Reflect::require<DArenaVector<Foo>>()` establishes `Foo` as the element
+  type for a struct element, not just a scalar
+- [x] xo-reflect declares xo_arena, and the installed `reflectConfig.cmake`
+  carries the matching `find_dependency`
+- [x] `xo-build --sweep` ok in both stages
+
+```bash
+.build/xo-reflect/utest/utest.reflect "[darenavector]"
+.build/xo-printjson/utest/utest.printjson "[darenavector]"
+```
+
+The incidental findings below were NOT acted on — they remain open as described.
 
 ## Provenance
 
