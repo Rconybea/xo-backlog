@@ -132,6 +132,46 @@ Worth stating because it inverts the usual reading: moving to a richer sink
 normally absorbs responsibilities. Here one of them must be deliberately kept
 out.
 
+### A third option: an escape POLICY on the sink (RC, 2026-09-20)
+
+Better than either of the above, and it has a home already. `PpSink` carries a
+`PpStyle` -- "the presentation choices in force for this sink"
+(`xo-ppsink/include/xo/ppsink/PpSink.hpp:229`) -- and an escape vocabulary is
+exactly such a choice. A json-configured sink escapes for json; a diagnostic
+sink escapes for display; `put_with_escape` stays one call.
+
+The ownership story is good and needs no new machinery: `style_` is copied
+from process-wide defaults AT CONSTRUCTION and exposed only as `const style()`
+(`PpSink.hpp:243-248`). So the policy is per-sink and fixed once built --
+printjson never mutates a caller's sink, and whoever constructs a json sink
+chooses json escaping.
+
+**Which means printjson should VALIDATE rather than impose.** `print(x, sink)`
+cannot set the policy on a sink handed to it, so it should check and refuse --
+the same shape as `DHandleStore` checking its storage arena's base alignment,
+and for the same reason: the invariant is real, unverifiable after the fact,
+and cheap to assert at the boundary.
+
+**The one real cost.** `Escape` is "a class used as a namespace: no instances,
+all members static" (`xo-ppsink/include/xo/ppsink/escape.hpp:26-40`), entirely
+`constexpr` -- a COMPILE-time policy. Making it runtime-selectable is not only
+dispatch:
+
+```
+Escape::c_max_char_expand = 4      // \x1b   -- display escaping
+json needs                  6      // \u0000
+```
+
+That constant feeds buffer pre-sizing (`str_size()` -> `stream_open(min_z)`).
+Json escaping expands MORE than display escaping, so any sizing that trusts 4
+under-allocates under a json policy. The sizing path has to become
+policy-aware, not just the emitting path.
+
+So the generalization is slightly less modest than "add an enum". It is still
+the right shape -- it puts the choice where the other presentation choices
+already live, and it is the only one of the three options that leaves
+`put_with_escape` usable by printjson at all.
+
 **One smaller thing to decide:** `PpSink::complete()` writes `"\n"`
 (`PpSink.hpp:201`). A JSON document should probably not, and the sink the
 caller supplies may be shared -- so whoever finishes a document has to not call
