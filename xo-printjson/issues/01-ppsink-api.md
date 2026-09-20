@@ -172,6 +172,44 @@ the right shape -- it puts the choice where the other presentation choices
 already live, and it is the only one of the three options that leaves
 `put_with_escape` usable by printjson at all.
 
+### Preferred shape: a JsonPpSink, and JsonPrinter takes only that (RC, 2026-09-20)
+
+Rather than printjson validating a sink it was handed, make the constraint a
+TYPE: `JsonPpSink` enforces at construction, and `JsonPrinter::print_json`
+takes `JsonPpSink &`. Then there is no runtime check, no failure mode to
+report, and no way to reach the serialiser with a sink that would corrupt the
+document.
+
+Strictly better than the DHandleStore parallel drawn above. DHandleStore
+checks at runtime because a `DArena` cannot be a distinct type per alignment;
+a sink CAN be.
+
+**The constraints are plural, and escaping is not the dangerous one.**
+
+| | |
+|---|---|
+| escape vocabulary | json, not display -- `\u0000` not `\x00` (issues/04) |
+| **colour** | `PpStyle` carries ANSI colour specs and a styled sink emits them INTO the stream. `xo-ppsink/utest/PpStyle.test.cpp:89` pins it: `"\033[31m:k\033[0m 1"`. Json written to a coloured sink carries `\033[31m` inside the document -- and ESC is a C0 control json also requires escaped, so it is broken twice |
+| `complete()` | writes `"\n"` (`PpSink.hpp:201`); a json document probably should not |
+
+Colour is the one that would have been missed. It manifests only when someone
+happens to pass a styled sink, and the corruption is invisible until a parser
+sees it.
+
+**One consequence to accept.** `PpStyle` is copied at construction and exposed
+only as `const`, so a WRAPPER around an existing sink cannot repair a bad
+policy -- it can only reject it. That points at `JsonPpSink` being a concrete
+sink (or a factory that builds one), not an adapter over whatever the caller
+already holds. Which means "render json into this existing PrettySink" stops
+being expressible.
+
+That is probably the right trade -- it is the same thing as saying a json
+document is not a diagnostic rendering -- but it should be a decision, not a
+discovery. The place it will be felt is `xo-reactor/include/xo/reactor/EventStore.hpp:67`,
+where an http endpoint hands over the response ostream: that seam now
+constructs a JsonPpSink over the response rather than adapting a sink it was
+given.
+
 **One smaller thing to decide:** `PpSink::complete()` writes `"\n"`
 (`PpSink.hpp:201`). A JSON document should probably not, and the sink the
 caller supplies may be shared -- so whoever finishes a document has to not call
