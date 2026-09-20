@@ -198,6 +198,23 @@ Nothing in the tree hits it -- the only reflected raw pointers are
 `MemorySizeInfo::lo_`/`hi_` (`const void *`, and `void` is fine). But merely
 DECLARING such a member is still free; only reflecting it is not.
 
+## Superseded one day later — the flywheel payoff, not the feature
+
+`JsonPrinter_RootSet` was re-keyed onto the pointee here, reached through
+`FlywheelInfo::strong_` via `print_generic_pointer`. On 2026-09-22
+`FlywheelInfo` was retired (`.xo-backlog/xo-facet/issues/02`) and
+`JsonPrinter_AllocFlywheel` now reaches the store DIRECTLY through
+`AllocFlywheel::strong_root_set()`.
+
+So the flywheel frame no longer exercises raw-pointer reflection. The pointee
+key is still right, and everything else here stands -- raw pointers reflect, a
+null `const char*` no longer segfaults, `{}` became `null`. But this ticket's
+"concrete payoff on existing code" lasted a day, and the coverage that matters
+is the `[rawpointer]` cases in `xo-reflect/utest/PointerTdx.test.cpp`, not the
+byte-exact frame.
+
+Worth knowing before citing the frame as evidence that raw pointers work.
+
 ## Curation choices, deliberately left open
 
 Per decision 3 — defaults are fine until someone cares.
