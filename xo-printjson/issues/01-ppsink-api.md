@@ -76,6 +76,69 @@ produce anything, not just JSON. So this ticket has to bridge the two — a
 obvious answer, and it is also where a future "pretty-print this JSON response"
 switch would live.
 
+## Re-measured 2026-09-20
+
+**Nine `print_json` implementations is now thirteen**, and two of the four new
+ones are OUTSIDE xo-printjson:
+
+```bash
+grep -rn ": public JsonPrinter" --include=*.hpp --include=*.cpp xo-*/ | grep -v "\.build"
+```
+
+| | |
+|---|---|
+| `xo-printjson/src/printjson/PrintJson.cpp` | 8 (was 6): + `JsonPrinter_flatstring`, `JsonPrinter_address`, `JsonPrinter_ObjectSlot` |
+| `xo-kalmanfilter/src/kalmanfilter/EigenUtil.cpp` | 2 |
+| `xo-printjson/include/xo/printjson/JsonPrinter.hpp` | `AsStringJsonPrinter` |
+| `xo-stringtable2/src/stringtable2/SetupStringtable2.cpp` | `DStringJsonPrinter` -- **new subsystem on the list** |
+
+That sharpens question 1. With implementations in three subsystems, a hard
+swap of the pure virtual breaks xo-kalmanfilter and xo-stringtable2 in the same
+commit. A bridging default on the base class is no longer just tidier; it is
+what makes the change land in more than one step.
+
+## The PpSink generalization this needs -- and a ticket it collides with
+
+Anticipated by RC 2026-09-20: "may require some modest generalization of the
+PpSink api". Measured, there are two halves, and they pull in opposite
+directions.
+
+**Structure: PpSink already has the vocabulary.** `begin()` / `split()` /
+`end()` / `newline()` (`xo-ppsink/include/xo/ppsink/PpSink.hpp:164-193`) are
+exactly the token stream a nested renderer emits, and `pretty_struct.hpp` is a
+worked example of using them -- it emits `begin(0)`, a `put(":")` per field,
+`split(1, offset)`, `end()`, and lets `PpState` decide the layout. A JSON
+object or array is the same shape. Nothing obvious is missing here.
+
+**Escaping: PpSink's vocabulary is the WRONG one, and adopting it would make
+that permanent.** `put_with_escape(sv, quote_flag)` escapes for *display* via
+`Escape`, not for JSON. That is already a live defect --
+`.xo-backlog/xo-printjson/issues/04`: an embedded NUL renders `\x00` where
+JSON requires `\u0000`, so a strict parser rejects the document.
+
+Today printjson escapes on its own account (`quot()` in `JsonPrinter_string`),
+so 04 is fixable inside xo-printjson. **If serialisation moves to
+`put_with_escape`, the wrong escape vocabulary moves into the sink layer**,
+where the fix would then have to be a JSON mode on PpSink rather than a change
+to one printer.
+
+So 04 is not a blocker in the usual sense -- this ticket could land first and
+make 04 harder. Either settle 04 first, or decide here that printjson keeps
+owning its escaping and writes pre-escaped text through plain `put()`. The
+second is probably right: escaping is a property of the FORMAT, and PpSink is
+format-agnostic.
+
+Worth stating because it inverts the usual reading: moving to a richer sink
+normally absorbs responsibilities. Here one of them must be deliberately kept
+out.
+
+**One smaller thing to decide:** `PpSink::complete()` writes `"\n"`
+(`PpSink.hpp:201`). A JSON document should probably not, and the sink the
+caller supplies may be shared -- so whoever finishes a document has to not call
+it, the way `DArenaVector`'s pretty bindings already avoid it
+("calling .complete() would be broken for sinks that do not forward to a
+streambuf").
+
 ## Questions to settle first
 
 1. **Replace, or add?** `print(x, PpSink&)` alongside the ostream overloads,
