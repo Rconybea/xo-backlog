@@ -70,13 +70,10 @@ that name. Reflecting a `const T*` member could therefore leave a type reading
 a `const_cast`, since `TaggedPtr` is `void*`-based. `RefPointerTdx` never meets
 this: `rp<Object>::get()` returns a non-const `Object*`.
 
-**Unverified in this tree** — reasoned from [expr.typeid]/5 plus the lookup
-order above, not observed. Worth confirming before relying on it:
-
-```cpp
-/* in a utest: do these produce one TypeDescr or two? */
-REQUIRE(Reflect::require<const MemorySizeInfo>() == Reflect::require<MemorySizeInfo>());
-```
+Was **unverified** when this ticket was written — reasoned from [expr.typeid]/5
+plus the lookup order above, not observed. Measured on implementation; see the
+done-when section. It held, and `pointer-to-const-shares-one-pointee` in
+`xo-reflect/utest/PointerTdx.test.cpp` now pins it.
 
 Note pointer types themselves stay distinct — `typeid(const Foo*)` is NOT
 `typeid(Foo*)`, since there the const is not top-level — so pointer-to-const and
