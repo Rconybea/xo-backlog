@@ -1,6 +1,6 @@
 # 01 — reflect `T*` the way `rp<Object>` is reflected
 
-Status: open (design settled 2026-09-21, unimplemented)
+Status: done 2026-09-21
 Type: feature
 
 `xo-reflect` describes `xo::ref::rp<Object>` as a pointer — `mt_pointer`, 0 or 1
@@ -113,6 +113,94 @@ through the generic path is a small regression on today's wire output.
 A full specialisation out-ranks the partial one, so `EstablishTdx<const char*>`
 returning `AtomicTdx::make()` reads as "exempt from `T*`".
 
+## What landed
+
+`RawPointerTdx<T>` in `xo-reflect/include/xo/reflect/pointer/PointerTdx.hpp`,
+beside `RefPointerTdx`, plus `EstablishTdx<T *>` in `Reflect.hpp` and full
+specialisations exempting `char *` / `const char *`. `print_generic_pointer`
+now emits `null`. `JsonPrinter_RootSet` was re-keyed from the pointer onto the
+POINTEE, which is this ticket's concrete payoff on existing code -- and the
+byte-exact frame test in `xo-object2/utest/flywheel_frame.test.cpp` passes
+unchanged, which is far better evidence than a synthetic test.
+
+Tests: six cases in `xo-reflect/utest/PointerTdx.test.cpp` (new file), three in
+`xo-printjson/utest/PrintJson.test.cpp`, both tagged `[rawpointer]`.
+
+### Falsified, three ways
+
+| reverted | breaks |
+|---|---|
+| `EstablishTdx<T*>::make()` -> `AtomicTdx` | 4 reflect, 2 printjson, **4 object2 flywheel** |
+| `const char *` exemption removed | 1 reflect (metatype only -- see below) |
+| `print_generic_pointer` back to `{}` | 3 printjson |
+
+The flywheel row is the useful one: the frame breaking proves the re-keyed
+printer genuinely reaches the store through raw-pointer reflection.
+
+## Four things this ticket predicted wrongly
+
+Recorded per CONVENTIONS rule 6; each was plausible and each cost time.
+
+**1. `Reflect::require<void>()` already worked.** Decision 1 anticipated
+needing new specialisations; none were required.
+
+```
+require<void>()  = 0x3ef90dd0  name=void
+```
+
+So `void*` needed only `RawPointerTdx`'s `if constexpr (std::is_void_v<T>)`
+guard returning 0 children, not groundwork.
+
+**2. The `const char *` string printer already existed.**
+`provide_string_printer<char *>` and `<char const *>` have been registered in
+`PrintJson::provide_std_printers` since long before this ticket
+(`xo-printjson/src/printjson/PrintJson.cpp:726`). What was actually missing was
+the null case, and it did not merely render badly -- **it segfaulted**:
+
+```
+about to print a null const char*...
+Segmentation fault (core dumped)
+```
+
+Pre-existing and reachable without any of this work; it simply had no test.
+Fixed with an `if constexpr (std::is_pointer_v<T>)` branch in
+`JsonPrinter_string`.
+
+**3. The exemption protects the METATYPE, not the wire.** Removing it breaks
+only `char-pointers-are-exempt`; rendering is unaffected, because `print_aux`
+consults `printer_map_` before the metatype switch, so the string printer wins
+either way. The exemption is still right -- a C string is text, not a container
+of one char -- but it is not what keeps strings rendering as strings, and the
+ticket implied it was.
+
+**4. `{}` -> `null` reached further than "a small regression on today's wire".**
+Two existing cases in `xo-printjson/utest/FopJson.test.cpp` pinned `{}` for an
+EMPTY FOP, which takes the same generic path. Both updated, and the change is
+an improvement rather than a cost: an `ObjectSlot` is an erased fop and already
+rendered `null` when empty, so the tree had two spellings for one condition.
+`print-obj-renders-an-empty-fop-as-braces` is renamed `...-as-null`.
+
+## A new constraint this introduced
+
+**`Reflect::require<T *>()` now requires `T` to be complete.** It did not
+before -- a pointer to an incomplete type fell to the primary template and
+reflected as an atom.
+
+```bash
+# struct Incomplete;  Reflect::require<Incomplete *>();
+#   EstablishTypeDescr.hpp:42: invalid use of incomplete type 'struct Incomplete'
+#   TypeDescr.hpp:109: invalid application of 'sizeof' to incomplete type
+```
+
+Note `sizeof` at `TypeDescr.hpp:109`: `require<T>()` needs completeness whatever
+Tdx it ends up with, so this is `EstablishTdx<T*>::make()` calling
+`Reflect::require<remove_cv_t<T>>()` inheriting an existing requirement, not a
+new one of its own. Same bargain `RefPointerTdx` makes for `rp<Object>`.
+
+Nothing in the tree hits it -- the only reflected raw pointers are
+`MemorySizeInfo::lo_`/`hi_` (`const void *`, and `void` is fine). But merely
+DECLARING such a member is still free; only reflecting it is not.
+
 ## Curation choices, deliberately left open
 
 Per decision 3 — defaults are fine until someone cares.
@@ -181,18 +269,33 @@ same reason — a cycle only arises if someone NAMES a member that closes a loop
 which is a visible local decision, not something the specialisation inflicts on
 the tree.
 
-## Done when
+## Done when — all met 2026-09-21
 
-- `Reflect::require<Foo*>()->metatype() == Metatype::mt_pointer`, with
+- [x] `Reflect::require<Foo*>()->metatype() == Metatype::mt_pointer`, with
   `n_child` 0 for null and 1 otherwise
-- a reflected `const Foo *` member renders as the pointee, and the pointee's
-  canonical name does not depend on establishment order
-- `Reflect::require<const char *>()` still reflects as an atom, and renders as a
-  quoted string including the null case
-- `JsonPrinter_RootSet` can be re-keyed on `DHandleArena<ObjectSlot>` and the
-  frame is byte-identical apart from that — the existing byte-exact test in
-  `xo-object2/utest/flywheel_frame.test.cpp` is the check
-- `xo-build --sweep` ok in both stages
+- [x] a reflected `const Foo *` member renders as the pointee, and the
+  pointee's canonical name does not depend on establishment order
+- [x] `Reflect::require<const char *>()` still reflects as an atom, and renders
+  as a quoted string including the null case
+- [x] `JsonPrinter_RootSet` re-keyed on `DHandleArena<ObjectSlot>`; frame
+  byte-identical, and unchanged through the python binding too
+- [x] `xo-build --sweep` ok in both stages (71 attempted: 43 ok, 0 failed),
+  umbrella ctest 44/44
+
+```bash
+.build/xo-reflect/utest/utest.reflect    "[rawpointer]"
+.build/xo-printjson/utest/utest.printjson "[rawpointer]"
+.build/xo-object2/utest/utest.object2     "[flywheel]"
+```
+
+The `const Foo*` claim rested on typeid stripping top-level cv, which this
+ticket marked unverified. Now measured:
+
+```
+require<Foo>       = 0x3ef8fce0  name=Foo
+require<const Foo> = 0x3ef8fce0  name=Foo      <- same TypeDescr
+typeid(Foo*)==typeid(const Foo*): NO           <- pointers stay distinct
+```
 
 ## Provenance
 
