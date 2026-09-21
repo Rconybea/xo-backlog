@@ -1,6 +1,6 @@
 # 01 — typeseq ids are per-pybind-module, but the registries they key are shared
 
-Status: open
+Status: done 2026-09-21 (scope split; O(1) upgrade -> issue 03)
 Type: bug
 
 `typeseq::id<T>()` allocates from a counter that pybind11 extension modules each
@@ -223,6 +223,126 @@ header-only-with-statics was never delivering what it promised.
   Empty is the passing condition. Note this must keep passing even after the
   fix -- the per-type cache is still duplicated, deliberately; what must not
   reappear is a duplicated SOURCE of ids
+
+## What landed, and the split
+
+The design below was implemented **in half**. Steps 1-2 -- a compiled
+`xo-reflectutil` owning a name-keyed table -- fix the bug. Steps 3-5
+(`TypeRegistry` down to xo-arena, `DArenaHashMap`, arena appcx machinery) are an
+O(n) -> O(1) optimisation that does not touch correctness, and are deferred to
+`.xo-backlog/xo-facet/issues/03`.
+
+The linear scan is paid **once per (type, module)**, because `typerecd::recd<T>()`
+memoises -- a few hundred string compares at startup. Deferring also removes
+this ticket's sharpest trap: with no upgrade to install there is no
+implementation pointer, so it cannot accidentally become a header static, and
+no `typeseq_install_registry()` sits unused looking maintained.
+
+`xo-reflectutil` gained `src/reflectutil/typeseq.cpp` and became a shared
+library. `typerecd::recd<T>()` is now a cache of `typeseq_id_for(name)`, and
+lost `s_armed` -- a magic static already provides the once-only guard the
+hand-rolled pair was emulating.
+
+## It was TWO bugs, not one
+
+This is the correction that matters. The ticket presents the sentinel as a
+consequence of module-local ids. It was that **and** an independent second
+cause: `SetupObject2::register_facets()` was commented out in
+`xo-pyobject2/src/pyobject2/pyobject2.cpp` as
+
+```cpp
+/* Unnecessary: guaranteed by HFloat */
+//SetupObject2::register_facets();
+```
+
+which is a claim with no mechanism -- `DObjectHandle` has no auto-registration,
+and `TypeRegistry::register_type<T>()` fires only from
+`FacetRegistry::register_impl`. Nothing populated the registry in the python
+process.
+
+**Fixing either alone leaves the sentinel**, which is presumably why the comment
+looked true: `register_facets()` is compiled into libxo_object2, so its typeseq
+for `DFloat` was that library's, while the slot's came from `with_facet<>`
+instantiated inside the pybind module. Registration under one id, lookup under
+another.
+
+## The failure mode is worse than "names are lost"
+
+Falsifying the shared table -- putting the counter back in the header --
+produces, for a slot holding a `DFloat`:
+
+```
+TYPE xo::scm::DRuntimeError
+SEQ 0
+```
+
+Not the sentinel: **a different type's name, reported confidently.** That is
+consequence 3 of this ticket ("rotation can dispatch to the wrong
+implementation") surfacing as a wrong label rather than a miss, and it is a
+better argument for the fix than the sentinel ever was.
+
+## Corrections to this ticket's own estimates
+
+**Blast radius was 8, not 60.** `xo-deps --users-of=xo-reflectutil` lists 60
+subsystems, but that is the transitive closure. Only 8 CMakeLists name it:
+
+```bash
+grep -rn "xo_reflectutil" --include=CMakeLists.txt xo-*/ | grep -v "^xo-reflectutil/"
+```
+
+Five already used `xo_dependency`; four used `xo_headeronly_dependency`. One of
+those four -- `xo-ratio` -- is itself an INTERFACE target, so it must KEEP
+`xo_headeronly_dependency` even though the dependency is now compiled;
+`xo_dependency` on an INTERFACE target fails with "target_include_directories
+may only set INTERFACE properties on INTERFACE targets".
+
+**A mutex was added, and consolidating the counter is why.** Ids are drawn from
+magic statics, so two threads can reach two different types' first draw
+concurrently. That raced before too -- but per module, on that module's own
+counter. One shared counter is what makes it a cross-module race. Paid once per
+(type, module).
+
+**reflectutil's utest cannot use `xo_testutil`.** Not levelization --
+`xo-deps --why=xo-testutil:xo-reflectutil` finds no path -- but umbrella
+subdirectory ORDER: xo-reflectutil configures first, so the target does not
+exist yet. Uses a self-contained `CATCH_CONFIG_MAIN`, as xo-flatstring and the
+other low-level subsystems do.
+
+## Done when — met 2026-09-21
+
+- [x] the same type reports the same `typeseq` from C++ and from python
+  (`DFloat` is 10 in both; it was 10 and 0)
+- [x] a frame from python names its types instead of `_%sentinel%_`, asserted
+  in a python test at the level where both a library and a pybind module are
+  loaded -- `test_frame_names_its_types` in `xo-pyobject2/utest`
+- [x] an anonymous-namespace type in two TUs still gets two ids
+- [x] the regression check is in the tree --
+  `test_no_module_privately_copies_the_id_source`, which reads the symbol
+  tables rather than trusting that no future module re-hides something
+- [ ] **ids survive the upgrade** -- deferred with the upgrade, to issue 03.
+  It cannot be tested before there is something to install
+
+```bash
+.build/xo-reflectutil/utest/utest.reflectutil "[typeseq]"
+cd xo-pyobject2/utest && ../../.build/xo-python -m unittest test_pyobject2
+```
+
+Falsified both ways, each failing only what it should: commenting out
+`register_facets()` gives `TYPE _%sentinel%_` with `SEQ 10` (id right, name
+gone); restoring the header-local counter gives `TYPE xo::scm::DRuntimeError`
+with `SEQ 0`.
+
+`xo-build --sweep` ok both stages -- note the counts moved `43 ok / 28 no
+tests` -> `44 / 27`, which is xo-reflectutil acquiring a suite, not a
+regression. Umbrella ctest 45/45, up from 44 for the same reason.
+
+## A note on writing tests for this
+
+The first draft of `xo-reflectutil/utest/typeseq.test.cpp` put its fixture
+types in an anonymous namespace, and `typeseq-id-agrees-with-the-table` failed
+`73 != 74`. That was the table being RIGHT: internal-linkage types are not
+name-keyed, so a memoised id and a fresh lookup on the same spelling are
+supposed to disagree. Worth knowing before debugging it as a defect.
 
 ## Provenance
 
