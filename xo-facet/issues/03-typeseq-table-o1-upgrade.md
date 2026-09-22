@@ -73,11 +73,35 @@ private arena instead and leave the context chain alone.
    makes a cross-module race reachable), so the upgrade must decide whether the
    installed implementation still needs it.
 3. **Ids stay dense and sequential**, so `TypeRegistry::_id2name`'s
-   `DArenaVector` indexing by `seqno()` keeps working.
-4. **The table owns its keys.** `type_name_holder<T>::value` is a per-module
-   header static, so names live at different addresses in different modules.
-   The bootstrap already copies into `std::string`; the hashmap must copy into
-   its arena.
+   `DArenaVector` indexing by `seqno()` keeps working. Note an id is NOT a
+   table index -- internal-linkage types draw from the counter without adding a
+   row, so the two diverge. Pinned by `an-id-is-never-reassigned` in
+   `xo-reflectutil/utest/typeseq.test.cpp`; measured 2026-09-22 that returning
+   the table index instead leaves every OTHER case in that file green, because
+   catch2 runs `ids-are-dense-and-sequential` before any anonymous draw has
+   occurred, when the two are still equal.
+4. **The table BORROWS its keys today; decide whether the hashmap should.**
+   Corrected 2026-09-22 -- the bootstrap no longer copies. `s_typerecd_table_`
+   holds `typerecd`, whose `name_` is a `std::string_view`, so a row points at
+   whichever module first registered that name
+   (`type_name_holder<T>::value` is a per-module header static).
+
+   Sound as it stands, and the soundness is structural rather than
+   conventional: `typerecd::_by_name` is PRIVATE, its only production caller is
+   `recd<T>()`, and its argument is `type_name<T>()` -- static storage
+   duration. The access restriction IS the lifetime contract, which is why
+   `typerecd_utaccess` (forward-declared, befriended, defined only in a test)
+   is the way to reach it.
+
+   Residual risk is `dlclose`: unloading a module that first registered a name
+   would leave dangling views in the table AND in other modules' `recd<T>`
+   caches, which memoise the whole `typerecd` including that foreign pointer.
+   Latent, since python does not unload extension modules.
+
+   So the hashmap has a choice the original design did not: copy into its
+   arena, or keep borrowing. Copying removes the `dlclose` hazard and costs
+   arena space; borrowing keeps rows pointer-sized and keeps the contract that
+   already exists.
 5. **Internal-linkage types are not name-keyed.** A name containing
    `{anonymous}` or `(anonymous namespace)` draws from the counter WITHOUT being
    inserted. Two TUs' anonymous types share a spelling and are different types,
