@@ -70,10 +70,33 @@ private arena instead and leave the context chain alone.
 1. **Ids are never reassigned.** The upgrade is additive. A trivial program
    linking libxo_object2 draws 12 ids before `main()`, all already cached in
    per-type statics; reassignment would silently invalidate every one.
-2. **The upgrade precedes threads.** Stated as the model. Note the bootstrap
-   already takes a `std::mutex` (added by issue 01, because one shared counter
-   makes a cross-module race reachable), so the upgrade must decide whether the
-   installed implementation still needs it.
+2. **The upgrade precedes threads.** Stated as the model, and the upgrade
+   itself can rely on it. `_by_name` cannot: it is reached from
+   `recd<T>()`'s magic static, which initialises on first CALL rather than at
+   load, and serialises only that one `T` -- so two threads each mentioning a
+   new type run it concurrently, with no `dlopen` involved.
+
+   The bootstrap therefore takes a `std::mutex` in `_by_name` only (not in
+   `_id_count` / `_table_z`, where a dirty read is fine and a lock would
+   advertise a guarantee nobody wants).
+
+   **What it protects is the vector, not the counter.** A racy `s_next_id++`
+   gives a duplicate id -- a wrong number. `s_typerecd_table_.push_back()`
+   reallocating while another thread scans it is a use-after-free. That
+   asymmetry is why it survives a cost argument the counter alone would lose:
+   one uncontended lock per uncached draw, a few hundred per process.
+
+   Not reachable today -- outside tests the only thread creator in the tree is
+   `xo-websock/src/websock/Webserver.cpp`, which draws no ids:
+
+   ```bash
+   grep -rln "std::thread\|pthread_create\|std::jthread" \
+        --include=*.cpp --include=*.hpp xo-*/ | grep -v utest
+   ```
+
+   The upgrade must decide whether the installed implementation still needs it,
+   and the answer depends on the same question: can the new table's insert path
+   invalidate a concurrent reader?
 3. **Ids stay dense and sequential**, so `TypeRegistry::_id2name`'s
    `DArenaVector` indexing by `seqno()` keeps working. Note an id is NOT a
    table index -- internal-linkage types draw from the counter without adding a
