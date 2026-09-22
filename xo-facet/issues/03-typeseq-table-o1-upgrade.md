@@ -3,8 +3,9 @@
 Status: open
 Type: feature
 
-`typeseq_id_for(std::string_view)` in `xo-reflectutil/src/reflectutil/typeseq.cpp`
-does a linear scan over a `std::vector<Entry>`. Replace it with an arena-backed
+`typerecd::_by_name(std::string_view)` in
+`xo-reflectutil/src/reflectutil/typeseq.cpp` does a linear scan over
+`typerecd::s_typerecd_table_`, a `std::vector<typerecd>`. Replace it with an arena-backed
 hash map, installed at runtime once one can exist.
 
 Split out of `.xo-backlog/xo-facet/issues/01` on 2026-09-21, which fixed the
@@ -13,13 +14,14 @@ correctness bug and deliberately left this.
 ## Why it was deferred, and why that is still the right call
 
 **The lookup is paid once per (type, module), not per call.**
-`typerecd::recd<T>()` memoises in a function-local static, so a scan happens
-only on a given module's first ask for a given type. With ~100 types that is a
+`typerecd::recd<T>()` memoises the whole `typerecd` in a function-local
+static, so a scan happens only on a given module's first ask for a given type. With ~100 types that is a
 few thousand string compares across a process's startup.
 
 So do this when something MEASURES it, not on principle. The one number that
 would change the calculus is the type count: the table is
-`typeseq_table_size()`, and it is worth looking at before assuming.
+`typerecd::table_z()` and the counter `typerecd::id_count()`, and both are
+worth looking at before assuming.
 
 ```bash
 # rows, and ids drawn (the two differ by the internal-linkage types)
@@ -109,7 +111,7 @@ private arena instead and leave the context chain alone.
 
 ## Done when
 
-- `typeseq_id_for` resolves through the hashmap after the upgrade
+- `typerecd::_by_name` resolves through the hashmap after the upgrade
 - **ids survive the upgrade**: draw an id, install, assert the same number
   comes back. This is issue 01's one unmet done-when item, and the invariant
   whose violation is SILENT -- the bootstrap is not observable any other way

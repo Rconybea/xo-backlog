@@ -239,9 +239,17 @@ implementation pointer, so it cannot accidentally become a header static, and
 no `typeseq_install_registry()` sits unused looking maintained.
 
 `xo-reflectutil` gained `src/reflectutil/typeseq.cpp` and became a shared
-library. `typerecd::recd<T>()` is now a cache of `typeseq_id_for(name)`, and
-lost `s_armed` -- a magic static already provides the once-only guard the
+library. `typerecd::recd<T>()` is now a cache of the table's answer, and lost
+`s_armed` -- a magic static already provides the once-only guard the
 hand-rolled pair was emulating.
+
+Refactored by the author on 2026-09-22, after this landed: the free function
+`typeseq_id_for` named in the design section below became the private static
+`typerecd::_by_name`, reachable only through a forward-declared
+`typerecd_utaccess` friend that production code never defines. That is a
+stronger statement of the same intent -- and it turned out to be load-bearing
+rather than cosmetic, because the table now BORROWS its keys. See issue 03's
+invariant 4.
 
 ## It was TWO bugs, not one
 
