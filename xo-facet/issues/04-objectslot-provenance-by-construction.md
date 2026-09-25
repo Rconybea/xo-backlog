@@ -1,6 +1,6 @@
 # 04 — prove an ObjectSlot's provenance, so a frame can report allocation size
 
-Status: open
+Status: done 2026-09-25, umbrella `b6d4acca`
 Type: feature
 
 A flywheel frame's slots carry `typeseq`, `type` and `offset`. They should also
@@ -266,6 +266,87 @@ pointer lies in **some** validated store's storage arena. Whether masking then
 *finds* that arena depends on `s_storage_base_align` still holding the value
 that store was checked against at `DHandleStore.hpp:112` — and the printer reads
 the global at PRINT time, long after the check.
+
+## What landed, 2026-09-25 (umbrella `b6d4acca`)
+
+| | |
+|---|---|
+| `ObjectSlot.hpp` | value-carrying ctors private, `DHandleStore` befriended through a forward declaration; default ctor stays public |
+| `DHandleStore.hpp` | `add_strong_ref(const typename Handle::ATop *, void *)` mints the slot after `storage_.contains(data)`, throwing otherwise; `assign_storage_base_align` is write-once |
+| `AllocFlywheel`, `DObjectHandle::make_strong_ref` | follow the new signature -- the whole of the production fallout |
+| `JsonPrinter_ObjectSlot` | emits `size` from `arena->alloc_info(data).size()` |
+
+```json
+{"_name_": "ObjectSlot", "typeseq": 10, "type": "xo::scm::DFloat", "offset": 16, "size": 8}
+```
+
+verified through the python binding, not only the C++ suites.
+
+### Two deviations from the plan above
+
+**The byte-exact frame test needed no change.** It renders an EMPTY flywheel, so
+no slot appears in it and the new key never reaches that expectation. `size` is
+pinned instead in `occupied-slots-appear-in-the-frame`
+(`xo-object2/utest/flywheel_frame.test.cpp`), spelled as
+`"offset": 16, "size": 8` so it cannot accidentally match `RootSet`'s unrelated
+`size` key one level up.
+
+**xo-printjson's utest main gained a facet context.** The fixture needs a real
+store; a store needs `FacetAppcxCreated`; and a second `Indentlog2Appcx` maps
+another temp arena and installs another `PrettySinkFactory`, so each test file
+owning one was not acceptable. `printjson_utest_main.cpp` now builds
+`AppContext<S_indentlog2_tag, S_facet_tag>` as a function-local static, reached
+by tests through a new `printjson_utest_appcx.hpp`. Unanticipated scope, and the
+part a re-reader is most likely to trip over.
+
+### Tests
+
+`slot-without-an-agreed-alignment-reports-null-offset` is gone: it set the
+global to 0, which now throws. Replaced by `storage-base-align-is-write-once`
+and `a-store-refuses-a-foreign-pointer`. The printer's `align_z == 0` branch is
+KEPT, with a comment recording that it is unreachable for a slot that exists --
+`data` still arrives via `recover_native` from a TaggedPtr a caller assembled,
+and what the guard prevents is a segfault rather than a wrong number.
+
+Store-only creation is pinned by `static_assert(!std::is_constructible_v<...>)`;
+`is_constructible` respects access, so the assert is the check.
+
+**One done-when item is met only in mechanism.** The write-once test drives
+`assign_storage_base_align` directly rather than constructing a second,
+differing `FacetAppcx`. The guard is the same one either path reaches, but the
+`FacetAppcx`-level case is not covered.
+
+### Falsified, each compiling
+
+| reverted | result |
+|---|---|
+| `storage_.contains` check | `a-store-refuses-a-foreign-pointer`: no exception thrown |
+| write-once guard | `storage-base-align-is-write-once`: no exception thrown |
+| `size` emission | 1 failure in printjson, 1 in object2 |
+| private ctor | `static_assert` fires by name at `ObjectSlotJson.test.cpp:156` |
+
+The last is a COMPILE failure rather than a red test, which is the stronger
+form and not the stale-binary trap of issue 02: it names the assertion and the
+message, so it cannot be mistaken for an unrelated build break.
+
+### A prediction that was wrong
+
+The first draft of the object2 expectation said `"size": 16`, reasoning that the
+allocation includes its 8-byte `AllocHeader`. Observed 8:
+`AllocInfo::size()` EXCLUDES the header, as
+`xo-arena/include/xo/arena/AllocInfo.hpp:73` says. For `DFloat` that coincides
+with `sizeof(DRepr)` -- fixed-size, no padding -- which is exactly why the
+`DArray` / `DString` reasoning above is what justifies reading the header rather
+than the type.
+
+### Verification
+
+```bash
+cd .build && ctest                  # 45/45
+xo-build --sweep                    # 71 attempted: 44 ok, 27 no tests, 0 failed
+.build/xo-printjson/utest/utest.printjson "[ObjectSlot]"
+.build/xo-object2/utest/utest.object2   "[flywheel]"
+```
 
 ## Open questions
 
