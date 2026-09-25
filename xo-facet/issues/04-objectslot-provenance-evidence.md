@@ -17,10 +17,13 @@ DArena * arena = DArena::obj2arena(data, align_z);   // recover the arena
 arena->alloc_info(data);                             // read its header
 ```
 
-The proposal is to make both correct **by construction**: give `ObjectSlot` a
-compile-checked witness that it refers to AllocFlywheel-owned storage, using the
-`Evidence` / `EvidenceProvider` pattern already in the tree
-(`xo-subsys/include/xo/subsys/Evidence.hpp`).
+The proposal is to make both correct **by construction**: make a non-null
+`ObjectSlot` something only a `DHandleStore` can create, so holding one is
+compile-checked proof that it refers to AllocFlywheel-owned storage. See
+[The design](#the-design-only-a-handlestore-can-create-an-objectslot) below.
+The `Evidence` / `EvidenceProvider` pattern already in the tree
+(`xo-subsys/include/xo/subsys/Evidence.hpp`) is the fallback shape if the store
+turns out not to be able to mint slots directly.
 
 ## Why `sizeof(DRepr)` is not the answer
 
@@ -177,41 +180,113 @@ does fire twice. Same family as the stale-binary trap in
 `.xo-backlog/xo-facet/issues/02`: a falsification that cannot fail is not a
 falsification.
 
+## The design: only a HandleStore can create an ObjectSlot
+
+Decided 2026-09-24.
+
+Make `ObjectSlot`'s value-carrying ctors private and befriend the `DHandleStore`
+template — the forward-declared-friend shape already recorded in
+`.xo-backlog/xo-facet/issues/02`. The default ctor stays public: a null slot
+never reaches an arena (see the Measured section).
+
+Construction then has to move out of the handle and into the store. That is the
+whole production diff:
+
+- `xo-facet/include/xo/facet/ObjectHandle.hpp:97` — `DObjectHandle::make_strong_ref`
+  builds the slot and hands it over. It would instead hand over `obj<ATop>` and
+  let `add_strong_ref` (`DHandleStore.hpp:230`) mint the slot.
+
+**And the store can CHECK, not merely attest.** The obligation is already
+written in prose one line above that function (`DHandleStore.hpp:228`):
+
+> *Require: @p x refers to memory owned by @ref storage_*
+
+Moving construction inside the store turns that comment into a runtime check
+paid once per root creation, after which the type carries the result. A token
+says "a validated store existed somewhere"; a check says "this pointer is in
+*this* store's arena" — the same compile-time guarantee at the use site, a
+materially better one at the creation site.
+
+**Use `storage_.contains(p)`, not `DHandleStore::contains(p)`.** The latter
+(`DHandleStore.hpp:189`) unions the root-set and free-list arenas, and those are
+mapped by `DArenaVector::map` with `ArenaConfig::store_header_flag_` defaulting
+to false. A pointer into them passes `contains` and then fails `alloc_info` —
+precisely the failure this ticket exists to exclude.
+
+### Why the arena is not passed down the print tree instead
+
+Considered and rejected 2026-09-24. `obj2arena` is what makes a slot
+**self-describing**, and that is the property worth keeping: `visit_object_slots`
+hands slots out by reference to *any* consumer, so every walker of the root set
+— not just `JsonPrinter_ObjectSlot` — would otherwise need the arena threaded to
+it. Providing `DArena::obj2arena` is the reason that threading is unnecessary
+(`.xo-backlog/xo-arena/issues/04`).
+
+The mechanical obstacle is real too — printers dispatch by type key through
+`provide_printer`, so `JsonPrinter_AllocFlywheel` has no parameter channel to
+`JsonPrinter_ObjectSlot` — but it is the lesser reason.
+
+### Cost: the ObjectSlotJson fixture
+
+`root(DArena &, double)` at `xo-printjson/utest/ObjectSlotJson.test.cpp:118`
+builds slots from a bare `DArena` with **no store at all**, and feeds three of
+the file's five cases:
+
+| line | case |
+|---|---|
+| 167 | `occupied-slot-reports-identity-and-offset` |
+| 191 | `offset-is-resolved-from-the-pointer-alone` — two arenas, to prove the mask lands on the right one |
+| 221 | `slot-without-an-agreed-alignment-reports-null-offset` |
+
+Those need real stores, or need to move. This is the bulk of the work, and it is
+arguably the point: the fixture constructs exactly the state the design makes
+unrepresentable.
+
+### It does not subsume the write-once gap
+
+The two are orthogonal and both are needed. Store-only creation proves the
+pointer lies in **some** validated store's storage arena. Whether masking then
+*finds* that arena depends on `s_storage_base_align` still holding the value
+that store was checked against at `DHandleStore.hpp:112` — and the printer reads
+the global at PRINT time, long after the check.
+
 ## Open questions
 
 - **Stored or only required?** Evidence in `ObjectSlot` as a member widens every
   slot; evidence as a ctor *parameter* is free at runtime and is what "every
   non-null slot was built from proven storage" actually needs. The latter proves
-  it at each construction site rather than carrying it.
-- **How does the arena reach the printer?** Printers are dispatched by type key
-  through `provide_printer`, so `JsonPrinter_AllocFlywheel` has no parameter
-  channel to `JsonPrinter_ObjectSlot`. If one existed, the flywheel could hand
-  down `storage()` (`xo-facet/include/xo/facet/AllocFlywheel.hpp:61`) and
-  `obj2arena` would leave the path entirely — a stronger outcome than proving
-  it sound. Worth deciding before building the witness, since it may make part
-  of it unnecessary.
+  it at each construction site rather than carrying it. Store-only creation
+  makes this narrower — the store is the witness — but it still has to be
+  settled for `ObjectSlot`'s own members.
 - No `Milestone:` line: no existing milestone covers flywheel visualization.
   `xo-sdlc --milestones` as of 2026-09-24 lists ostream-containment,
   ppsink-migration, pyobject2, reflectable2.
 
 ## Files
 
-- `xo-facet/include/xo/facet/handlestore/ObjectSlot.hpp:41-43` — ctors to guard
+- `xo-facet/include/xo/facet/handlestore/ObjectSlot.hpp:42-43` — value-carrying ctors, to go private
+- `xo-facet/include/xo/facet/ObjectHandle.hpp:97` — the one production construction site, moves into the store
+- `xo-facet/include/xo/facet/handlestore/DHandleStore.hpp:228-230` — `add_strong_ref`, gains the mint and the check
+- `xo-facet/include/xo/facet/handlestore/DHandleStore.hpp:189` — `contains`, the one NOT to use
 - `xo-facet/include/xo/facet/handlestore/DHandleStore.hpp:20`,`:98`,`:106`,`:112` — the setter and the three checks
 - `xo-facet/src/facet/FacetAppcx.cpp:23` — the unguarded assignment
 - `xo-facet/src/facet/DHandleStore.cpp:10` — `s_storage_base_align = 0` definition
 - `xo-printjson/src/printjson/PrintJson.cpp:525` — `JsonPrinter_ObjectSlot`, gains `size`
 - `xo-object2/utest/flywheel_frame.test.cpp` — byte-exact wire contract, must be updated deliberately
-- `xo-printjson/utest/ObjectSlotJson.test.cpp:99`,`:158`,`:237` — the three sites this ticket disturbs
+- `xo-printjson/utest/ObjectSlotJson.test.cpp:118` — the storeless fixture, and the three cases it feeds
 
 ## Done when
 
 - a flywheel frame's non-null slots carry `size`, sourced from `AllocInfo::size()`
+- a non-null `ObjectSlot` cannot be constructed outside a `DHandleStore`, and
+  the store rejects a pointer its own `storage_` does not contain
 - `DHandleStoreBase::assign_storage_base_align` rejects a conflicting
   reassignment, with a test that the second, differing `FacetAppcx` is refused
-- a non-null `ObjectSlot` cannot be constructed without a witness that its
-  storage came from a validated `DHandleStore`
+- `ObjectSlotJson.test.cpp`'s cases still cover what they cover today — in
+  particular `offset-is-resolved-from-the-pointer-alone`, which is the only
+  thing pinning that masking finds the right arena among several
 - the byte-exact frame test is updated for the new key, deliberately
-- falsified: remove the witness requirement, or the write-once rule, and a test
-  goes red — **and the falsification compiles**, per issue 02
+- falsified: remove the store-only restriction, the provenance check, or the
+  write-once rule, and a test goes red — **and each falsification compiles**,
+  per issue 02
 - `xo-build --sweep` ok in both stages
