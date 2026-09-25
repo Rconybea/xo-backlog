@@ -18,12 +18,29 @@ arena->alloc_info(data);                             // read its header
 ```
 
 The proposal is to make both correct **by construction**: make a non-null
-`ObjectSlot` something only a `DHandleStore` can create, so holding one is
-compile-checked proof that it refers to AllocFlywheel-owned storage. See
+`ObjectSlot` something only a `DHandleStore` can create. See
 [The design](#the-design-only-a-handlestore-can-create-an-objectslot) below.
-The `Evidence` / `EvidenceProvider` pattern already in the tree
-(`xo-subsys/include/xo/subsys/Evidence.hpp`) is the fallback shape if the store
-turns out not to be able to mint slots directly.
+
+**No `Evidence` token is carried.** Decided 2026-09-24: the chain of trust is
+structural and legible from the types, so a witness would only restate it.
+
+| step | who guarantees it | where |
+|---|---|---|
+| only a `DHandleStore` creates an `ObjectSlot` | the access restriction | `ObjectSlot.hpp:42-43`, private + friend |
+| the pointer is in that store's storage arena | the store, per slot | `DHandleStore.hpp:230`, `storage_.contains` |
+| that arena has headers, non-zero base align, and the agreed k | the store, once | `DHandleStore.hpp:98`,`:106`,`:112` |
+| the arena was configured that way to begin with | `AllocFlywheel` | `xo-facet/src/facet/AllocFlywheel.cpp:63` |
+
+This is the same move `.xo-backlog/xo-facet/issues/03` invariant 4 records for
+`typerecd::_by_name`: *"The access restriction IS the lifetime contract."* Here
+the access restriction is the provenance contract. Reading `ObjectSlot` tells
+you a store made it; reading `DHandleStore` tells you what the store checked.
+
+The `Evidence` / `EvidenceProvider` pattern
+(`xo-subsys/include/xo/subsys/Evidence.hpp`) stays the fallback shape if the
+store turns out not to be able to mint slots directly — it is already used by
+`FacetAppcx` and, uncommitted, by `DHandleStore` itself for a DIFFERENT
+proposition (that a `FacetAppcx` exists at all).
 
 ## Why `sizeof(DRepr)` is not the answer
 
@@ -252,12 +269,11 @@ the global at PRINT time, long after the check.
 
 ## Open questions
 
-- **Stored or only required?** Evidence in `ObjectSlot` as a member widens every
-  slot; evidence as a ctor *parameter* is free at runtime and is what "every
-  non-null slot was built from proven storage" actually needs. The latter proves
-  it at each construction site rather than carrying it. Store-only creation
-  makes this narrower — the store is the witness — but it still has to be
-  settled for `ObjectSlot`'s own members.
+- Settled 2026-09-24, kept because it is the first thing a reader will ask:
+  **`ObjectSlot` gains no member.** Evidence as a stored field would widen every
+  slot; evidence as a ctor requirement is free at runtime; and neither is needed,
+  because the chain of trust above is already legible from the types. See the
+  table under the opening section.
 - No `Milestone:` line: no existing milestone covers flywheel visualization.
   `xo-sdlc --milestones` as of 2026-09-24 lists ostream-containment,
   ppsink-migration, pyobject2, reflectable2.
