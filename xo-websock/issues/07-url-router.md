@@ -129,6 +129,21 @@ Refcounting still matters under this rule. Between unregister and the queued
 work running, live subscriptions hold the endpoint alive, and their
 unsubscribe still runs on the endpoint that subscribed them.
 
+## A duplicate registration is rejected (decided 2026-09-26, RC)
+
+Registering an endpoint whose stem is already present is an ERROR. Replacing
+one takes an explicit unregister first. Today a duplicate silently replaces
+the existing endpoint (`this->stream_map_[stem] = std::move(endpoint)`).
+
+- **Proposed: `register_*` throws** on a duplicate, so a python caller gets an
+  exception rather than a return value it can ignore.
+- **"Duplicate" means same STEM, not same pattern.** The maps are keyed by
+  stem, the longest literal prefix. `/fw/${a}` and `/fw/${a}/detail` share the
+  stem `/fw/`, so the second is rejected even though the patterns differ. It
+  was silently replaced before, so rejecting makes an existing limit of the
+  keying visible rather than creating it. Keying by full pattern would lift
+  it, but that is a change to matching, not in scope here.
+
 ## Consequences
 
 - **`WsSessionRouter` takes `UrlRouter const &`** in place of its
@@ -144,9 +159,6 @@ unsubscribe still runs on the endpoint that subscribed them.
 
 ## Open
 
-- **Replace vs reject** on registering an existing stem. With unregister
-  available, rejecting a duplicate and requiring an explicit unregister first
-  is the stricter contract; replacing silently is today's behaviour.
 - `UrlRouter` sits beside `WsSessionRouter`: two routers, different jobs (URL
   to endpoint, server-wide; one session's commands to its subscriptions). If
   that grates, the second is the one to rename.
@@ -159,8 +171,8 @@ unsubscribe still runs on the endpoint that subscribed them.
 - endpoints can be registered and unregistered on a running server, from C++
   and from python
 - `WsSessionRouter` takes `UrlRouter const &`; its tests use real routing
-- `UrlRouter` has its own tests, including replace-while-subscribed (the old
-  endpoint's unsubscribe still runs)
+- `UrlRouter` has its own tests: registering a duplicate stem throws; unregister
+  then re-register succeeds
 - unregistering an endpoint ends every live subscription on it, in every
   session, on the service thread; each client gets `unsubscribed` with
   `"reason": "endpoint removed"`, and the endpoint's unsubscribe runs once per
