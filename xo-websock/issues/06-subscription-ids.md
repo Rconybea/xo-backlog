@@ -58,7 +58,7 @@ and `WsSessionRouter::Subscription` gains an `id_`. Consequences:
   session. The vector is bounded by subscribes over one session's life, so no
   reclamation is needed. Same shape as the flywheel's root set, without the
   free list.
-- **The sink knows its id.** It must put `"sub"` on every envelope and is
+- **The sink knows its id.** It must put `"sub_id"` on every envelope and is
   created before the endpoint's subscribe runs, so the id is passed in:
   `WsSessionRouter::SinkFactory` and `WebsocketSink::make` gain it.
 
@@ -67,7 +67,7 @@ and `WsSessionRouter::Subscription` gains an `id_`. Consequences:
 ```json
 client  {"cmd": "subscribe",   "stream": "/flywheel"}
 server  {"cmd": "subscribed",  "sub": 0, "stream": "/flywheel"}
-server  {"stream": "/flywheel", "sub": 0, "seq": 0, "event": ...}
+server  {"stream": "/flywheel", "sub_id": 0, "seq": 0, "event": ...}
 client  {"cmd": "send",        "sub": 0, "msg": ...}
 client  {"cmd": "unsubscribe", "sub": 0}
 ```
@@ -85,7 +85,8 @@ client  {"cmd": "unsubscribe", "sub": 0}
   alongside client-assigned ids if wanted.
 - **`unsubscribe` by `"sub"`** is new -- the first control message whose
   target must be unambiguous. Errors: unknown id, already unsubscribed.
-- ids are non-negative integers; the envelope key is `"sub"`.
+- ids are non-negative integers; the envelope key is `"sub_id"` (RC,
+  2026-09-26). Whether the control messages use `"sub_id"` too is being settled.
 
 ## Open (superseded by the Design above, kept for the reasoning)
 
@@ -117,7 +118,7 @@ behaviour. These change deliberately:
 
 - every subscription has a server-assigned id -- its index in
   `subscription_v_`, never reused within a session -- carried on every
-  outbound envelope as `"sub"`
+  outbound envelope as `"sub_id"`
 - subscribe answers `subscribed` with the id BEFORE the endpoint's subscribe
   runs (a test pins the ordering against an endpoint that sends an initial
   frame), and answers an unknown stream with an error
