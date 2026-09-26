@@ -190,9 +190,28 @@ Umbrella `13049348`.
 utest.websock 23 cases / 187 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages (73/73; 47 ok, 26 no tests).
 
-Remaining: `WsSessionRouter` onto `UrlRouter const &`, runtime unregister,
-duplicate rejection, removal ending live subscriptions -- and issue 05's
-`WsSender` alongside.
+**Step 3, 2026-09-26 -- `WsSessionRouter` takes `UrlRouter const &`.**
+Implemented, awaiting review and commit in the umbrella.
+
+- `EndpointLookup` is gone; the router holds `UrlRouter const & url_router_`
+  (a reference, RC) and `subscribe()` stores `find_stream()`'s `rp<>` directly,
+  closing the raw-pointer window between lookup and the subscription taking
+  ownership.
+- Borrowed, so the `UrlRouter` must outlive every session's router:
+  `WebserverImpl::url_router_` is declared before `session_v_`, so sessions are
+  destroyed first. Commented at both ends.
+- `xo-websock/utest/WsSessionRouter.test.cpp`: the fixture's exact-match
+  `std::map` is replaced by a real `UrlRouter`; every case registers through
+  `register_stream(StreamEndpointDescr(...))`. New case
+  `subscribe-resolves-a-stream-name-through-its-pattern` (`/fw/${id}` serves
+  `/fw/7` and `/fw/8`; `/other/7` is an error). Falsified with a compiling
+  exact-match-only `find_in`: fails at its first `n_subscription` check.
+
+utest.websock 24 cases / 199 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages (73/73; 47 ok, 26 no tests).
+
+Remaining: runtime unregister, duplicate rejection, removal ending live
+subscriptions -- and issue 05's `WsSender` alongside.
 
 ## Consequences
 
@@ -221,7 +240,7 @@ duplicate rejection, removal ending live subscriptions -- and issue 05's
 - `DynamicEndpoint` is reference-counted; maps and subscriptions hold `rp<>`
 - endpoints can be registered and unregistered on a running server, from C++
   and from python
-- `WsSessionRouter` takes `UrlRouter const &`; its tests use real routing
+- ~~`WsSessionRouter` takes `UrlRouter const &`; its tests use real routing~~ step 3
 - `UrlRouter` has its own tests: registering a duplicate stem throws; unregister
   then re-register succeeds
 - unregistering an endpoint ends every live subscription on it, in every
