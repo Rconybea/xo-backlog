@@ -1,6 +1,6 @@
 # 06 — give subscriptions unique ids, so control messages are unambiguous
 
-Status: implemented 2026-09-26, awaiting review and commit in the umbrella
+Status: done 2026-09-26, umbrella `cac62b3a`
 Type: feature
 Raised: 2026-09-26, follow-up to `.xo-backlog/xo-websock/issues/04`
 
