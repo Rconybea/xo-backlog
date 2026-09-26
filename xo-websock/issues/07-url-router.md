@@ -191,7 +191,8 @@ utest.websock 23 cases / 187 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages (73/73; 47 ok, 26 no tests).
 
 **Step 3, 2026-09-26 -- `WsSessionRouter` takes `UrlRouter const &`.**
-Implemented, awaiting review and commit in the umbrella.
+Umbrella `5a6b827a` (with two `Webserver.cpp` cleanups: an undefined, unused
+`lookup_dynamic_http_stem` declaration and an unused `using Alist`).
 
 - `EndpointLookup` is gone; the router holds `UrlRouter const & url_router_`
   (a reference, RC) and `subscribe()` stores `find_stream()`'s `rp<>` directly,
