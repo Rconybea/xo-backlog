@@ -101,8 +101,24 @@ since 2022 (see issue 02).
 3. **http snapshot only, browser polls.** The smallest change, but polling is
    not really animation, and the race narrows rather than goes away.
 
-**Decided in principle: "a variation on 1".** What the variation is was not
-settled.
+**Decided 2026-09-26: option 1, with the BROWSER stepping the state
+changes.** A "next" control sends a command over the websocket; the C++ side
+performs one mutation and sends one frame back. No timer at all, so the tick
+question below is moot. And the mutation and the serialization both run in the
+webserver's message handler, on the service thread, so the race does not arise
+for this demo. Natural pairing, not yet decided: a scripted sequence of steps,
+each showing one behaviour (e.g. release a middle slot, then watch the next
+allocation reuse it).
+
+Needs something xo-websock lacks: inbound messages are only
+`{"cmd": "subscribe", ...}` today (`WebserverImpl::perform_ws_cmd`). An
+application-defined command has to reach the demo without xo-websock
+interpreting it -- a generic registered handler, keeping to "carries frames,
+never shapes them".
+
+(Settles the "command"/"cmd" question from issue 02: the kalman-era page sends
+`"cmd"` -- `xo-websock/utest/mount-origin/ex_websock.js:828` -- so the code and
+its only client agree; the `"command"` comments in `Webserver.cpp` are stale.)
 
 A suggestion from the discussion, not decided: if the example has the
 *mutating* side produce the frame string and hand it to the sink, moving
