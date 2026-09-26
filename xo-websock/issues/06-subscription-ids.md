@@ -25,9 +25,9 @@ interleaved on one socket.
 
 Each subscription gets an id, unique within its session:
 
-- carried on every outbound envelope, e.g. `"sub": <id>`, so the client can
+- carried on every outbound envelope, e.g. `"sub_id": <id>`, so the client can
   demultiplex;
-- used to address control messages: `{"cmd": "send", "sub": <id>, "msg": ...}`.
+- used to address control messages: `{"cmd": "send", "sub_id": <id>, "msg": ...}`.
 
 ### Consequence: per-subscription unsubscribe
 
@@ -40,7 +40,7 @@ grep -n '"unsubscribe"' xo-websock/src/websock/*.cpp    # empty
 ```
 
 Ids are exactly what such a command would need
-(`{"cmd": "unsubscribe", "sub": <id>}`). Worth doing together, since it is
+(`{"cmd": "unsubscribe", "sub_id": <id>}`). Worth doing together, since it is
 the first control message whose target must be unambiguous.
 
 ## Design (decided 2026-09-26)
@@ -66,10 +66,10 @@ and `WsSessionRouter::Subscription` gains an `id_`. Consequences:
 
 ```json
 client  {"cmd": "subscribe",   "stream": "/flywheel"}
-server  {"cmd": "subscribed",  "sub": 0, "stream": "/flywheel"}
+server  {"cmd": "subscribed",  "sub_id": 0, "stream": "/flywheel"}
 server  {"stream": "/flywheel", "sub_id": 0, "seq": 0, "event": ...}
-client  {"cmd": "send",        "sub": 0, "msg": ...}
-client  {"cmd": "unsubscribe", "sub": 0}
+client  {"cmd": "send",        "sub_id": 0, "msg": ...}
+client  {"cmd": "unsubscribe", "sub_id": 0}
 ```
 
 - **The subscribe response goes out BEFORE the endpoint's subscribe function
@@ -80,13 +80,14 @@ client  {"cmd": "unsubscribe", "sub": 0}
   for an unknown stream). This retires issue 04's deliberately silent
   unmatched subscribe; the test
   `subscribe-to-an-unknown-stream-stays-silent` flips on purpose.
-- **`send` is addressed by `"sub"` ONLY.** Stream-name addressing is dropped,
+- **`send` is addressed by `"sub_id"` ONLY.** Stream-name addressing is dropped,
   and with it issue 04's "earlier subscription wins" tiebreak. It can return
   alongside client-assigned ids if wanted.
-- **`unsubscribe` by `"sub"`** is new -- the first control message whose
+- **`unsubscribe` by `"sub_id"`** is new -- the first control message whose
   target must be unambiguous. Errors: unknown id, already unsubscribed.
-- ids are non-negative integers; the envelope key is `"sub_id"` (RC,
-  2026-09-26). Whether the control messages use `"sub_id"` too is being settled.
+- ids are non-negative integers, named `"sub_id"` EVERYWHERE -- envelope,
+  `subscribed` reply, `send`, `unsubscribe` (RC, 2026-09-26). One name for one
+  thing, so a page echoes back exactly the key it read off a frame.
 
 ## Open (superseded by the Design above, kept for the reasoning)
 
@@ -122,7 +123,7 @@ behaviour. These change deliberately:
 - subscribe answers `subscribed` with the id BEFORE the endpoint's subscribe
   runs (a test pins the ordering against an endpoint that sends an initial
   frame), and answers an unknown stream with an error
-- `send` addresses by `"sub"` only, unambiguously when one stream is
+- `send` addresses by `"sub_id"` only, unambiguously when one stream is
   subscribed twice
 - a client can unsubscribe one subscription by id; a stale id is an error,
   never a different subscription
