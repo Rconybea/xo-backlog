@@ -43,7 +43,52 @@ Ids are exactly what such a command would need
 (`{"cmd": "unsubscribe", "sub": <id>}`). Worth doing together, since it is
 the first control message whose target must be unambiguous.
 
-## Open
+## Design (decided 2026-09-26)
+
+**Server-assigned ids, for now.** Client-assigned ids are the eventual second
+mode ("support both"); not in this ticket.
+
+**The id is the subscription's index in `WsSessionRouter::subscription_v_`**,
+and `WsSessionRouter::Subscription` gains an `id_`. Consequences:
+
+- **Unsubscribe leaves a hole; slots are never compacted or reused.** Erasing
+  would shift every later id. Reusing a freed slot would let a page still
+  holding the old id steer a `send` into a different subscription -- a
+  stale-id bug. So unsubscribe nulls the slot, and ids only grow within a
+  session. The vector is bounded by subscribes over one session's life, so no
+  reclamation is needed. Same shape as the flywheel's root set, without the
+  free list.
+- **The sink knows its id.** It must put `"sub"` on every envelope and is
+  created before the endpoint's subscribe runs, so the id is passed in:
+  `WsSessionRouter::SinkFactory` and `WebsocketSink::make` gain it.
+
+**Protocol:**
+
+```json
+client  {"cmd": "subscribe",   "stream": "/flywheel"}
+server  {"cmd": "subscribed",  "sub": 0, "stream": "/flywheel"}
+server  {"stream": "/flywheel", "sub": 0, "seq": 0, "event": ...}
+client  {"cmd": "send",        "sub": 0, "msg": ...}
+client  {"cmd": "unsubscribe", "sub": 0}
+```
+
+- **The subscribe response goes out BEFORE the endpoint's subscribe function
+  runs.** That function may send an initial frame immediately -- the flywheel
+  demo's will -- and the page must learn its id before any frame tagged with
+  it arrives. Order: assign id, reply `subscribed`, then call subscribe.
+- **A failed subscribe gets an error reply** (`{"error": ..., "stream": S}`
+  for an unknown stream). This retires issue 04's deliberately silent
+  unmatched subscribe; the test
+  `subscribe-to-an-unknown-stream-stays-silent` flips on purpose.
+- **`send` is addressed by `"sub"` ONLY.** Stream-name addressing is dropped,
+  and with it issue 04's "earlier subscription wins" tiebreak. It can return
+  alongside client-assigned ids if wanted.
+- **`unsubscribe` by `"sub"`** is new -- the first control message whose
+  target must be unambiguous. Errors: unknown id, already unsubscribed.
+- ids are non-negative integers; the envelope key is `"sub"`.
+
+## Open (superseded by the Design above, kept for the reasoning)
+
 
 - **Who assigns the id.** Server-assigned needs an acknowledgement, since
   subscribe replies with nothing today; the client must wait for it before it
@@ -70,10 +115,15 @@ behaviour. These change deliberately:
 
 ## Done when
 
-- every subscription has an id unique within its session, carried on every
-  outbound envelope
-- `send` can address a subscription by id, unambiguously when one stream is
+- every subscription has a server-assigned id -- its index in
+  `subscription_v_`, never reused within a session -- carried on every
+  outbound envelope as `"sub"`
+- subscribe answers `subscribed` with the id BEFORE the endpoint's subscribe
+  runs (a test pins the ordering against an endpoint that sends an initial
+  frame), and answers an unknown stream with an error
+- `send` addresses by `"sub"` only, unambiguously when one stream is
   subscribed twice
-- a client can unsubscribe one subscription by id
+- a client can unsubscribe one subscription by id; a stale id is an error,
+  never a different subscription
 - tests cover two subscriptions to one stream, each addressed separately
 - `xo-build --sweep` ok in both stages
