@@ -18,26 +18,105 @@ small, trivially copyable callables are stored inline -- that capture is
 heap-allocated, since `rp<>` is not trivially copyable. That is inferred from
 the library's rule, not measured.
 
-## Proposal
+## Proposal: `WsSender` (sketched 2026-09-26; name chosen by RC)
 
-An abstract sender class with a virtual send, replacing `SendFn`:
+**One `WsSender` per session, shared by that session's router (replies) and
+every sink it creates (frames).** It is the layer BELOW `WebsocketSink`: the
+sink turns an event into json (envelope, `sub_id`, `seq`); the sender puts
+finished text on the wire. Hence not another "sink".
 
-- the webserver-backed implementation holds the webserver and session id;
-- the unit tests' recorder becomes a small subclass
-  (`xo-websock/utest/WsSessionRouter.test.cpp` builds sinks through
-  `WebsocketSink::make(send_fn, ...)` in two cases);
-- `WebsocketSink::make(send_fn, pjson, stream)` takes the sender instead.
+It replaces BOTH `WebsocketSink::SendFn` and `WsSessionRouter::ReplyFn`. The
+two have the identical signature `void (std::string text)`, and in production
+are the identical operation: `Webserver::send_text(session_id, text)` for one
+session.
+
+```cpp
+namespace xo::web {
+    /** @brief delivers finished outbound text to ONE websocket session.
+     *
+     *  THREADING: send_text() may be called from any thread; it must not
+     *  block (the production sender queues).
+     **/
+    class WsSender : public ref::Displayable {
+    public:
+        /** send @p text as one complete websocket message.
+         *  After the session closes, dropped rather than delivered.
+         **/
+        virtual void send_text(std::string text) = 0;
+
+        /** false once the destination session has closed **/
+        virtual bool is_open() const = 0;
+    };
+}
+```
+
+Production implementation, private to `Webserver.cpp`:
+
+```cpp
+class WsSessionSender : public WsSender {
+public:
+    WsSessionSender(WebserverImpl * websrv, uint32_t session_id);
+
+    void send_text(std::string text) override;   // -> websrv_->send_text(session_id_, ...), if open
+    bool is_open() const override;
+    void close();                                 // from notify_ws_session_close
+
+private:
+    WebserverImpl * websrv_;
+    uint32_t session_id_;
+    std::atomic<bool> open_{true};
+};
+```
+
+Wiring:
+
+- `WebsocketSessionRecd` creates one `rp<WsSender>` at session open, and
+  closes it at session close.
+- `WsSessionRouter` takes that `rp<WsSender>` in place of `ReplyFn`.
+- `WebsocketSink::make(rp<WsSender>, pjson, stream, sub_id)` replaces BOTH
+  existing `make()` overloads. The webserver-specific one exists only to build
+  a send function from `(websrv, session_id)`.
+- The tests implement `RecordingSender : WsSender` holding a
+  `std::vector<std::string>`; it replaces the recorder lambdas in
+  `xo-websock/utest/WsSessionRouter.test.cpp`.
 
 A concrete subclass can be allocated however the owner chooses, which is the
-point.
+original point of the ticket.
 
-Open:
+### `close()` fixes a hazard in the current design
 
-- plain virtual class, or a fomo facet (`ASender` / `obj<ASender>`), as
-  xo-reactor2 does for its event sinks. The facet version fits the direction of
-  the codebase; the plain class is smaller.
-- ownership: does the sink own its sender (`rp<>`, which means `Refcount`), or
-  borrow one whose lifetime the session guarantees?
+From reading the code; NOT reproduced. A sink today captures a bare
+`session_id` (`WebsocketSink::make`, `xo-websock/src/websock/WebsocketSink.cpp`).
+When a session closes its id goes on a free list, and the next connection
+reuses it (`WebserverImpl::notify_ws_session_close` /
+`notify_ws_session_open`, `xo-websock/src/websock/Webserver.cpp`). So a sink
+the application RETAINS past its session's close would start writing into a
+different client's session. The flywheel demo is exactly the kind of code that
+might keep a sink for later pushes.
+
+`close()` removes the hazard: the sink holds the session's sender rather than
+its id, and a closed sender drops what it is given. Worth a test that
+reproduces the misdelivery first.
+
+### Consequence for `WsSessionHost` (below)
+
+With the router holding a sender and `pjson`, it can make sinks itself via
+`WebsocketSink::make(sender, pjson, stream, sub_id)`. `SinkFactory` then
+disappears, `ReplyFn` is the sender, and the host interface shrinks to the
+endpoint lookup alone. Whether a one-method interface is still worth having,
+or the router just takes the endpoint map, is open.
+
+### Open
+
+1. **`std::string text` by value**, as sketched: the production sender moves it
+   into its queue without copying. `std::string_view` would force a copy
+   there. `std::string &&` is equivalent but stricter for callers.
+2. **Ownership:** `rp<WsSender>` is the simplest way to share one sender
+   between a router and sinks that may outlive it. It costs one `Refcount`
+   allocation per SESSION, against one per subscription today with `SendFn`.
+3. **Plain virtual class or a fomo facet** (`AWsSender` / `obj<AWsSender>`), as
+   xo-reactor2 does for its event sinks. The plain class is less code and
+   enough for two implementations; the facet matches the codebase's direction.
 
 ## Also in scope: the session router's view of the server
 
@@ -107,8 +186,12 @@ real target, that is a separate and larger change.
 
 ## Done when
 
-- `WebsocketSink::SendFn` is gone; sinks send through the sender class
-- the webserver-backed and test senders are subclasses
+- `WsSender` exists; `WebsocketSink::SendFn` and `WsSessionRouter::ReplyFn` are
+  gone; one sender per session serves the router and all of its sinks
+- `WsSessionSender` (production) and `RecordingSender` (tests) implement it
+- a sink retained past its session's close cannot write into a later session
+  that reuses the id -- a test reproduces the misdelivery before the fix, and
+  shows it dropped after
 - `WsSessionRouter` takes one session-host interface instead of three
   `std::function`s; `WebserverImpl` and the test fixture implement it
 - `StreamReceiveFn` is an API class; `StreamEndpointDescr` and
