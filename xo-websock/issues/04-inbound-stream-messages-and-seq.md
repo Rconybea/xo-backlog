@@ -1,6 +1,6 @@
 # 04 — inbound messages on a subscribed stream; sequence numbers in the envelope
 
-Status: open
+Status: implemented 2026-09-26, awaiting review and commit in the umbrella
 Type: feature
 Raised: 2026-09-26, for `.xo-backlog/xo-websock/issues/03` (browser-stepped AllocFlywheel demo)
 
@@ -123,6 +123,88 @@ client in a C++ utest; or a python client (needs a websocket library in the
 nix environment -- unverified whether one is there). The routing logic
 (find subscription by stream, call receive with the right sink, `seq`
 increments per subscription) is the part worth pinning, whatever the harness.
+
+## What landed, 2026-09-26
+
+Decisions taken after the design above: `seq` is 0-based (RC); a `send` to a
+stream the session has not subscribed to gets an error reply (RC); tests use a
+socket-free seam (RC chose harness A; a python client is a later follow-up).
+
+| where | change |
+|---|---|
+| xo-webutil `StreamEndpointDescr` | `StreamReceiveFn`, an optional 4th ctor argument; `Json::Value` forward-declared, so no new dependency; threading contract documented there |
+| xo-websock `DynamicEndpoint` | carries the receive fn; `has_receive()`, `receive()` |
+| xo-websock **`WsSessionRouter`** (new) | one per session; owns the subscription list and all command handling; no libwebsockets. Reaches the server through 3 injected fns: find endpoint, make sink, reply to session |
+| xo-websock `WebsocketSink` | second `make(send_fn, pjson, stream)`; the webserver's `make()` wraps it; envelope gains `"seq"` |
+| xo-websock `Webserver.cpp` | `WebsocketSubscriptionRecd`, `subscribe_endpoint`, `readjson_` and the parsing in `perform_ws_cmd` removed -- the session record owns a router and delegates; 145 lines out, 78 in |
+
+Error replies are `{"error": <reason>, "stream": <name>}`, with "stream"
+absent when there is none to name. Reasons: `malformed json: ...`,
+`message is not a json object`, `send requires a "stream"`,
+`not subscribed to stream`, `stream does not accept messages`,
+`stream handler failed: <what()>`.
+
+**A server crash fixed along the way.** A client sending a json STRING or ARRAY
+crashed the server: jsoncpp throws `Json::LogicError` from `operator[]` on a
+non-object (and from `asString()` on a non-string), and the exception escaped
+into libwebsockets' C callback. The router type-checks before any field
+access, and catches a handler's `std::exception` and turns it into an error
+reply. Both are pinned by tests.
+
+### Calls taken without RC, for review
+
+- **The unit tests live in `xo-websock/utest/`, next to the kalman demo.**
+  `add_subdirectory(utest)` is now live. The demo's build stanza is kept
+  byte-identical inside `if(FALSE)`, and none of its files were touched. That
+  is why the tests' main is `websock_unit_main.cpp`: `websock_utest_main.cpp`
+  is the demo's. Issue 01 records this; its delete-or-port decision is
+  unaffected.
+- **A `send` whose message fails to parse, or is not an object, gets an error
+  reply**, not only the not-subscribed case. It is on the send path in spirit
+  (the server cannot know it was meant to be a send), and silence here is the
+  "page gets nothing and nothing says why" problem.
+- **An unmatched `subscribe`, and an unknown `cmd`, stay silent**, as before --
+  an explicit scope limit, pinned by a test so a later change is deliberate.
+  Arguably the same problem as above.
+- **Subscribing twice to one stream is allowed**, as before. A `send` goes to
+  the EARLIER subscription.
+- **`msg` is optional**: absent reads as json null, and the handler decides.
+
+### Tests
+
+`utest.websock`, 11 cases, 72 assertions -- the first automated tests
+xo-websock has had. They cover: subscribe; silent unknown subscribe; send
+reaching receive with the subscription's OWN sink; routing among two streams;
+the four error cases; malformed and non-object input never throwing; a
+throwing handler; unsubscribe_all; `seq` 0-based and per subscription; and a
+handler's reply going out enveloped and sequenced on its own subscription only
+(real sinks, no socket).
+
+Each of seven behaviours was falsified with a change that compiles, and each
+failed at its intended assertion: routing ignoring the stream name; 1-based
+seq; no error when unsubscribed; object check removed; handler exceptions not
+caught; receive handed a fresh sink instead of the subscription's; unsubscribe
+skipped.
+
+Umbrella ctest 48/48 (+1, utest.websock). `xo-build --sweep` ok in both stages:
+
+```
+stage 1: 73 attempted: 73 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2: 73 attempted: 47 ok, 26 with no tests, 0 failed, 0 skipped
+```
+
+xo-websock moved from "no tests" to "ok".
+
+### Noticed, not acted on
+
+- `WebsocketSinkImpl::notify_ev_tp` has debug logging hard-wired on
+  (`XO_DEBUG_(true)`), so every outbound frame is logged. Visible in the test
+  output, and the flywheel demo would log every frame too.
+- A subscription holds a raw `DynamicEndpoint *`. Re-registering a stream
+  replaces its `unique_ptr` in the webserver's stream map, which would leave
+  existing subscriptions dangling. Pre-existing (the old record held the same
+  raw pointer); harmless while endpoints are registered once, before
+  `start_webserver`.
 
 ## Done when
 
