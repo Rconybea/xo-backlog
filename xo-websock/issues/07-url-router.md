@@ -59,9 +59,10 @@ and XO cannot impose lifetime rules on arbitrary python code. So:
   `unique_ptr`.
 - **Each subscription holds its endpoint by `rp<>`.** A subscription must
   later call the SAME endpoint's unsubscribe, to detach its sink from the
-  source. Replacing or removing an endpoint then leaves existing subscriptions
-  on the old one, alive, while new subscribes get the new one (or none).
-  Subscribe and unsubscribe always pair on one endpoint's functions.
+  source. Holding it by `rp<>` means that endpoint stays alive for as long as
+  the subscription needs it -- in particular across an unregister, until the
+  subscription has been ended (see below) -- so subscribe and unsubscribe
+  always pair on one endpoint's functions.
 
   Today a subscription holds a raw `DynamicEndpoint *`, and re-registering a
   stem frees the old endpoint out from under it
@@ -155,7 +156,8 @@ the existing endpoint (`this->stream_map_[stem] = std::move(endpoint)`).
   registers through `register_stream()` instead of an exact-match map.
   `lookup_pattern` has no tests at all today; `UrlRouter` gets its own:
   longest-stem wins, `${var}` patterns, the `/`-then-no-`/` prefix order, http
-  and stream kept separate, unregister, and replace-while-subscribed.
+  and stream kept separate, a duplicate stem rejected, and
+  unregister-while-subscribed (the old endpoint's unsubscribe still runs).
 
 ## Open
 
