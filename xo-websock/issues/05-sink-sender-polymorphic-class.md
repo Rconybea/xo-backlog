@@ -62,6 +62,27 @@ objection is less that they allocate today than that the choice is made
 inside the standard library rather than by us, and that three independent
 callables stand in for one interface. The test fixture's lambdas capture more.
 
+## Also in scope: the stream receive function
+
+Widened 2026-09-26 (RC). `StreamReceiveFn`
+(`xo-webutil/include/xo/webutil/StreamEndpointDescr.hpp`), added in issue 04,
+becomes an API class: an abstract receiver with a virtual
+`receive(rp<WebsocketSink> const &, Json::Value const &)`, held by
+`StreamEndpointDescr` and `DynamicEndpoint` in place of the `std::function`.
+It is the one callback here that APPLICATION code implements -- the flywheel
+demo's "step" handler will be one -- so it is the interface most worth making
+explicit. The threading contract now documented on the alias moves to the
+class.
+
+Open: `StreamReceiveFn` has two siblings in the same descriptor,
+`StreamSubscribeFn` and `StreamUnsubscribeFn`. The three together ARE a stream
+endpoint's behaviour, so a single endpoint interface with subscribe,
+unsubscribe and receive could replace all three -- the same one-role shape as
+`WsSessionHost` above. Kept out of scope for now: it reaches
+xo-reactor2websock, whose `stream_endpoint_descr()`
+(`xo-reactor2websock/src/reactor2websock/reactor_endpoints.cpp`) builds the
+subscribe/unsubscribe lambdas, and xo-pyreactor2websock above it.
+
 ## Not in scope, but the same objection applies
 
 The remaining `std::function` aliases on the path:
@@ -72,7 +93,7 @@ grep -rn "std::function<" xo-websock/include xo-websock/src xo-webutil/include
 
 | alias | where |
 |---|---|
-| `StreamSubscribeFn`, `StreamUnsubscribeFn`, `StreamReceiveFn` | `StreamEndpointDescr` (xo-webutil) -- one set per registered endpoint |
+| `StreamSubscribeFn`, `StreamUnsubscribeFn` | `StreamEndpointDescr` (xo-webutil) -- one set per registered endpoint; see the Open note above |
 | `HttpEndpointFn` | `HttpEndpointDescr` (xo-webutil) |
 
 These are created once per registered endpoint, at startup, not per
@@ -90,5 +111,7 @@ real target, that is a separate and larger change.
 - the webserver-backed and test senders are subclasses
 - `WsSessionRouter` takes one session-host interface instead of three
   `std::function`s; `WebserverImpl` and the test fixture implement it
+- `StreamReceiveFn` is an API class; `StreamEndpointDescr` and
+  `DynamicEndpoint` hold it; the router tests' receive handlers are subclasses
 - `utest.websock` unchanged in what it covers, and green
 - `xo-build --sweep` ok in both stages
