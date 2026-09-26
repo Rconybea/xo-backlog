@@ -211,8 +211,40 @@ Umbrella `5a6b827a` (with two `Webserver.cpp` cleanups: an undefined, unused
 utest.websock 24 cases / 199 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages (73/73; 47 ok, 26 no tests).
 
-Remaining: runtime unregister, duplicate rejection, removal ending live
-subscriptions -- and issue 05's `WsSender` alongside.
+**Step 4, 2026-09-26 -- unregister + duplicate rejection, in `UrlRouter`
+only** (RC: bounded; no Webserver/python API yet). Implemented, awaiting review
+and commit in the umbrella.
+
+- `register_http` / `register_stream` throw `std::runtime_error` on a stem
+  already in that map; the message names both patterns and says to unregister
+  first. Propagates through `Webserver::register_*_endpoint` (documented in
+  `Webserver.hpp`); no in-tree caller registers a duplicate.
+- `bool unregister_http(uri_pattern)` / `unregister_stream(uri_pattern)`.
+  Calls taken without RC, for review:
+  - **exact pattern required**: `/fw/${b}` does not remove a registered
+    `/fw/${a}`, though they share a stem. Needed `DynamicEndpoint::uri_pattern()`.
+  - **not found returns false, does not throw** -- removal stays idempotent.
+    Arguable against the "python can ignore a return value" reasoning for
+    register; flip if preferred.
+  - the removed `rp<>` is released after the lock, so an endpoint dtor (and its
+    captures' dtors) never runs under the router's mutex.
+- Live subscriptions on an unregistered endpoint are NOT ended: they keep it
+  alive via `rp<>` and keep receiving frames. Unreachable until the
+  Webserver/python unregister API exists (steps below).
+- Tests: `url-router-reregistering-a-stem-replaces` flipped to
+  `url-router-rejects-a-duplicate-stem`; new `unregister-then-register-replaces`
+  and `unregister-needs-the-exact-pattern`. The router's
+  `an-endpoint-replaced-while-subscribed-outlives-the-map` now unregisters
+  before re-registering. Falsified with compiling changes: duplicate check
+  disabled; pattern comparison in unregister disabled -- each fails at its
+  intended assertion.
+
+utest.websock 26 cases / 215 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages.
+
+Remaining: removal ends live subscriptions (service thread, `"reason":
+"endpoint removed"`); then Webserver + python unregister API -- and issue 05's
+`WsSender` before the former.
 
 ## Consequences
 
