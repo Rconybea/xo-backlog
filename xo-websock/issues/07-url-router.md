@@ -168,7 +168,7 @@ utest.websock 15 cases / 160 assertions; umbrella 48/48; `xo-build --sweep` ok
 in both stages (73/73; 47 ok, 26 no tests).
 
 **Step 2, 2026-09-26 -- `UrlRouter` extracted** (RC: extraction only).
-Implemented, awaiting review and commit in the umbrella.
+Umbrella `13049348`.
 
 - `xo-websock/include/xo/websock/UrlRouter.hpp`, `src/websock/UrlRouter.cpp`:
   `register_http` / `register_stream`, `find_http` / `find_stream` returning
