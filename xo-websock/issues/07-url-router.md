@@ -145,6 +145,32 @@ the existing endpoint (`this->stream_map_[stem] = std::move(endpoint)`).
   keying visible rather than creating it. Keying by full pattern would lift
   it, but that is a change to matching, not in scope here.
 
+## Progress
+
+**Step 1, 2026-09-26 -- `DynamicEndpoint` reference-counted** (RC's suggestion:
+land it alone, ahead of the rest of 05/07). Implemented, awaiting review and
+commit in the umbrella.
+
+- `DynamicEndpoint : public ref::Refcount`; `make_http` / `make_stream` return
+  `rp<DynamicEndpoint>`
+- `WebserverImpl`'s `EndpointMap` holds `rp<>`; lookups still return a raw
+  pointer (`UrlRouter::find_*` returning `rp<>` is the later step)
+- `WsSessionRouter::Subscription::endpoint_` is `rp<DynamicEndpoint>`
+
+This alone fixes the re-registration hazard: the old endpoint lives until its
+last subscription ends, and unsubscribe runs on the endpoint that subscribed.
+Pinned by `an-endpoint-replaced-while-subscribed-outlives-the-map`
+(`xo-websock/utest/WsSessionRouter.test.cpp`), which tracks the old endpoint's
+lifetime through a `shared_ptr` its callbacks capture. Falsified: a raw-pointer
+subscription fails that test at the liveness check, before the unsubscribe
+that would have called into freed memory.
+
+utest.websock 15 cases / 160 assertions; umbrella 48/48; `xo-build --sweep` ok
+in both stages (73/73; 47 ok, 26 no tests).
+
+Remaining: `UrlRouter`, runtime unregister, the lock, duplicate rejection,
+removal ending live subscriptions -- and issue 05's `WsSender` alongside.
+
 ## Consequences
 
 - **`WsSessionRouter` takes `UrlRouter const &`** in place of its
