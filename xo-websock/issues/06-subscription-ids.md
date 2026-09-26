@@ -1,6 +1,6 @@
 # 06 — give subscriptions unique ids, so control messages are unambiguous
 
-Status: open
+Status: implemented 2026-09-26, awaiting review and commit in the umbrella
 Type: feature
 Raised: 2026-09-26, follow-up to `.xo-backlog/xo-websock/issues/04`
 
@@ -114,6 +114,63 @@ behaviour. These change deliberately:
 
 - `send-routes-to-the-named-stream-only` -- the addressing it pins changes;
 - `subscribe-to-an-unknown-stream-stays-silent` -- if an ack lands.
+
+## What landed, 2026-09-26
+
+As designed. Touches only xo-websock: `WsSessionRouter` (the protocol),
+`WebsocketSink` (both `make()`s gain `sub_id`, envelope gains `"sub_id"`),
+`Webserver.cpp` (the sink factory passes the id through). The `SinkFactory`
+signature gains the id. No other subsystem calls `WebsocketSink::make`.
+
+Replies and errors, as implemented:
+
+| message | reply |
+|---|---|
+| subscribe, known stream | `{"cmd": "subscribed", "stream": S, "sub_id": N}` BEFORE the endpoint's subscribe runs |
+| subscribe, unknown stream | `{"error": "unknown stream", "stream": S}` |
+| subscribe, no stream | `{"error": "subscribe requires a \"stream\""}` |
+| send / unsubscribe, missing or non-uint `sub_id` | `{"error": "<cmd> requires a \"sub_id\""}` |
+| send / unsubscribe, never-assigned id | `{"error": "unknown sub_id", "sub_id": N}` |
+| send / unsubscribe, retired id | `{"error": "already unsubscribed", "sub_id": N}` |
+| send, endpoint without receive | `{"error": "stream does not accept messages", "stream": S, "sub_id": N}` |
+| unsubscribe, active id | `{"cmd": "unsubscribed", "sub_id": N}` |
+
+`sub_id` must pass jsoncpp's `isUInt()`, so a negative, fractional or string
+id is rejected before `asUInt()` could throw.
+
+### Calls taken without RC, for review
+
+- **`unsubscribe` gets a reply**, `{"cmd": "unsubscribed", "sub_id": N}`.
+  The design did not specify one. Frames already queued may still arrive after
+  the page asks to unsubscribe, so the page needs a marker meaning "no more
+  frames on this id". Trivially removable.
+- **"unknown" and "already unsubscribed" are distinct errors**: an id never
+  assigned, versus one retired. It costs nothing -- the slot says which -- and
+  a page debugging a stale id wants to know that it WAS valid once.
+- `n_subscription()` now counts ACTIVE subscriptions, excluding retired slots.
+
+### Tests
+
+`utest.websock`: 14 cases, 155 assertions (was 11 / 72). New: the subscribed
+reply and its id; unknown stream is an error (issue 04's silent case, flipped
+on purpose and renamed); **the subscribed reply precedes an initial frame sent
+from the endpoint's subscribe function**, with replies and frames on one
+ordered wire; one stream subscribed twice and addressed separately;
+unsubscribe by id, including the retired-id errors and no double unsubscribe;
+a retired id never reused; the envelope carrying `sub_id`. Every existing case
+moved to `sub_id` addressing.
+
+Six behaviours falsified, each with a change that compiles, each failing at
+its intended assertion: reply sent after the endpoint's subscribe; slots
+erased so ids are reused; send ignoring `sub_id`; envelope without `sub_id`;
+unsubscribe leaving the slot live; unknown stream silent.
+
+Umbrella ctest 48/48. `xo-build --sweep` ok in both stages:
+
+```
+stage 1: 73 attempted: 73 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2: 73 attempted: 47 ok, 26 with no tests, 0 failed, 0 skipped
+```
 
 ## Done when
 
