@@ -1,6 +1,6 @@
 # 04 — inbound messages on a subscribed stream; sequence numbers in the envelope
 
-Status: implemented 2026-09-26, awaiting review and commit in the umbrella
+Status: done 2026-09-26, umbrella `441b5c6d`
 Type: feature
 Raised: 2026-09-26, for `.xo-backlog/xo-websock/issues/03` (browser-stepped AllocFlywheel demo)
 
