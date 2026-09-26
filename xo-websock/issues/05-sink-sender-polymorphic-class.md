@@ -102,9 +102,8 @@ reproduces the misdelivery first.
 
 With the router holding a sender and `pjson`, it can make sinks itself via
 `WebsocketSink::make(sender, pjson, stream, sub_id)`. `SinkFactory` then
-disappears, `ReplyFn` is the sender, and the host interface shrinks to the
-endpoint lookup alone. Whether a one-method interface is still worth having,
-or the router just takes the endpoint map, is open.
+disappears, and `ReplyFn` IS the sender. What remains is the endpoint lookup,
+which was never per-session -- see the section below and issue 07.
 
 ### Open
 
@@ -120,28 +119,20 @@ or the router just takes the endpoint map, is open.
    sinks, but fomo has no ref-counted solution yet, and `rp<WsSender>` needs
    one. Revisit if fomo gains refcounting.
 
-## Also in scope: the session router's view of the server
+## ~~Also in scope: the session router's view of the server~~ -- superseded by issue 07
 
-Widened 2026-09-26 (RC). `WsSessionRouter` reaches the server through three
-`std::function`s -- `EndpointLookup`, `SinkFactory`, `ReplyFn`
-(`xo-websock/include/xo/websock/WsSessionRouter.hpp`) -- supplied as lambdas
-when `WebserverImpl::notify_ws_session_open` builds each
-`WebsocketSessionRecd` (`xo-websock/src/websock/Webserver.cpp`).
+`WsSessionRouter` reaches the server through three `std::function`s:
+`EndpointLookup`, `SinkFactory`, `ReplyFn`. These were first to become one
+per-session interface, `WsSessionHost`. They go differently now:
 
-Those three are ONE role with three operations -- find an endpoint, make a
-sink, reply to this session -- so the natural replacement is a single abstract
-interface (working name `WsSessionHost`), one object per session:
+- `ReplyFn` becomes the session's `WsSender` (above);
+- `SinkFactory` disappears -- the router makes sinks from the sender;
+- `EndpointLookup` becomes `UrlRouter const &` --
+  `.xo-backlog/xo-websock/issues/07`, which pulls the endpoint maps out of
+  `WebserverImpl`. The lookup was never per-session, so a per-session host
+  object was the wrong shape for it.
 
-- the webserver's implementation holds `WebserverImpl *` and the session id;
-- the unit tests' `Fixture` becomes one subclass instead of three lambdas;
-- `WsSessionRouter`'s constructor takes the interface.
-
-An honest caveat on the allocation argument HERE: the production lambdas
-capture only `[this]` and `[this, new_id]` -- small and trivially copyable,
-which libstdc++ stores inline without allocating. So for these three the
-objection is less that they allocate today than that the choice is made
-inside the standard library rather than by us, and that three independent
-callables stand in for one interface. The test fixture's lambdas capture more.
+`WsSessionHost` is not built.
 
 ## Also in scope: the stream receive function
 
@@ -194,8 +185,8 @@ real target, that is a separate and larger change.
 - a sink retained past its session's close cannot write into a later session
   that reuses the id -- a test reproduces the misdelivery before the fix, and
   shows it dropped after
-- `WsSessionRouter` takes one session-host interface instead of three
-  `std::function`s; `WebserverImpl` and the test fixture implement it
+- `WsSessionRouter` has no `std::function` members: it takes the session's
+  `rp<WsSender>`, and `UrlRouter const &` from issue 07
 - `StreamReceiveFn` is an API class; `StreamEndpointDescr` and
   `DynamicEndpoint` hold it; the router tests' receive handlers are subclasses
 - `utest.websock` unchanged in what it covers, and green
