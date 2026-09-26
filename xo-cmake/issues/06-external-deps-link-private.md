@@ -119,6 +119,40 @@ Open decisions:
   The `--as-needed` block stays: it keeps libwebsock.so's OWN NEEDED list
   clean, which PRIVATE linkage does not.
 
+## Prerequisite, done 2026-09-26: installed runpaths record external dirs
+
+Linking an external dependency PRIVATE has a runtime consequence the survey
+above does not cover. The installed xo library must find that dependency
+through its OWN runpath: no consumer loads it first any more, as a PUBLIC link
+made them. The xo macros set `CMAKE_INSTALL_RPATH` to the install prefix and
+nothing else, so a private external outside the loader's default search path
+could not be found.
+
+It surfaced after xo-websock/02 made libwebsockets private. The
+docker-xo-builder cmake CI failed at load: `utest.reactor2websock: ...
+libwebsockets.so.19: cannot open shared object file` (forgejo run 502). It is
+invisible in a nix dev shell, whose cc-wrapper adds a runpath entry per `-L`
+directory, and whose `-L` directories cmake also treats as implicit and so
+never records.
+
+Fixed in `xo_cxx_toplevel_options3` (`xo-cmake/cmake/xo_macros/xo_cxx.cmake`):
+`CMAKE_INSTALL_RPATH_USE_LINK_PATH` ON, as a cache default (overridable with
+`-D`). Reproduced faithfully to the CI image -- standalone build, wrapper
+rpath injection off, libwebsockets not an implicit dir -- with the fix on and
+off:
+
+| | installed libwebsock.so runpath | libwebsockets.so.19 |
+|---|---|---|
+| ON | prefix, ~/local/lib, libwebsockets' dir, openssl's dir | resolves |
+| OFF | prefix only | not found |
+
+Umbrella 48/48; `xo-build --sweep` ok both stages. The docker CI run after
+commit is the real confirmation; so is the nix pipeline, where nix's fixup
+should shrink any runpath entries a binary does not need (unverified).
+
+**Why it matters here:** without it, converting jsoncpp (xo-websock) and
+replxx (xo-interpreter) to PRIVATE would break the docker CI the same way.
+
 ## Done when
 
 - the macro never links PUBLIC, and has the opt-in for exporting compile-only
