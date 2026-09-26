@@ -1,4 +1,4 @@
-# 05 — replace WebsocketSink::SendFn (std::function) with a polymorphic class
+# 05 — replace std::function callbacks in the websocket session path with polymorphic classes
 
 Status: open
 Type: refactor
@@ -39,9 +39,32 @@ Open:
 - ownership: does the sink own its sender (`rp<>`, which means `Refcount`), or
   borrow one whose lifetime the session guarantees?
 
+## Also in scope: the session router's view of the server
+
+Widened 2026-09-26 (RC). `WsSessionRouter` reaches the server through three
+`std::function`s -- `EndpointLookup`, `SinkFactory`, `ReplyFn`
+(`xo-websock/include/xo/websock/WsSessionRouter.hpp`) -- supplied as lambdas
+when `WebserverImpl::notify_ws_session_open` builds each
+`WebsocketSessionRecd` (`xo-websock/src/websock/Webserver.cpp`).
+
+Those three are ONE role with three operations -- find an endpoint, make a
+sink, reply to this session -- so the natural replacement is a single abstract
+interface (working name `WsSessionHost`), one object per session:
+
+- the webserver's implementation holds `WebserverImpl *` and the session id;
+- the unit tests' `Fixture` becomes one subclass instead of three lambdas;
+- `WsSessionRouter`'s constructor takes the interface.
+
+An honest caveat on the allocation argument HERE: the production lambdas
+capture only `[this]` and `[this, new_id]` -- small and trivially copyable,
+which libstdc++ stores inline without allocating. So for these three the
+objection is less that they allocate today than that the choice is made
+inside the standard library rather than by us, and that three independent
+callables stand in for one interface. The test fixture's lambdas capture more.
+
 ## Not in scope, but the same objection applies
 
-Seven more `std::function` aliases sit on the same path:
+The remaining `std::function` aliases on the path:
 
 ```bash
 grep -rn "std::function<" xo-websock/include xo-websock/src xo-webutil/include
@@ -49,13 +72,11 @@ grep -rn "std::function<" xo-websock/include xo-websock/src xo-webutil/include
 
 | alias | where |
 |---|---|
-| `EndpointLookup`, `SinkFactory`, `ReplyFn` | `WsSessionRouter` -- one set per session |
 | `StreamSubscribeFn`, `StreamUnsubscribeFn`, `StreamReceiveFn` | `StreamEndpointDescr` (xo-webutil) -- one set per registered endpoint |
 | `HttpEndpointFn` | `HttpEndpointDescr` (xo-webutil) |
 
-The per-session ones are the likelier to matter, since they are created per
-connection rather than once at startup. Worth deciding whether this ticket
-sets the pattern for them.
+These are created once per registered endpoint, at startup, not per
+connection. Worth deciding whether this ticket sets the pattern for them.
 
 Also: the sink itself is still `new WebsocketSinkImpl(...)`
 (`WebsocketSink.cpp:145`), and every outbound message is a `std::string` built
@@ -67,5 +88,7 @@ real target, that is a separate and larger change.
 
 - `WebsocketSink::SendFn` is gone; sinks send through the sender class
 - the webserver-backed and test senders are subclasses
+- `WsSessionRouter` takes one session-host interface instead of three
+  `std::function`s; `WebserverImpl` and the test fixture implement it
 - `utest.websock` unchanged in what it covers, and green
 - `xo-build --sweep` ok in both stages
