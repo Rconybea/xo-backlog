@@ -1,6 +1,6 @@
 # 02 — xo-websock without xo-reactor: own sink API, adapter above both
 
-Status: implemented 2026-09-26, awaiting review and commit in the umbrella
+Status: done 2026-09-26, umbrella `632ba081`..`a5b06a66`
 Type: refactor / levelization
 Raised: 2026-09-26, while planning AllocFlywheel visualization
 
