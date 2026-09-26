@@ -148,8 +148,7 @@ the existing endpoint (`this->stream_map_[stem] = std::move(endpoint)`).
 ## Progress
 
 **Step 1, 2026-09-26 -- `DynamicEndpoint` reference-counted** (RC's suggestion:
-land it alone, ahead of the rest of 05/07). Implemented, awaiting review and
-commit in the umbrella.
+land it alone, ahead of the rest of 05/07). Umbrella `e94f5695`.
 
 - `DynamicEndpoint : public ref::Refcount`; `make_http` / `make_stream` return
   `rp<DynamicEndpoint>`
@@ -168,8 +167,32 @@ that would have called into freed memory.
 utest.websock 15 cases / 160 assertions; umbrella 48/48; `xo-build --sweep` ok
 in both stages (73/73; 47 ok, 26 no tests).
 
-Remaining: `UrlRouter`, runtime unregister, the lock, duplicate rejection,
-removal ending live subscriptions -- and issue 05's `WsSender` alongside.
+**Step 2, 2026-09-26 -- `UrlRouter` extracted** (RC: extraction only).
+Implemented, awaiting review and commit in the umbrella.
+
+- `xo-websock/include/xo/websock/UrlRouter.hpp`, `src/websock/UrlRouter.cpp`:
+  `register_http` / `register_stream`, `find_http` / `find_stream` returning
+  `rp<DynamicEndpoint>`, one mutex over both maps. `stem_map_` renamed
+  `http_map_`. `lookup_stem` / `lookup_pattern` moved verbatim.
+- `WebserverImpl` holds a `UrlRouter` and delegates. The session-open lambda
+  still hands `WsSessionRouter` a raw pointer (`EndpointLookup` unchanged);
+  switching `WsSessionRouter` to `UrlRouter const &` is the next step (RC).
+- Behaviour unchanged: a duplicate stem still replaces. Rejecting it waits for
+  unregister, else nothing could replace an endpoint at all.
+- New `xo-websock/utest/UrlRouter.test.cpp`, 8 cases: empty, literal whole-uri,
+  `${var}` stored under its stem, longest stem wins (either registration
+  order), a `/`-terminated stem beats a longer bare prefix (pinned: the
+  matching is NOT strictly longest-prefix), bare-prefix fallback, http and
+  stream kept apart (one stem in both maps), re-register replaces while a held
+  `rp<>` keeps the old endpoint usable. Falsified twice with compiling
+  changes: `find_http` searching the stream map; skipping the whole-uri step.
+
+utest.websock 23 cases / 187 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages (73/73; 47 ok, 26 no tests).
+
+Remaining: `WsSessionRouter` onto `UrlRouter const &`, runtime unregister,
+duplicate rejection, removal ending live subscriptions -- and issue 05's
+`WsSender` alongside.
 
 ## Consequences
 
