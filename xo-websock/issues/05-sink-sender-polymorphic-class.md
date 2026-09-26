@@ -111,12 +111,14 @@ or the router just takes the endpoint map, is open.
 1. **`std::string text` by value**, as sketched: the production sender moves it
    into its queue without copying. `std::string_view` would force a copy
    there. `std::string &&` is equivalent but stricter for callers.
-2. **Ownership:** `rp<WsSender>` is the simplest way to share one sender
-   between a router and sinks that may outlive it. It costs one `Refcount`
-   allocation per SESSION, against one per subscription today with `SendFn`.
-3. **Plain virtual class or a fomo facet** (`AWsSender` / `obj<AWsSender>`), as
-   xo-reactor2 does for its event sinks. The plain class is less code and
-   enough for two implementations; the facet matches the codebase's direction.
+2. ~~Ownership~~ **Decided 2026-09-26 (RC): `rp<WsSender>`.** The simplest way to
+   share one sender between a router and sinks that may outlive it. It costs
+   one `Refcount` allocation per SESSION, against one per subscription today
+   with `SendFn`.
+3. ~~Plain class or facet~~ **Decided 2026-09-26 (RC): plain virtual class, for
+   now.** A fomo facet was the alternative, as xo-reactor2 does for its event
+   sinks, but fomo has no ref-counted solution yet, and `rp<WsSender>` needs
+   one. Revisit if fomo gains refcounting.
 
 ## Also in scope: the session router's view of the server
 
