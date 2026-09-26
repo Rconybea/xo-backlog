@@ -3,7 +3,9 @@
 Status: open -- design mostly OPEN, deliberately; see "Open"
 Type: feature
 Raised: 2026-09-26
-Blocked by: `.xo-backlog/xo-websock/issues/02` (xo-websock without xo-reactor)
+Blocked by: `.xo-backlog/xo-websock/issues/04` (inbound messages on a stream;
+            seq in the envelope).  Issue 02 (xo-websock without xo-reactor)
+            is done.
 
 This ticket preserves what planning conversations established so the thread can
 be picked back up after issue 02. It does NOT settle the demo's design; the
@@ -139,9 +141,10 @@ grep -rn lws_sul xo-websock/src    # empty as of 2026-09-26
 
 ## Related, not required
 
-- **Frame sequence number:** not done. `JsonPrinter_AllocFlywheel` is where it
-  would go. An animation wants one to notice dropped or reordered frames
-  instead of interpolating across a gap.
+- **Frame sequence number:** moved to the transport. Decided 2026-09-26 it goes
+  in the websock envelope, per subscription, not in `JsonPrinter_AllocFlywheel`:
+  sequencing is a property of the pipe, and a model of a native data structure
+  should not have to know it is being streamed. See issue 04.
 - **`.xo-backlog/xo-printjson/issues/04`, JSON string escapes:** latent while
   type names are the only strings in a frame.
 - `import xo.object2` prints `SetupObject2::register_facets`'s debug log, a
