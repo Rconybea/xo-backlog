@@ -99,6 +99,25 @@ not re-derive it. That is the whole change.
 - [ ] `xo-websock/CMakeLists.txt` no longer carries a commented-out
       `add_subdirectory` — either the directory is gone or it is built
 
+## Since 2026-09-26: utest/ also holds real unit tests
+
+`.xo-backlog/xo-websock/issues/04` needed an automated test directory, and
+utest/ is xo-websock's. To leave THIS ticket's delete-or-port decision
+untouched:
+
+- `xo-websock/CMakeLists.txt` now has a live `add_subdirectory(utest)`. The
+  bare commented-out line this ticket's "Done when" complains about is gone,
+  replaced by a comment pointing here.
+- `utest/CMakeLists.txt` builds the unit tests (`utest.websock`, main in
+  `websock_unit_main.cpp`), and keeps the demo's build stanza verbatim inside
+  `if(FALSE)`. None of the demo's files were moved, renamed or edited. The
+  unit tests' main is named `websock_UNIT_main.cpp` precisely because
+  `websock_utest_main.cpp` is the demo's.
+
+The decision among options 1/2/3 is unaffected. Whichever is chosen, the demo
+stanza's `if(FALSE)` block is what goes away (option 1) or moves to `example/`
+(options 2 and 3).
+
 ## Notes
 
 `xo-websock` reports `ok (utest:no-tests)` in `xo-build --sweep` and always has.

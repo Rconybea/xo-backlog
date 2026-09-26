@@ -30,7 +30,7 @@ are unaffected: nothing links against an executable. The 5 on libraries:
 |---|---|---|
 | xo-kalmanfilter / `Eigen3::Eigen` | yes -- `KalmanFilterInput.hpp`, `KalmanFilterTransition.hpp`, `print_eigen.hpp` | include dirs; nothing to link (Eigen is `INTERFACE IMPORTED`) |
 | xo-testutil / `Catch2::Catch2` | yes -- `UtestListener.hpp`, `try_test_array.hpp` | include dirs; nothing to link (`INTERFACE IMPORTED`) |
-| xo-websock / `jsoncpp_lib` | no -- `Webserver.cpp` only | nothing |
+| xo-websock / `jsoncpp_lib` | not included, but NAMED: `StreamReceiveFn` and `WsSessionRouter` forward-declare `Json::Value` (since xo-websock/04) | include dirs, since a receive handler reads `Json::Value` members; nothing to link |
 | xo-interpreter / `replxx::replxx` | no -- its `.cpp` only | nothing |
 | xo-pykalmanfilter / `Eigen3::Eigen` | no -- a pybind module | nothing |
 
@@ -41,7 +41,13 @@ grep -rn "xo_external_target_dependency(" --include=CMakeLists.txt . | grep -v '
 grep -rlE '#include\s*<(Eigen/|catch2/|json/|replxx)' xo-*/include
 ```
 
-(The xo-websock row describes the jsoncpp call as it stands. The libwebsockets
+(The xo-websock jsoncpp row CHANGED on 2026-09-26: xo-websock/04 made inbound
+application messages arrive as a parsed `Json::Value`. No public header includes
+`<json/json.h>` -- `Json::Value` is only forward-declared -- but a handler that
+reads a message has to compile against jsoncpp, so the row moved from "nothing"
+to "include dirs". It is now a use of the opt-in, like Eigen and Catch2.
+
+The xo-websock row describes the jsoncpp call as it stands. The libwebsockets
 call was already replaced by hand in xo-websock/02.)
 
 So the axis that actually varies is **whether the package's HEADERS reach
