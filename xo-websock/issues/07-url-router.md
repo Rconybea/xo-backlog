@@ -92,6 +92,43 @@ lengthen that chain. Issue 05's `WsSender` holds a plain `WebserverImpl *`,
 removing the edge back to the server. Landing 05 first, or with this, keeps
 refcounted endpoints cycle-free.
 
+## Removing an endpoint ends its live subscriptions (decided 2026-09-26, RC)
+
+Without this, refcounting alone would leave existing subscriptions on a
+removed endpoint alive -- and still RECEIVING FRAMES, since their sinks stay
+attached to the source -- until each client unsubscribed. Instead, removal
+ends them, and tells each client:
+
+```json
+{"cmd": "unsubscribed", "sub_id": N, "reason": "endpoint removed"}
+```
+
+This is issue 06's `unsubscribed` reply plus a `reason`. As with a
+client-initiated unsubscribe, frames already queued may still arrive; the
+reply marks the end.
+
+Mechanism, proposed:
+
+- **The server walks its sessions; no back-pointers.** Only each session's
+  `WsSessionRouter` knows which of its subscriptions use a given endpoint. On
+  unregister, each session's router ends the subscriptions whose endpoint is
+  the removed one (`rp<>` identity), running that endpoint's unsubscribe
+  function for each. There are few sessions, so the walk is cheap. The
+  alternative, an endpoint keeping a list of its subscribers, adds endpoint ->
+  session references, and with them the cycles issue 05's `WsSender` removes.
+- **The forced unsubscribe runs on the webserver's service thread.**
+  Unregister is typically called from python's thread, but subscriptions,
+  sinks and replies belong to the service thread. So unregister removes the
+  endpoint from `UrlRouter` at once (new subscribes fail immediately), queues
+  the ending of live subscriptions, and wakes the service loop -- the way
+  `WebsocketSessionRecd::send_text` does with `lws_cancel_service` -- rather
+  than detaching sinks from the application thread while a source may be
+  delivering into them.
+
+Refcounting still matters under this rule. Between unregister and the queued
+work running, live subscriptions hold the endpoint alive, and their
+unsubscribe still runs on the endpoint that subscribed them.
+
 ## Consequences
 
 - **`WsSessionRouter` takes `UrlRouter const &`** in place of its
@@ -107,14 +144,6 @@ refcounted endpoints cycle-free.
 
 ## Open
 
-- **What removal does to live subscriptions.** With refcounting, by default
-  they keep the old endpoint alive and keep RECEIVING FRAMES until each client
-  unsubscribes, since their sinks are still attached to the source. The
-  alternative: removal ends them -- detach, and tell each client, e.g.
-  `{"cmd": "unsubscribed", "sub_id": N, "reason": "endpoint removed"}`. That
-  is arguably what someone removing an endpoint from python expects. But it
-  needs an endpoint to know its subscribers, which today only each session's
-  `WsSessionRouter` knows.
 - **Replace vs reject** on registering an existing stem. With unregister
   available, rejecting a duplicate and requiring an explicit unregister first
   is the stricter contract; replacing silently is today's behaviour.
@@ -132,5 +161,8 @@ refcounted endpoints cycle-free.
 - `WsSessionRouter` takes `UrlRouter const &`; its tests use real routing
 - `UrlRouter` has its own tests, including replace-while-subscribed (the old
   endpoint's unsubscribe still runs)
-- the removal-vs-live-subscriptions question decided and tested
+- unregistering an endpoint ends every live subscription on it, in every
+  session, on the service thread; each client gets `unsubscribed` with
+  `"reason": "endpoint removed"`, and the endpoint's unsubscribe runs once per
+  subscription -- tested
 - `xo-build --sweep` ok in both stages
