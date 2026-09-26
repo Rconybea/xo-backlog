@@ -1,6 +1,6 @@
 # 02 — xo-websock without xo-reactor: own sink API, adapter above both
 
-Status: open
+Status: implemented 2026-09-26, awaiting review and commit in the umbrella
 Type: refactor / levelization
 Raised: 2026-09-26, while planning AllocFlywheel visualization
 
@@ -104,6 +104,114 @@ printers in xo-printjson -- which is already transport-free. The eventual
 in-browser (wasm) mode will replace the transport wholesale, since libwebsockets
 will not exist there. If the producer stays out of xo-websock, live-server mode
 and in-browser mode run the identical producer and only the pipe differs.
+
+## What landed, 2026-09-26
+
+Implemented as designed. Two small departures from the wording above:
+
+- the sink kept its existing name, `web::WebsocketSink`, rather than
+  `WebsockSink`: less churn, and no second name for one thing.
+- the adapter and both endpoint builders live in namespace `xo::web`
+  (`ReactorWebsocketSink`, `stream_endpoint_descr`, `http_endpoint_descr`),
+  since what they produce are web endpoints.
+
+| where | change |
+|---|---|
+| xo-webutil | `StreamSubscribeFn` takes `rp<web::WebsocketSink>`; forward-declared, as `reactor::AbstractSink` was |
+| xo-websock | `WebsocketSink` is a `ref::Refcount` with `stream_name` / `n_in_ev` / `notify_ev_tp(TaggedPtr)` / `pretty`; server, `DynamicEndpoint`, session records use it; `reactor` dependency replaced by the `printjson` one it had been borrowing |
+| xo-reactor | `AbstractSource::stream_endpoint_descr` and `AbstractEventStore::http_endpoint_descr` removed; `webutil` dependency dropped (cmake and nix) |
+| xo-pyreactor | the two endpoint bindings removed |
+| **xo-reactor2websock** (new) | `ReactorWebsocketSink` adapter; both builders as free functions holding their subject by `rp<>` |
+| **xo-pyreactor2websock** (new) | module `xo.reactor2websock`: `stream_endpoint_descr(src, prefix)`, `http_endpoint_descr(store, prefix)` |
+| registration | top `CMakeLists.txt`, `subsystem-list`, `ci.nix`, `xo.nix`, `pkgs/*.nix`; CI workflows regenerated with `xo-gen-ci` (additions only) |
+
+**Python API change:** `src.stream_endpoint_descr(p)` and
+`store.http_endpoint_descr(p)` became `xo.reactor2websock.stream_endpoint_descr(src, p)`
+and `...http_endpoint_descr(store, p)`. There were no in-tree python callers:
+
+```bash
+grep -rn "stream_endpoint_descr\|http_endpoint_descr" --include=*.py . | grep -v '\.build/'
+```
+
+### Two install-only defects this surfaced
+
+Both were pre-existing and invisible in the umbrella build, which shares one
+cmake context and a build-tree runpath. xo-reactor2websock was the first
+standalone C++ consumer of an installed xo-websock, and its python smoke test
+the first thing to load one.
+
+1. **`websockConfig.cmake` never declared jsoncpp.** `jsoncpp_lib` was in
+   websock's `INTERFACE_LINK_LIBRARIES`, so a consumer that could not resolve
+   the target linked a bare `-ljsoncpp_lib` and failed. Fixed:
+   `find_dependency(jsoncpp CONFIG)` in `xo-websock/cmake/websockConfig.cmake.in`.
+2. **Loading an installed xo-websock failed on `libssl.so.3`.** This was true
+   of plain `import xo.websock` through `~/local/bin/xo-python` before any of
+   this work. The root cause is in libwebsockets' exported cmake target, which
+   lists openssl by full path in its PUBLIC link interface although openssl is
+   its private dependency. Everything linking it therefore recorded direct
+   `NEEDED libssl.so.3` / `libcrypto.so.3` entries while calling no ssl
+   symbol, and the installed runpath could not resolve them. libwebsockets'
+   OWN runpath does include openssl; it is only the spurious direct entries
+   that break. Fixed in `xo-websock/src/websock/CMakeLists.txt`, two ways:
+   - libwebsockets is linked PRIVATE, with its include directories re-exported
+     PUBLIC (`$<TARGET_PROPERTY:websockets_shared,INTERFACE_INCLUDE_DIRECTORIES>`,
+     since `Webserver.hpp` includes `<libwebsockets.h>`). Consumers compile
+     against it but never link it, so the list stops at xo-websock.
+   - `LINKER:--as-needed` PRIVATE on websock itself, guarded `NOT APPLE`
+     (ld64 does not take it, and install-name linkage makes the problem moot
+     there), so libwebsock.so does not record the entries either.
+
+```bash
+for f in ~/local/lib/libwebsock.so ~/local/lib/libreactor2websock.so; do
+    readelf -d $f | grep -c 'NEEDED.*libssl'; done        # 0 and 0
+~/local/bin/xo-python -c 'import xo.websock, xo.reactor2websock'
+```
+
+`xo-pyreactor2websock` also needed `xo_emit_python_wrapper` for standalone
+builds, as xo-pyobject2 has, because it is the first python subsystem modelled on
+xo-pywebsock, which has no python tests.
+
+### Tests
+
+`utest.reactor2websock`, 5 cases: adapter forwarding; subscribe/unsubscribe
+through a stream endpoint; `/snap` suffix; and that each endpoint keeps its
+source/store alive, which pins the fix for the raw-`this` capture.
+
+Each was falsified with a change that compiles: forwarding removed; unsubscribe
+made a no-op; `/snap` dropped; raw-pointer capture of the source; raw-pointer
+capture of the store. Each failed at its intended assertion. A first attempt at
+the raw-source variant did NOT compile. The harness flagged it rather than
+reporting the stale binary's result -- the trap from
+`.xo-backlog/xo-facet/issues/02`.
+
+`utest.pyreactor2websock`, 4 cases: module import (which pulls xo.reactor and
+xo.webutil), the builders gone from xo.reactor, and argument type checks.
+Nothing at the xo.reactor level is constructible from python, so no event
+flows here. Not falsified.
+
+### Verification
+
+```bash
+xo-deps --why=xo-websock:xo-reactor -q; echo $?   # 1
+xo-deps --why=xo-reactor:xo-webutil -q; echo $?   # 1
+comm -23 <(xo-deps --deps-of=xo-websock --format=names -q | sort) \
+         <(xo-deps --deps-of=xo-printjson --format=names -q | sort)
+# xo-callback xo-websock xo-webutil
+```
+
+Umbrella ctest 47/47. `xo-build --sweep` ok in both stages, after reinstalling
+xo-cmake so the installed subsystem-list carried the two new entries:
+
+```
+stage 1: 73 attempted: 73 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2: 73 attempted: 46 ok, 27 with no tests, 0 failed, 0 skipped
+```
+
+The +2 in each stage is the two new subsystems.
+
+**Not verified:** `nix-build ci.nix -A xo-pyreactor2websock` (or any of the four
+changed packages). The nix files follow existing patterns, and the python
+test's PYTHONPATH chain follows xo-pyobject2's, but nothing has built them.
 
 ## Incidental findings, deliberately not acted on here
 
