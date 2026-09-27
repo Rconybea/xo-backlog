@@ -192,6 +192,27 @@ umbrella `b8b8a647` -- which includes `utest.websock.live` (landed
 smoke-test for that commit not yet run. Close when both cmake builds and the
 smoke-test are green.
 
+**CI, checked 2026-09-27.** Run 506/507 at umbrella `b8b8a647` (after the
+live-test commits `fd7c4287`, `fd2eecec`, `a134c88d`): `cmake-build (clang)`
+success (task 576), `cmake-build (gcc)` success (577), `smoke-test` (nix)
+success (578).
+
+- **cmake pipeline: runs the live test.** Its xo-websock step
+  (`.forgejo/workflows/ci-cmake.yaml`, "build xo-websock") is
+  `xo-build --configure --with-utests --with-examples` / `--build` /
+  `--utest` -- the same path as the local sweep, whose xo-websock build
+  registers both `utest.websock` and `utest.websock.live`
+  (`ctest --test-dir xo-websock/.build -N`). So both compilers ran it, and
+  the step passed. INFERRED from the workflow + the local equivalent: the
+  logs of 576/577 could not be read -- no file under
+  `/var/lib/forgejo/actions_log` (only 578's), the API
+  (`actions/jobs/<id>/logs`) returns 404, no `sqlite3` on vpn1 to ask the
+  db.
+- **nix pipeline: does NOT run it.** The xo-websock nix package runs no
+  tests at all (`No tests were found!!!` -- `pkgs/xo-websock.nix` passes no
+  `-DENABLE_TESTING=1`; the doCheck gap, noted in issue 11). Its smoke-test
+  passing says nothing about this test.
+
 ## Done when
 
 - a test starts a `Webserver`, connects a real websocket client, and covers
