@@ -174,8 +174,7 @@ refresh returns all three endpoints in order; headless Chrome
 utest.websock 41/527, utest.websock.live 5/65, umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
-**Increment 3, 2026-09-27 -- sessions.** Implemented, awaiting review and
-commit in the umbrella.
+**Increment 3, 2026-09-27 -- sessions.** Umbrella `dd9866cb`.
 
 - Library: new `xo-websock/include/xo/websock/SessionInfo.hpp` --
   `SessionInfo {session_id, sender_open, n_subscription}`.
