@@ -177,6 +177,12 @@ reveals it (a consistency check the generator can assert).
   closure. Clear ownership, no duplication. A -> B is a filter plus a merge,
   so A closes nothing off.
 
+### Where the pieces live
+
+Per xo-cmake issue 07 (split, RC 2026-09-27): the per-target generator lives
+in xo-cmake (the bottom layer); the merge over a subsystem set's dependency
+closure lives in the new top-level package that owns `subsystem-edges`.
+
 ### Merge tool (RC, 2026-09-27)
 
 A tool, in xo-cmake, that for any SET of xo subsystems produces the source

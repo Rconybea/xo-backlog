@@ -62,16 +62,21 @@ every subsystem needs to BUILD, and knows no other subsystem.
   `xo-gen-clang-format`, and `xo-reconfigure --capture-subsystem-edges`'s
   publishing step. Nothing builds against it; developer tools and CI use it.
 
-## Open
+## Decided (RC, 2026-09-27)
 
-- **Where the topology files live.** In the new package, or at the umbrella
-  root (they describe the umbrella), with the tools pointed at them.
-- **xo-build's split.** It is both a per-subsystem build driver (configure /
-  build / utest / install of ONE subsystem -- bottom-ish) and the sweep over
-  all of them (top). Split the command, or keep it whole in the top package.
-- **Relation to issue 12 of xo-websock** (type -> source maps): its generator
-  is per-target (bottom); its MERGE tool takes a subsystem set's dependency
-  closure (top). The split decides where each goes.
+- **The topology files live in the new package** (`subsystem-list`,
+  `subsystem-edges`, `dot-clang-format`), not at the umbrella root.
+- **xo-build is split.** Single-subsystem behaviour (configure / build /
+  utest / install of ONE subsystem) stays in xo-cmake; the whole-tree tool
+  (sweep order, dependency closures) lives in the new package and INVOKES the
+  single-subsystem tool for each subsystem.
+- **xo-websock issue 12's pieces:** the per-target type-map generator is
+  bottom (xo-cmake); the merge over a subsystem set's dependency closure is
+  top (the new package).
+
+## Open (remaining)
+
+- **Name** of the new package.
 - **Ordering of the move**: nix packaging (`pkgs/xo-cmake.nix` + a new pkg),
   the docker CI image, `~/local` installs, and every `xo-cmake-config
   --subsystem-list` caller change together.
