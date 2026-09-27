@@ -315,8 +315,8 @@ effect -- exactly the "refcount > drawn edges" case 5e is to flag.
 utest.websock 45/560, utest.websock.live 6/94 (3/3), umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
-**5c, 2026-09-27 -- the session and its sender native.** Implemented,
-awaiting review and commit in the umbrella.
+**5c, 2026-09-27 -- the session and its sender native.** Umbrella
+`c2840d5f`.
 
 - `WebsocketSessionRecd` and `WsSessionSender<WebserverImpl>` are private to
   `Webserver.cpp`, so their printers (`JsonPrinter_WsSession`,
