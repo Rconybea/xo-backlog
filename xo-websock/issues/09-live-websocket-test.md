@@ -123,8 +123,23 @@ atomic alone would not close.
   `xo-build --sweep` ok. NOT shown race-free: that needs ThreadSanitizer, a
   separate build configuration, not set up.
 
-Also noticed, NOT fixed: if `lws_create_context` fails, `run()` returns
-without setting `state_ = stopped`, so `join_webserver()` waits forever.
+**Join hang, fixed with it** (RC). If `lws_create_context` failed, `run()`
+returned without setting `state_ = stopped`, so `join_webserver()` -- and
+`~WebserverImpl`, which joins -- waited forever. Now the failure path sets
+`stopped` and notifies, under `mutex_`.
+
+- New live case `live-a-server-that-cannot-start-still-joins`: a second server
+  on the first's port. Observed: lws fails to bind (`ERROR on binding ... (-1
+  98)`, EADDRINUSE; `Failed to create default vhost`; `lws init failed`). The
+  join runs on a DETACHED thread signalling a promise, so a regression fails
+  the test instead of hanging it (a `std::async` future would block in its
+  destructor). Falsified by removing the fix: fails at the join's
+  `wait_for`.
+- utest.websock.live 2 cases / 23 assertions, 5/5 runs; utest.websock
+  39/498; umbrella 49/49; `xo-build --sweep` ok.
+
+Both fixes (race, join hang) together: `Webserver.cpp` +
+`WebserverLive.test.cpp`, awaiting review and commit.
 
 Results: live test passed 5/5 consecutive runs (~0.12 s). Falsified with a
 compiling change (`EVENT_WAIT_CANCELLED` not calling
