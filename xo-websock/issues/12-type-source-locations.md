@@ -57,7 +57,9 @@ Only anonymous namespaces differ.
   introspect example), not baked into the map: e.g. a Forgejo url prefix.
   **The git sha is runtime configuration too.** The map itself carries only
   repo-relative paths and lines.
-- **Extraction via a clang-query matcher.**
+- ~~**Extraction via a clang-query matcher.**~~ Superseded by the spike
+  below: clang-query cannot report qualified names; use clang's filtered text
+  AST dump.
 - **Scope: the repo root, `xo-umbrella2/`.**
 - **Generator provided by xo-cmake.**
 - **Repo-relative paths**, joined at runtime with the provider's prefix + sha.
@@ -106,6 +108,51 @@ Only anonymous namespaces differ.
 8. **Where it lives.** The generator is generic -- an xo-cmake function, e.g.
    `xo_type_source_map(<target> OUTPUT <file>)`; the introspect example
    writes its map into its `mount-origin` copy.
+
+## Spike, 2026-09-27: what the clang toolchain gives
+
+Script (throwaway, scratchpad): `typemap_spike.py` -- reads
+`.build/compile_commands.json`, reuses each TU's own flags (the g++ commands
+work as-is with clang tools).
+
+1. **clang-query finds the definitions but cannot name them.**
+   `m cxxRecordDecl(isDefinition(), isExpansionInFileMatching("xo-umbrella2/xo-websock/"),
+   unless(isImplicit()))` over `Webserver.cpp`: 34 matches, exact file:line,
+   1.9 s, 250 MB. But no output mode gives the QUALIFIED name -- `diag` shows
+   location + source line, `print` the class body, `dump` the bare name.
+   It also matches macro-generated specializations (e.g.
+   `XO_PRETTIFIER_DECLARE(xo::web::Runstate)`). So the decided "clang-query
+   matcher" does not suffice on its own.
+2. **Full JSON AST dump: impractical** -- 1.3 GB for one TU (all of `std::`).
+3. **Filtered text AST dump: works.** `clang++ <tu flags> -fsyntax-only
+   -Xclang -ast-dump -Xclang -ast-dump-filter=xo:: <tu>` -- 6.6 MB, 1.9 s per
+   TU. clang dumps the OUTERMOST declaration whose qualified name contains
+   `xo::` (usually a namespace), headed `Dumping <qualified name>:`; nesting is
+   in the `|-`/`` `- `` tree prefix, so qualified names are rebuilt by walking
+   it. Out-of-line nested definitions (`struct WsSessionRouter::Subscription
+   {..}` at namespace scope, `WsSessionRouter.cpp:31`) carry `parent 0x..`,
+   resolved to the enclosing class -- without that the walk mis-names it
+   `xo::web::Subscription`.
+
+   Over xo-websock's library + example TUs (11): 15 s, **174 types** under
+   `xo-umbrella2/` (dedup'd across TUs; anonymous namespaces skipped). Spot
+   checks, each verified against the source line:
+   `xo::web::WebserverImpl` Webserver.cpp:588, `xo::web::WebsocketSessionRecd`
+   Webserver.cpp:346, `xo::web::WebsocketSinkImpl` WebsocketSink.cpp:31,
+   `xo::web::UrlRouter` UrlRouter.hpp:46, `xo::web::WsSessionSender`
+   (template) WsSessionSender.hpp:38, `xo::web::Ticker` introspect.cpp:83,
+   `xo::web::WsSessionRouter::Subscription` WsSessionRouter.cpp:31.
+
+**Recommendation:** extract with the filtered AST dump rather than
+clang-query. Keys come out in the same form as `type_name<T>`
+(`xo::web::WsSessionRouter::Subscription`; a template under its bare name).
+Cost is per TU, so a target's map is incremental and parallelizable; the whole
+umbrella (820 TUs) would be ~25 min serial, which argues for per-target maps.
+Filter `xo::` covers this repo's code (all under namespace `xo`); a
+configurable filter would be needed for anything outside it.
+
+Not yet covered by the spike: aliases/typedefs; class templates vs partial
+specializations; records defined inside functions; enums.
 
 ## Related
 
