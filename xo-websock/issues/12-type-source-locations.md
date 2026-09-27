@@ -223,7 +223,7 @@ set depends on, directly or indirectly, plus the set itself.
    merging them (an interim merge; the real one belongs to xo-top, xo-cmake
    issue 07). **Revised (RC): the build writes only the list of maps; the
    program merges at run time, serving `/dyn/types`** -- see Progress.
-3. Printers report `_type`.
+3. Printers report `_type_` (first spelled `_type`).
 4. The page links, via a runtime-configured provider.
 
 ## Progress
@@ -515,13 +515,14 @@ no `std::`, no repeated segment like `xo::xo::`): 0 bad. Option OFF; ctest
 49/49. No sweep: the change is only in the generator, which runs only with
 the option on.
 
-**Step 3, 2026-09-27 -- printers report `_type`.** Uncommitted, awaiting
-RC's review. Decided (RC): `_type` is the FULL canonical name (template
+**Step 3, 2026-09-27 -- printers report `_type_`.** Umbrella `08f52285`
+(as `_type`), renamed `_type_` to match `_name_` (RC) -- uncommitted, awaiting
+RC's review. Decided (RC): `_type_` is the FULL canonical name (template
 arguments included; the page strips `<...>` to look it up), of the type the
 printer READS -- so the Webserver printer, which reads only the interface,
 reports `xo::web::Webserver`, not `WebserverImpl`.
 
-- Everywhere `_name_` is emitted, `_type` follows it:
+- Everywhere `_name_` is emitted, `_type_` follows it:
   - xo-printjson's generic struct printer: `tp.td()->canonical_name()`;
   - hand-written printers, `xo::reflect::type_name<T>()` (the same string):
     xo-printjson ObjectSlot, RootSet (`DHandleArena<ObjectSlot>`),
@@ -530,13 +531,13 @@ reports `xo::web::Webserver`, not `WebserverImpl`.
     base), Subscription (`WsSessionRouter::Subscription`), WsSessionSender
     (`WsSessionSender<WebserverImpl>`), WsSession (`WebsocketSessionRecd`);
     the introspect example's Ticker.
-- Tests: the websock utests that checked `_name_` now check `_type` too
+- Tests: the websock utests that checked `_name_` now check `_type_` too
   (exact; a prefix for the template). Exact-string json tests updated
-  (utest.printjson 4, utest.object2 flywheel frame): expected `_type` BUILT
+  (utest.printjson 4, utest.object2 flywheel frame): expected `_type_` BUILT
   from `type_name<T>()`, not spelled -- test types in anonymous namespaces
   are `{anonymous}` under gcc, `(anonymous namespace)` under clang.
 - End to end (node's WebSocket against introspect, option on, a /demo
-  subscription so the ticker holds a sink): 8 distinct `_type`s in a
+  subscription so the ticker holds a sink): 8 distinct `_type_`s in a
   snapshot, every one found in `/dyn/types` with template args stripped --
   e.g. `WsSessionSender<xo::web::WebserverImpl>` ->
   `xo-websock/include/xo/websock/WsSessionSender.hpp:38`,
