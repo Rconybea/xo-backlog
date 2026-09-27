@@ -213,7 +213,34 @@ real target, that is a separate and larger change.
 utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
 `xo-build --sweep` ok in both stages.
 
-Remaining: `WsSender` (the class, wiring, the retained-sink misdelivery test).
+`WsSender` is split three ways (RC, 2026-09-26): A the interface and the
+sink; B the router takes one sender (no `ReplyFn` / `SinkFactory`); C the
+production per-session sender with `close()`, and the misdelivery test.
+
+**Step A, 2026-09-26 -- `WsSender` interface; sinks take one.** Implemented,
+awaiting review and commit in the umbrella.
+
+- New `xo-websock/include/xo/websock/WsSender.hpp`: `send_text(std::string)`,
+  `is_open()`. Derives `ref::Refcount`, NOT `ref::Displayable` as sketched
+  above -- a call taken without RC: Displayable would oblige every sender,
+  test ones included, to implement `pretty()` and `display_string()`.
+  Trivially changed.
+- `WebsocketSink::SendFn` is gone; `make(rp<WsSender>, pjson, stream, sub_id)`
+  replaces `make(SendFn, ...)`, and `WebsocketSinkImpl` holds the sender.
+- The webserver-backed `make(rp<Webserver>, pjson, session_id, ...)` keeps its
+  signature; it now wraps `(websrv, session_id)` in an interim
+  `WebserverSessionSender` (anonymous namespace, `WebsocketSink.cpp`) -- one
+  per sink and never closed, exactly as the lambda was. Production behaviour
+  unchanged; step C replaces it.
+- Tests: `RecordingSender` (keeps each message in `sent_v_`) replaces the
+  three sink lambdas in `xo-websock/utest/WsSessionRouter.test.cpp`. Where
+  replies and frames must share one ordered wire, the router's `ReplyFn`
+  forwards into the same sender -- the shape step B makes structural.
+  Falsified with a compiling change (sink never calling `send_text`): 3 cases
+  fail.
+
+utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
+`xo-build --sweep` ok in both stages.
 
 ## Done when
 
