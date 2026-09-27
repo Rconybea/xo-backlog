@@ -1,6 +1,6 @@
 # 07 — UrlRouter: the endpoint maps as their own class; endpoints added and removed at runtime
 
-Status: open
+Status: done 2026-09-26, umbrella `a19de4bd` (last step)
 Type: refactor / feature
 Raised: 2026-09-26, from `.xo-backlog/xo-websock/issues/05`
 
@@ -295,6 +295,11 @@ Umbrella `a19de4bd`.
 
 utest.websock 39 cases / 498 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages.
+
+**Closed 2026-09-26 (RC)** with one "Done when" item met only below the
+socket: unregistering ends live subscriptions is tested at the router
+(`[removal]`, step 5), not on a running server. The live end-to-end test is
+`.xo-backlog/xo-websock/issues/09`.
 
 ## Consequences
 
