@@ -387,6 +387,35 @@ slot + the ticker's map -- the application's hold, 5e draws it);
 utest.websock.live 6/103 (3/3), umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
+**5e, 2026-09-27 -- the application's holds; refcount accounting.**
+Implemented, awaiting review and commit in the umbrella. Example and page
+only; no library change.
+
+- Example: `Ticker::visit_sinks` (under its lock); `JsonPrinter_Ticker`
+  (`{_name_, id, sinks: [{ref}]}`), installed by `main` on the printjson
+  context's PrintJson beside WebsockAppcx's printers -- the application
+  prints its own objects. `IntrospectSnapshot {server, ticker}`; the ticker
+  is made before `/introspect`, whose receiver reports it.
+- Page: frame is `{server, ticker}`; a "Ticker (app)" box with dotted "holds"
+  links to the subscriptions whose sinks it refers to. Every refcount is
+  checked against the holds the snapshot shows -- endpoint: router map + one
+  per subscription; sender: session record + router + one per sink; sink:
+  router slot + one per application ref -- and a badge turns red when they
+  differ, tooltip saying how many holds are not shown. svg width follows the
+  content.
+
+Observed (headless Chrome, two node clients held): every badge accounted for
+EXCEPT exactly the two known observer-effect holds -- `/introspect` endpoint
+3 vs 2 shown, its sink 2 vs 1 shown: the snapshot is printed inside the
+`/introspect` receiver, which `WsSessionRouter::send` runs on a COPY of the
+subscription record (holding both). The `/demo` sinks now show 2 = slot +
+ticker, both drawn. No automated test of the page's accounting (the example
+has none). utest.websock 46/585, utest.websock.live 6/103, umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
+That completes the native-printer plan (5a-5e). Remaining in this ticket:
+layout rework, then push instead of pull.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
