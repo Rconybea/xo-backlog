@@ -103,10 +103,15 @@ xo.printjson: `configure()` once per process.
   `PrintJsonAppcx`; ctor calls `provide_websock_json_printers`; exposes
   `print_json()`, creation evidence, placeholder `visit_pools`).
 - `Webserver::make(WebsockAppcx const &, WebserverConfig const &)`.
-- Tests: `websock_unit_main.cpp` builds
-  `AppContext<indentlog2, reflect, printjson, websock>`; new
-  `utest/websock_test_appcx.hpp` (`xo::ut::websock_appcx()`) for both test
-  executables. Example builds the same stack.
+- Tests: new `xo-websock/utest/WebsockUtestAppcx.{hpp,cpp}`, the
+  `FacetUtestAppcx` shape (RC, xo-facet/utest): owns the test binary's
+  `AppContext<indentlog2, reflect, printjson, websock>`; `configure(cfg)` from
+  main, `appcx()` for tests (throws, not asserts, if unconfigured -- NDEBUG
+  in Release). `websock_unit_main.cpp` builds only a `UtestAppConfig`; tests
+  make servers from `WebsockUtestAppcx::appcx().cx<S_websock_tag>()`. Shared
+  by utest.websock and utest.websock.live. (Replaced a first cut,
+  `websock_test_appcx.hpp` / `xo::ut::websock_appcx()`, never committed.)
+  Example builds the same stack.
 - xo-pywebsock: `WebsockConfig`, `WebsockAppcx`, `configure(config,
   printjson_appcx)` (once per process, throws on a second call);
   `Webserver.make(cx, ws_config)` / `make_webserver(cx, ws_config)` with
