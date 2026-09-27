@@ -241,8 +241,7 @@ only** (RC: bounded; no Webserver/python API yet). Umbrella `1ba706e8`.
 utest.websock 26 cases / 215 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages.
 
-**Step 5, 2026-09-26 -- the router operation** (RC). Implemented, awaiting
-review and commit in the umbrella. (Issue 05 landed first, as planned: the
+**Step 5, 2026-09-26 -- the router operation** (RC). Umbrella `137e7bb6`. (Issue 05 landed first, as planned: the
 session's sender holds a plain `WebserverImpl *`, so no cycle.)
 
 - `std::size_t WsSessionRouter::end_subscriptions_on(rp<DynamicEndpoint> const &)`:
