@@ -416,6 +416,16 @@ has none). utest.websock 46/585, utest.websock.live 6/103, umbrella 49/49,
 That completes the native-printer plan (5a-5e). Remaining in this ticket:
 layout rework, then push instead of pull.
 
+**nix builds the example (RC, 2026-09-27).** `pkgs/xo-websock.nix` gains
+`buildExamples ? false` -> `-DXO_ENABLE_EXAMPLES=on`, with `xo-indentlog2`
+an input when tests OR examples are on (the example links it); `xo.nix`
+passes `buildExamples = true` for xo-websock, as for xo-ppsink, xo-reader
+etc. Pattern: `pkgs/xo-reader.nix`. Verified `nix-build ci-nxfs.nix -A
+xo-websock`: `websock_ex_introspect` (and its page-copy target) built;
+utest.websock + utest.websock.live Passed. `ci.nix` takes xo-websock from
+`xo.nix`, so nix CI builds it too. Awaiting review and commit in the
+umbrella.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
