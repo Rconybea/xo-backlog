@@ -423,8 +423,7 @@ passes `buildExamples = true` for xo-websock, as for xo-ppsink, xo-reader
 etc. Pattern: `pkgs/xo-reader.nix`. Verified `nix-build ci-nxfs.nix -A
 xo-websock`: `websock_ex_introspect` (and its page-copy target) built;
 utest.websock + utest.websock.live Passed. `ci.nix` takes xo-websock from
-`xo.nix`, so nix CI builds it too. Awaiting review and commit in the
-umbrella.
+`xo.nix`, so nix CI builds it too. Umbrella `d3446794`.
 
 ## Open
 
