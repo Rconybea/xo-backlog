@@ -503,6 +503,18 @@ per-entry check tested only the last name component and missed them; the
 correct names (`xo::mm::IGCObject_Any`, ..) are present. Option OFF; ctest
 49/49; sweep 73/73 build, 47 utest ok + 26 without tests.
 
+**A failed header TU contributes nothing, 2026-09-27.** Uncommitted,
+awaiting RC's review. Guards against the malformed names above recurring:
+a header TU that clang fails on is warned about and its dump DISCARDED
+(error recovery can mis-nest namespaces); a type it defines that a real TU
+reaches is still mapped from that TU. Test (22): the fixture's broken header
+now also defines `xo::sub::Broken`, which must not appear -- failed before
+the fix. Whole tree (option on): 1053 types, maps unchanged (no header fails
+today), and every entry checked with a NAME-SHAPE test added (starts `xo::`,
+no `std::`, no repeated segment like `xo::xo::`): 0 bad. Option OFF; ctest
+49/49. No sweep: the change is only in the generator, which runs only with
+the option on.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
