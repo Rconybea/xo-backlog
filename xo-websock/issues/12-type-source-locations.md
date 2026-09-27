@@ -228,7 +228,7 @@ set depends on, directly or indirectly, plus the set itself.
 ## Progress
 
 **Step 1, 2026-09-27 -- every subsystem generates and installs its own map.**
-Implemented, awaiting review and commit in the umbrella.
+Umbrella `04e2af3a`.
 
 - `xo-cmake/cmake/xo_macros/xo-type-src-map.py` (installed beside the
   macros; found via `CMAKE_CURRENT_FUNCTION_LIST_DIR`, so in-tree and
