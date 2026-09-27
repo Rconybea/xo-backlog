@@ -444,8 +444,8 @@ Option OFF again (`.build`, the four standalone builds): no header TUs in
 the database (820 entries); ctest 49/49; `xo-build --sweep --with-examples`
 73/73 build, 47 utest ok + 26 without tests.
 
-**Map staleness + a parser bug, 2026-09-27.** Uncommitted, awaiting RC's
-review. After RC deleted xo-jit's ghosts (`eeaccd9d`) and xo-expression's
+**Map staleness + a parser bug, 2026-09-27.** Umbrella `a632aa38`.
+After RC deleted xo-jit's ghosts (`eeaccd9d`) and xo-expression's
 (`d2f0a86d`):
 
 - **A deleted source did not re-run the map**: the glob re-configures and
