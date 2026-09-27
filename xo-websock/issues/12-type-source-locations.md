@@ -221,7 +221,8 @@ set depends on, directly or indirectly, plus the set itself.
    in-tree flavour (`XO_SUBMODULE_BUILD`: `${XO_UMBRELLA_BINARY_DIR}/xo-foo/types.json`)
    and installed flavour (`share/xo-foo/types.json`) -- linking the files, or
    merging them (an interim merge; the real one belongs to xo-top, xo-cmake
-   issue 07).
+   issue 07). **Revised (RC): the build writes only the list of maps; the
+   program merges at run time, serving `/dyn/types`** -- see Progress.
 3. Printers report `_type`.
 4. The page links, via a runtime-configured provider.
 
@@ -355,6 +356,40 @@ xo-cmake reinstalled; installed edges == `.build/subsystem-edges`; closures
 agree; `xo-build --with-deps xo-websock` now 18 subsystems. After forcing the
 merge to re-run: standalone map == in-tree map exactly (18 subsystems, 258
 types). Option OFF again everywhere.
+
+**Step 2 revised (RC, 2026-09-27): merge at RUN time, in the program.** The
+build only establishes WHICH maps; introspect merges them when asked -- so
+the merged map cannot go stale. Replaces the build-time merge above
+(`xo_type_src_map_closure` removed; the build no longer runs
+`xo-type-src-merge.py`, which stays as a CLI and for `--print-closure`).
+RC chose the C++ endpoint over merging in the page's JS.
+
+- `xo_cxx.cmake`: `xo_type_src_map_list(<output>)` -- at configure time,
+  the closure via `xo-type-src-merge.py --print-closure`, written as
+  `{"format": "xo-type-src-maps/1", "maps": {subsystem: path}}` (`file(CONFIGURE)`:
+  rewritten only on change). Paths: in-tree, `${XO_UMBRELLA_BINARY_DIR}/<s>/types.json`;
+  standalone, `share/<s>/types.json` installed, except the subsystem's own
+  (its build dir). `CMAKE_CONFIGURE_DEPENDS` on the edges file. Option OFF:
+  the list is REMOVED (a leftover would still be read).
+  Known lag, in-tree: the umbrella writes `.build/subsystem-edges` at the END
+  of its configure, so a changed dependency reaches the list one configure
+  later.
+- `xo-websock/example/introspect/CMakeLists.txt`:
+  `xo_type_src_map_list(.../type-maps.json)` -- beside the executable, NOT
+  in mount-origin (program configuration, not page content).
+- `introspect.cpp`: `TypeMaps` (reads the list; `write_merged` unions the
+  maps with jsoncpp on EVERY request -- a missing/unreadable map listed
+  under `missing`, a name at two places left out and listed under
+  `conflicts`, as the script does); served at `/dyn/types`
+  (application/json); `--type-maps=TEMPLATE` overrides locations
+  (`{subsystem}` -> name). No list: an empty map, and a startup note.
+
+Verified: in-tree, `/dyn/types` == the script's merge of the same maps
+(18 subsystems, 259 types -- +1 over before: `xo::web::TypeMaps` itself);
+`--type-maps=$HOME/local/share/{subsystem}/types.json`: 18 installed maps;
+standalone (`xo-websock/.build`, option on): list names installed maps + own
+build-dir map, endpoint 18 / 259; option OFF: list removed, endpoint empty,
+ctest 49/49; `xo-build --sweep --with-examples` 73/73 build, 47 utest ok + 26 without tests.
 
 ## Related
 
