@@ -203,6 +203,28 @@ set depends on, directly or indirectly, plus the set itself.
   exactly one subsystem's directory -- so the merge is a plain union; a name
   in two maps is an error to report, not resolve.
 
+## Plan (RC, 2026-09-27)
+
+1. **Every subsystem produces and installs its own map** -- scope (B) from
+   the start. xo-cmake's generator runs automatically in each subsystem's
+   build (hooked into the xo cmake macros; no per-subsystem CMake), behind a
+   configure option; skipped with a warning when clang is absent. Output
+   `<subsystem build dir>/types.json`, containing only types defined under
+   that subsystem's source directory. **Installed at
+   `share/<subsystem dir name>/types.json`**, e.g.
+   `~/local/share/xo-websock/types.json` (RC: option (b)) -- NOT
+   `share/${PROJECT_NAME}/`: project names are not uniform (`websock` vs
+   `xo_printable2`), and maps are addressed by subsystem name, as
+   `xo-deps` and `subsystem-list` name them.
+2. **The introspect example assembles its mount origin** from the maps of
+   xo-websock's dependency closure (`xo-deps --deps-of=xo-websock`): a script,
+   in-tree flavour (`XO_SUBMODULE_BUILD`: `${XO_UMBRELLA_BINARY_DIR}/xo-foo/types.json`)
+   and installed flavour (`share/xo-foo/types.json`) -- linking the files, or
+   merging them (an interim merge; the real one belongs to xo-top, xo-cmake
+   issue 07).
+3. Printers report `_type`.
+4. The page links, via a runtime-configured provider.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
