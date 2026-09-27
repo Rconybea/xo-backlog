@@ -154,6 +154,29 @@ configurable filter would be needed for anything outside it.
 Not yet covered by the spike: aliases/typedefs; class templates vs partial
 specializations; records defined inside functions; enums.
 
+**One TU at a time, and it sees lower subsystems' types.** Each dump is one
+TU with its own flags; results merged. A TU's includes bring in every `xo::`
+type they reach: of the spike's 174 types, only 26 are xo-websock's --
+xo-reflect 35, xo-ppsink 26, xo-arena 21, xo-indentlog2 14, xo-subsys 13,
+xo-facet 10, xo-printjson 6, xo-callback 5, xo-refcnt 5, xo-flatstring 4,
+xo-webutil 4, xo-reflectutil 3, xo-reflectable2 2. Correct, not
+contamination: a location is a fact about the TYPE, the same whichever TU
+reveals it (a consistency check the generator can assert).
+**Paths must be normalized:** some came as `xo-umbrella2/./xo-subsys/...`
+(the spelling of an include dir).
+
+## Map scope: start with A, destination B (RC, 2026-09-27)
+
+- **(A) first -- everything a target's TUs see.** Self-sufficient per
+  program: covers every type it can print (anything it prints is defined in
+  something its code includes). Duplicates lower subsystems' entries across
+  maps; partial coverage of each lower subsystem.
+- **(B) is the destination -- each subsystem maps only its OWN types**
+  (entries whose file is under its directory, e.g. `xo-websock/`), installs
+  its `types.json`, and a program loads and merges the maps of its link
+  closure. Clear ownership, no duplication. A -> B is a filter plus a merge,
+  so A closes nothing off.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
@@ -163,6 +186,11 @@ attach naturally to that: type-level first; member-level (edges -> member
 declarations) later, when the edge schema exists.
 
 ## Done when
+
+- **(B)** each subsystem produces (and installs) a map of only its own
+  types; a program's viewer merges the maps of its link closure. (A -- one
+  map of everything a target sees -- is an accepted intermediate step, not
+  the end state.)
 
 - behind a configure-time switch, a build step (xo-cmake) produces
   `types.json` (`canonical_name` -> repo-relative file + line) for a target,
