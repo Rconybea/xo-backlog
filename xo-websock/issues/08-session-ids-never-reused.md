@@ -1,6 +1,6 @@
 # 08 — websocket session ids are never reused
 
-Status: open
+Status: done 2026-09-26, umbrella `ae263aa9`
 Type: refactor / bugfix
 Raised: 2026-09-26, from `.xo-backlog/xo-websock/issues/05` (step C)
 
@@ -101,7 +101,7 @@ Same question as 05 step C.
 ## Progress
 
 **2026-09-26 -- implemented** (RC: `uint64_t`; option 1, `WsSessionTable`).
-Awaiting review and commit in the umbrella.
+Umbrella `ae263aa9`.
 
 - New `xo-websock/include/xo/websock/WsSessionTable.hpp`: header-only template
   over the per-session record. `next_id()` (counter from 1, only increases),
