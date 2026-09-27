@@ -46,7 +46,37 @@ installed.
 
 Only anonymous namespaces differ.
 
-## Details to settle
+## Decided (RC, 2026-09-27)
+
+- **Anonymous-namespace types are OUT OF SCOPE.** The generator skips them;
+  a node of such a type simply has no link. This drops the gcc/clang spelling
+  normalization and the collision handling (details 1-2 below) -- they arose
+  only for anonymous namespaces.
+- **Configure-time switch** for generating the map.
+- **The link provider is RUNTIME configuration of the program** (e.g. the
+  introspect example), not baked into the map: e.g. a Forgejo url prefix.
+  **The git sha is runtime configuration too.** The map itself carries only
+  repo-relative paths and lines.
+- **Extraction via a clang-query matcher.**
+- **Scope: the repo root, `xo-umbrella2/`.**
+- **Generator provided by xo-cmake.**
+- **Repo-relative paths**, joined at runtime with the provider's prefix + sha.
+
+### Providers (runtime choice)
+
+1. **Forgejo, pinned to a commit:** prefix + sha + path + `#L<line>`.
+2. **The uncommitted tree** (RC: wanted for in-tree builds, "if practical").
+   Practical: the program serves the checkout itself -- a read-only http
+   endpoint, e.g. `/dyn/src/<repo-relative path>`, reading files under the
+   repo root, like the example's `/hello/${name}`. The page links to it on the
+   same server. For an in-tree build the map is generated from the tree as
+   compiled, uncommitted edits included, so lines match the running binary --
+   UNLESS files were edited after the build (worth saying on the page).
+   Safety: confined to the repo root (no `..`, no symlinks out), read-only,
+   off unless configured.
+3. Editor (emacsclient / org-protocol) -- not requested; possible later.
+
+## Details to settle (1-2 superseded by the decisions above)
 
 1. **Normalization.** Keys in clang's spelling; the lookup maps gcc's
    `{anonymous}` to `(anonymous namespace)`. Template instances look up by the
@@ -87,9 +117,12 @@ declarations) later, when the edge schema exists.
 
 ## Done when
 
-- a build step produces `types.json` (`canonical_name` -> locations) for a
-  target, from clang, with the normalization and collision handling above
+- behind a configure-time switch, a build step (xo-cmake) produces
+  `types.json` (`canonical_name` -> repo-relative file + line) for a target,
+  from clang-query, scoped to `xo-umbrella2/`, anonymous namespaces skipped
 - xo-websock printers report `_type` (reflection's canonical name; the
   concrete class where the printer knows it)
-- the introspect page links each node to its type's definition
+- the introspect page links each node to its type's definition, through a
+  provider chosen at runtime (Forgejo prefix + sha; optionally the local
+  uncommitted tree served by the program)
 - builds without clang tooling still succeed (no map, no links)
