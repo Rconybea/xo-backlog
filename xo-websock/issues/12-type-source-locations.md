@@ -391,8 +391,7 @@ standalone (`xo-websock/.build`, option on): list names installed maps + own
 build-dir map, endpoint 18 / 259; option OFF: list removed, endpoint empty,
 ctest 49/49; `xo-build --sweep --with-examples` 73/73 build, 47 utest ok + 26 without tests.
 
-**Header TUs, 2026-09-27 (RC: one-line TU per header).** Uncommitted,
-awaiting RC's review. Closes the header-only gap above.
+**Header TUs, 2026-09-27 (RC: one-line TU per header).** Umbrella `34e6383d`. Closes the header-only gap above.
 
 - `xo_type_source_map()`: per header (`*.hpp`, `*.h`, not `/.build/`), a
   one-line `<build>/xo-type-src-map/<rel>.hpp.cpp` (`#include "<abs header>"`,
