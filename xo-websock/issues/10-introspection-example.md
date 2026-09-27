@@ -138,6 +138,43 @@ origin config + startup check), same uncommitted change:
   utest.websock 39/498, utest.websock.live 5/65, umbrella 49/49,
   `xo-build --sweep --with-examples` ok.
 
+**Increment 2, 2026-09-27 -- registered endpoints.** Implemented, awaiting
+review and commit in the umbrella.
+
+- Library: new `xo-websock/include/xo/websock/EndpointInfo.hpp` -- plain value
+  `EndpointInfo {kind, stem, uri_pattern}`, `endpoint_kind_descr()`, and
+  `EndpointKind` MOVED here from `DynamicEndpoint.hpp` (which includes it), so
+  `Webserver.hpp` needs no `DynamicEndpoint.hpp`. `UrlRouter::endpoints()`
+  (copies under the lock; http then stream, each by stem -- the maps are
+  unordered, so sorted for a stable listing) and `Webserver::endpoints()`,
+  delegating.
+- Tests: `url-router-lists-its-endpoints` (registered out of order, one stem
+  in both maps; order; unregistered one drops out),
+  `webserver-lists-its-endpoints` (idle server). Falsified with a compiling
+  change (stems sorted descending): fails at the first order check.
+- Example: snapshot gains `endpoints: [{kind, stem, pattern}]` (reflected
+  `IntrospectEndpoint`, kind as text; `std::vector` of a reflected struct
+  needs nothing extra). Demo endpoints: http `/hello/${name}` (answers
+  `/dyn/hello/<name>` -- http endpoints live under the `/dyn` mount) and
+  stream `/demo/${id}` (subscribable, no frames yet).
+- Page: server in the middle, http endpoints left, stream endpoints right,
+  one link each; links and boxes in fixed layer groups so a refresh cannot
+  draw a line over a box. First layout (server left, both columns right)
+  was misleading -- the link to a stream ran behind an http box -- caught in
+  a headless-Chrome screenshot, fixed.
+- **CMake bug from increment 1, fixed:** the page was copied by a POST_BUILD
+  step, which runs only when the executable relinks -- a page-only edit
+  never reached the build dir (found when the screenshot did not change).
+  Now one copy rule per page file (`copy_if_different`, `DEPENDS` its
+  source, `GLOB_RECURSE CONFIGURE_DEPENDS`) under an `ALL` target the
+  executable depends on. Verified: a page-only edit propagates.
+
+Verified: `curl /dyn/hello/roland` -> `<html>hello, roland</html>`; websocket
+refresh returns all three endpoints in order; headless Chrome
+(`google-chrome --headless=new --screenshot`) shows the layout above.
+utest.websock 41/527, utest.websock.live 5/65, umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
