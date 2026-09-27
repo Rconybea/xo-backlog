@@ -231,6 +231,59 @@ Layout debt, NOT addressed: "uses" curves cross session and subscription
 boxes -- readable, busy. Candidate for its own increment (grouped columns or
 a d3 force layout).
 
+## Identities and refcounts -> native json printers (RC, 2026-09-27)
+
+Replaces plan item 5. RC: rather than an Info layer, give xo-websock's native
+classes json printers and print them with PrintJson; `IntrospectSnapshot`
+stays as the container. PrintJson has no cycle / sharing support yet --
+deferred; printers avoid both BY CONSTRUCTION: each object printed in full
+once, at its owner, and elsewhere as `{"ref": id}` (endpoint inside a
+subscription, sender inside a sink). The Info types
+(`EndpointInfo`/`SessionInfo`/`SubscriptionInfo` + listings) are REMOVED as
+native printers replace them (RC). Precedent: `JsonPrinter_RootSet` retired
+`RootSetInfo` the same way (xo-printjson, 2026-09-21).
+
+Increments:
+- **5a** `Webserver` printer as a thin shell over the Info listings; example
+  snapshot becomes `{server: Webserver*}`
+- **5b** `DynamicEndpoint` native (id, refcount, ...); retire `EndpointInfo`,
+  `endpoints()`
+- **5c** session record + `WsSessionSender` native; retire `SessionInfo`,
+  `sessions()`
+- **5d** subscription + sink native (`WebsocketSink` virtual print_json),
+  refs by id; retire `SubscriptionInfo`, `subscriptions()`; page draws the
+  real object graph, edges by id, refcount per node
+- **5e** the example's `Ticker` prints its sinks as refs -> every refcount
+  accounted for; page flags refcount > drawn edges
+- then layout rework, then push
+
+**5a, 2026-09-27.** Implemented, awaiting review and commit -- in the same
+uncommitted tree as increment 4 (not yet committed either).
+
+- New `xo-websock/include/xo/websock/websock_json.hpp` /
+  `src/websock/websock_json.cpp`: `provide_websock_json_printers(PrintJson*)`
+  installing `JsonPrinter_Webserver`, keyed on the abstract `Webserver`
+  (what a `Webserver*` member dispatches to -- raw pointers reflect,
+  xo-reflect issue 01). Prints `{_name_, id (address, as a string),
+  refcount, listen_port, state, endpoints, sessions}`; endpoints and
+  sessions from the Info listings, printed by temporary helpers with the
+  same keys the page already used. Reads the server only through its public
+  API, as `JsonPrinter_AllocFlywheel` does.
+- `Webserver::make` installs the printers on the PrintJson it is given
+  (idempotent: PrintJson keeps the first printer per type).
+- Example: `IntrospectEndpoint/Session/Subscription` mirror structs deleted;
+  `IntrospectSnapshot {server: Webserver*}`; the page reads `event.server`.
+- Tests: `webserver-prints-as-json` (unit: a reflected struct holding a
+  `Webserver*`, printed and parsed); the live sessions test also checks
+  sessions/subscriptions in the printed json. Falsified: `make` not
+  installing the printers -> the unit test's output is not even valid json
+  (generic printing of an unreflected class).
+
+Verified: frame is `{"server": {"_name_": "Webserver", "id": "0x...",
+"refcount": 1, ...}}`; headless Chrome draws the same picture as increment 4.
+utest.websock 44/555, utest.websock.live 6/90, umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
