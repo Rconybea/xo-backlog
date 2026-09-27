@@ -342,8 +342,19 @@ Found:
   xo-statistics) get EMPTY maps -- no TU includes their headers from inside
   their own source dir. Open question for RC: e.g. a generated one-line TU
   per header for the dump, or accept the gap.
-- The installed flavour's merged map does not rebuild when a member's
-  installed map changes (its only file dependency is the root's own map).
+- **The merged map goes STALE** (both flavours): its only file dependency is
+  the root's own map, so a changed `subsystem-edges` or a member's changed map
+  does not re-run the merge. Observed: after the recapture below, the
+  standalone build kept its old 22-subsystem map until the output was deleted.
+
+Follow-up, same day (RC: "yes, run the edges recapture"):
+`.build/reconfigure --capture-subsystem-edges` -> `xo-cmake/etc/xo/subsystem-edges`
++86 -2 (dropped `xo-reactor xo-websock`, `xo-webutil xo-reactor` ->
+`xo-webutil xo-reactor2websock`: the source of the 7 stale closure members);
+xo-cmake reinstalled; installed edges == `.build/subsystem-edges`; closures
+agree; `xo-build --with-deps xo-websock` now 18 subsystems. After forcing the
+merge to re-run: standalone map == in-tree map exactly (18 subsystems, 258
+types). Option OFF again everywhere.
 
 ## Related
 
