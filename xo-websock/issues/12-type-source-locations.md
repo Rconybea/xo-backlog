@@ -230,21 +230,21 @@ set depends on, directly or indirectly, plus the set itself.
 **Step 1, 2026-09-27 -- every subsystem generates and installs its own map.**
 Implemented, awaiting review and commit in the umbrella.
 
-- `xo-cmake/cmake/xo_macros/xo-type-source-map.py` (installed beside the
+- `xo-cmake/cmake/xo_macros/xo-type-src-map.py` (installed beside the
   macros; found via `CMAKE_CURRENT_FUNCTION_LIST_DIR`, so in-tree and
   installed alike): all of a subsystem's TUs (library, utest, example) from
   the compile database, dumped in parallel; keeps types defined under its
   source dir; skips anonymous namespaces and function-local classes;
   out-of-line nested definitions resolved via `parent 0x..`; enums included;
   aliases and specializations not separate entries. Output
-  `{"format": "xo-type-source-map/1", "subsystem", "types": {name: {file,
+  `{"format": "xo-type-src-map/1", "subsystem", "types": {name: {file,
   line}}, "conflicts": {..}}`, paths repo-relative.
 - `xo_cxx.cmake`: `option(XO_ENABLE_SOURCE_MAP ... OFF)`; `xo_type_source_map()`
   called from `xo_export_cmake_config` (71 of 73 subsystems call it; not
   xo-procedure2, xo-numeric) -> target `xo_types_json_<subsystem>` (ALL),
   output `<subsystem build dir>/types.json`, installed
   `share/<subsystem>/types.json`. Without clang++/python3: a warning, no map.
-- Tests: `xo-cmake/utest/test_xo_type_source_map.py` -- a synthetic tree with
+- Tests: `xo-cmake/utest/test_xo_type_src_map.py` -- a synthetic tree with
   its own compile database (namespace / nested / out-of-line nested classes,
   template + specialization, enum, alias, anonymous namespace,
   function-local, another subsystem's type); two parse regressions (below);
@@ -281,6 +281,11 @@ ppdetail`) -- a class NAMED BY A MACRO points at the macro. Known
 limitation. Install checked: `share/xo-websock/types.json` (31 types).
 Option OFF: no map targets. ctest 49/49 (117 python tests in
 `utest.xo-loc`); `xo-build --sweep --with-examples` ok.
+
+Renamed (RC, 2026-09-27): the generator is `xo-type-src-map`
+(`xo-type-src-map.py`, `test_xo_type_src_map.py`, format id
+`xo-type-src-map/1`). The cmake names `xo_type_source_map()` /
+`XO_ENABLE_SOURCE_MAP` unchanged.
 
 Not yet: an `xo-build` switch to turn the option on in per-subsystem builds;
 nix. (Note: this change edits xo-cmake, so under nix every package rebuilds
