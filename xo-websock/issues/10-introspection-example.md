@@ -117,12 +117,33 @@ PrintJson adds `"_name_"`. SIGTERM -> clean stop. `xo-build --sweep
 NOT verified: the page in a real browser (the d3 drawing). No automated test
 for the example.
 
+**Found in RC's first real run: started from anywhere but its build dir, the
+server served lws's fallback page** (`<img src="/libwebsockets.org-logo.svg">
+... no dynamic content for uri [/] from mountpoint`) -- the static origin was
+the cwd-relative `./mount-origin`, and a missing file falls through to the
+dynamic handler. Reproduced by starting it from the repo root. Fixed (RC:
+origin config + startup check), same uncommitted change:
+
+- `WebserverConfig::mount_origin()` (default `./mount-origin`, as before) and
+  `with_mount_origin(dir) const` (returns a copy); `init_mount_static` uses
+  it -- lws keeps the pointer, into `WebserverImpl::ws_config_`. Bound in
+  xo-pywebsock (`mount_origin` property, `with_mount_origin(dir)`); checked
+  from python against `.build/python`.
+- the example finds `mount-origin/` beside its executable (`/proc/self/exe`,
+  else `argv[0]`), and exits 1 with the path it looked for if `index.html` is
+  missing.
+- Verified: started from the repo root -> real `index.html`, `introspect.js`
+  200, websocket refresh ok; binary copied to a dir without `mount-origin` ->
+  `introspect: page not found: ".../mount-origin/index.html"`, rc 1.
+  utest.websock 39/498, utest.websock.live 5/65, umbrella 49/49,
+  `xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
   per-kind ids (nicer to read, needs a table).
-- **Static origin:** copy page files into the build dir (as the old demo), or
-  add an origin path to `WebserverConfig`.
+- ~~**Static origin**~~ -- both: files copied beside the executable, and
+  `WebserverConfig::with_mount_origin` so it runs from any directory.
 - **d3:** vendored (works offline) or CDN.
 - **Snapshot consistency:** per-component locks give a snapshot that is
   consistent per component, not globally atomic. Probably fine for a
