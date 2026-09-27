@@ -79,15 +79,21 @@ every subsystem needs to BUILD, and knows no other subsystem.
   other subsystems only by NAME -- data in its topology files -- with no
   build or link dependency on any of them. So nothing depends on xo-top, and
   a topology edit rebuilds xo-top alone.
+- **Both stay in `subsystem-list`: xo-cmake first, xo-top right after.**
+  xo-cmake must be built and installed before anything else in a cmake
+  build. xo-top is not needed BY the sweep, but a human who wants to
+  intervene needs it installed. (Checked 2026-09-27: `xo-cmake` is line 1 of
+  `subsystem-list`; it is in no `subsystem-edges` line -- nothing declares it
+  as an edge.)
+- Note, not a decision: a sweep then reinstalls the very tool running it.
+  That is already true today -- the sweep reinstalls xo-cmake, which contains
+  `xo-build` -- so nothing new; but a bash script overwritten in place while
+  running can misbehave (bash reads its script incrementally). Worth a
+  thought when the whole-tree tool is written: e.g. install by rename rather
+  than in-place copy.
 
 ## Open (remaining)
 
-- **Is xo-top itself in the topology files?** xo-cmake IS: it is line 1 of
-  `subsystem-list` (checked 2026-09-27), so the sweep builds it first.
-  xo-top is different -- it is the tool that runs the sweep, and depends on
-  no subsystem -- so presumably it stays OUT of `subsystem-list` (a
-  whole-tree sweep should not rebuild the tool running it). Decide, and
-  whether xo-cmake stays in the list once xo-top drives the sweep.
 - **Ordering of the move**: nix packaging (`pkgs/xo-cmake.nix` + a new pkg),
   the docker CI image, `~/local` installs, and every `xo-cmake-config
   --subsystem-list` caller change together.
