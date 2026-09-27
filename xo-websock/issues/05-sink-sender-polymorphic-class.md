@@ -180,8 +180,7 @@ real target, that is a separate and larger change.
 ## Progress
 
 **Step 1, 2026-09-26 -- `StreamReceiver`** (RC: smallest scope first; name and
-`rp<StreamReceiver>` chosen by RC). Implemented, awaiting review and commit in
-the umbrella.
+`rp<StreamReceiver>` chosen by RC). Umbrella `b0cdf0a7`.
 
 - New `xo-webutil/include/xo/webutil/StreamReceiver.hpp`: `class StreamReceiver
   : public ref::Refcount` with pure virtual
