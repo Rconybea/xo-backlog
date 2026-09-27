@@ -103,7 +103,7 @@ under the lock, interrupt after releasing it. The first run of the live test,
 before the fix, is its falsification (hung; killed by `timeout`).
 
 **Race on `lws_cx_`, fixed after `fd7c4287`** (RC: "add it to step A";
-landed separately since A was already committed). Awaiting review and commit.
+landed separately since A was already committed). Umbrella `fd2eecec`.
 `interrupt_stop_webserver` and `unregister_stream_endpoint` read `lws_cx_` from
 the caller's thread while the service thread wrote it at start and stop: a data
 race on the pointer, and a use-after-free window (a non-null read, then
@@ -138,8 +138,7 @@ returned without setting `state_ = stopped`, so `join_webserver()` -- and
 - utest.websock.live 2 cases / 23 assertions, 5/5 runs; utest.websock
   39/498; umbrella 49/49; `xo-build --sweep` ok.
 
-Both fixes (race, join hang) together: `Webserver.cpp` +
-`WebserverLive.test.cpp`, awaiting review and commit.
+Both fixes (race, join hang) landed together: umbrella `fd2eecec`.
 
 Results: live test passed 5/5 consecutive runs (~0.12 s). Falsified with a
 compiling change (`EVENT_WAIT_CANCELLED` not calling
