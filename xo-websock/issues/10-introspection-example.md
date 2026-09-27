@@ -350,6 +350,43 @@ holds the SINK, not the sender). utest.websock 46/575,
 utest.websock.live 6/101 (3/3), umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
+**5d, 2026-09-27 -- subscription + sink native; the Info layer is gone.**
+Implemented, awaiting review and commit in the umbrella.
+
+- `WsSessionRouter::Subscription` forward declaration moved to public
+  (still opaque outside `WsSessionRouter.cpp`) so its printer can be keyed on
+  it. `visit_subscriptions(SubscriptionVisitor)` -- each ACTIVE subscription
+  as a `TaggedPtr`, by sub_id, under the router's lock -- replaces
+  `subscriptions()`. `JsonPrinter_Subscription` (in `WsSessionRouter.cpp`,
+  registered via `provide_router_json_printers`): `{_name_, id, sub_id,
+  stream, endpoint: {ref}, sink}`.
+- `WebsocketSink::print_json(PrintJson const &, std::ostream *)` -- new
+  virtual with a default (id, refcount, stream), so other subclasses
+  (reactor2websock's test sink) compile unchanged. `WebsocketSinkImpl`: adds
+  sub_id, seq (read unlocked -- a source may be sending), `sender: {ref}`.
+  `JsonPrinter_WebsocketSink` keyed on the abstract type delegates to it.
+- `json_id` shared via the internal `webserver_json.hpp` -- a ref prints the
+  same string as the object's id, so the page joins them.
+- **Removed:** `SubscriptionInfo.hpp` (`git rm`, staged), `subscriptions()`.
+  No Info type remains (`grep -rn "SubscriptionInfo\|SessionInfo\|EndpointInfo"`).
+- Tests: `subscriptions-print-as-json` (router unit: active only, by sub_id;
+  endpoint ref == the url router's object; sink == the one subscribe was
+  handed, refcount 2 = router slot + the test's recorder; sink's sender ref
+  == the router's sender); live: the subscription's endpoint ref == that
+  endpoint's id, its sink's sender ref == its session's sender id, sink
+  refcount 2. Falsified with a compiling change (sink printing its own
+  address as its sender's ref): both fail at the sender-ref check.
+- Page: "uses" curves joined BY ID (endpoint ref -> endpoint), not by
+  pattern; subscription boxes carry the sink's refcount; a sink whose sender
+  ref is not its session's sender is outlined red ("astray") -- never seen.
+
+Observed (headless Chrome, two node clients held): `/demo` sinks 2 (router
+slot + the ticker's map -- the application's hold, 5e draws it);
+`/introspect` sink 2 = router slot + the COPY `send` runs the receiver on
+(same observer effect as the endpoint's in 5b). utest.websock 46/585,
+utest.websock.live 6/103 (3/3), umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
