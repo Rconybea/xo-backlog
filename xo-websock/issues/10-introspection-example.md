@@ -315,6 +315,41 @@ effect -- exactly the "refcount > drawn edges" case 5e is to flag.
 utest.websock 45/560, utest.websock.live 6/94 (3/3), umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
+**5c, 2026-09-27 -- the session and its sender native.** Implemented,
+awaiting review and commit in the umbrella.
+
+- `WebsocketSessionRecd` and `WsSessionSender<WebserverImpl>` are private to
+  `Webserver.cpp`, so their printers (`JsonPrinter_WsSession`,
+  `JsonPrinter_WsSessionSender`) live there, registered via
+  `provide_webserver_json_printers` -- declared in a new INTERNAL header
+  `xo-websock/src/websock/webserver_json.hpp` (not installed), called from
+  `provide_websock_json_printers`.
+- Session: `{_name_: "WsSession", id (address), session_id, sender (in full),
+  subscriptions}` -- subscriptions still from `SubscriptionInfo` until 5d.
+  Sender: `{_name_, id, refcount, session_id, open}`.
+- `Webserver::visit_sessions(SessionVisitor)` replaces `sessions()`: each
+  session as a `TaggedPtr` (the type is private; PrintJson dispatches it),
+  in id order, under the session table's lock -- via new
+  `WsSessionTable::for_each_by_id` (sorts under the mutex).
+- Removed: `SessionInfo`, `Webserver::sessions()`, the record's `info()`.
+  `SessionInfo.hpp` renamed `SubscriptionInfo.hpp` (`git mv`, staged) -- only
+  `SubscriptionInfo` left, marked temporary.
+- Tests: `session-table-for-each-by-id-is-in-id-order` (unit, with holes);
+  live sessions test rewritten on the printed json: sessions in id order,
+  distinct ids, sender open with its session's id, sender refcount **2**
+  with no subscriptions (session record + router) and **3** with one (+ its
+  sink). Falsified with a compiling change (session printer holding an rp to
+  the sender while printing it): fails at the first sender refcount.
+- Page: sessions labelled by `session_id`; a "sender" box under each, with
+  its refcount badge, above the subscriptions.
+
+Observed (headless Chrome, two node clients held): senders 4 (2 subs),
+3 (1 sub), 3 (the page's own session, 1 sub) -- record + router + one per
+sink, no observer extra here (the subscription copy made during `send`
+holds the SINK, not the sender). utest.websock 46/575,
+utest.websock.live 6/101 (3/3), umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
