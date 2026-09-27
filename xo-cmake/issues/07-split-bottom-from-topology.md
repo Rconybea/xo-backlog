@@ -73,10 +73,21 @@ every subsystem needs to BUILD, and knows no other subsystem.
 - **xo-websock issue 12's pieces:** the per-target type-map generator is
   bottom (xo-cmake); the merge over a subsystem set's dependency closure is
   top (the new package).
+- **Name: `xo-top`.**
+- **xo-top's dependencies:** a BUILD dependency on xo-cmake only (and, at
+  run time, it invokes xo-cmake's single-subsystem xo-build). It knows the
+  other subsystems only by NAME -- data in its topology files -- with no
+  build or link dependency on any of them. So nothing depends on xo-top, and
+  a topology edit rebuilds xo-top alone.
 
 ## Open (remaining)
 
-- **Name** of the new package.
+- **Is xo-top itself in the topology files?** xo-cmake IS: it is line 1 of
+  `subsystem-list` (checked 2026-09-27), so the sweep builds it first.
+  xo-top is different -- it is the tool that runs the sweep, and depends on
+  no subsystem -- so presumably it stays OUT of `subsystem-list` (a
+  whole-tree sweep should not rebuild the tool running it). Decide, and
+  whether xo-cmake stays in the list once xo-top drives the sweep.
 - **Ordering of the move**: nix packaging (`pkgs/xo-cmake.nix` + a new pkg),
   the docker CI image, `~/local` installs, and every `xo-cmake-config
   --subsystem-list` caller change together.
