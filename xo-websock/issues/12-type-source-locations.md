@@ -516,8 +516,8 @@ no `std::`, no repeated segment like `xo::xo::`): 0 bad. Option OFF; ctest
 the option on.
 
 **Step 3, 2026-09-27 -- printers report `_type_`.** Umbrella `08f52285`
-(as `_type`), renamed `_type_` to match `_name_` (RC) -- uncommitted, awaiting
-RC's review. Decided (RC): `_type_` is the FULL canonical name (template
+(as `_type`), renamed `_type_` to match `_name_` (RC) in `8a5ed754`.
+Decided (RC): `_type_` is the FULL canonical name (template
 arguments included; the page strips `<...>` to look it up), of the type the
 printer READS -- so the Webserver printer, which reads only the interface,
 reports `xo::web::Webserver`, not `WebserverImpl`.
