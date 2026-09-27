@@ -148,6 +148,44 @@ its xo-websock build registers both executables (`ctest --test-dir
 xo-websock/.build -N`). CI not yet observed -- whether localhost sockets work
 in both pipelines is unverified until a push.
 
+**Step B, 2026-09-26 -- cases 2-4.** Implemented, awaiting review and
+commit in the umbrella. `xo-websock/utest/WebserverLive.test.cpp` only.
+
+- `live-send-reaches-the-receiver-and-its-reply-comes-back` (case 2): a
+  `StreamReceiver` gets the msg as sent; its reply through the handed sink
+  arrives as a frame of that subscription.
+- `live-unregister-ends-a-live-subscription` (case 3): two subscriptions on
+  `/fw/${id}`; `unregister_stream_endpoint` from the test's thread; both get
+  `unsubscribed` with `"reason": "endpoint removed"`, in sub_id order; the
+  endpoint's unsubscribe ran exactly twice; a later subscribe is
+  `unknown stream`. Case 3 as first written also asked that "no frame for N
+  follows the reply" -- that is the SOURCE's job once its unsubscribe runs,
+  and here the test is the source; asserting the unsubscribe ran is the
+  server's half.
+- `live-a-sink-kept-past-its-session-reaches-no-one` (case 4): client 1
+  subscribes and disconnects; once the server has handled the close (the
+  endpoint's unsubscribe ran), client 2 connects; the application pushes to
+  the kept sink; client 2's first message is its own `subscribed`, and no
+  message carries the stale event.
+- Case 5 (distinct session ids) NOT added as a live case: the session id is
+  internal -- nothing a client receives carries it -- so observing it would
+  need a test-only accessor. Covered by `WsSessionTable.test.cpp` (never
+  reused) and, behaviourally, by case 4.
+
+Falsified with compiling changes:
+- the service thread not draining removed endpoints: case 3 fails at its
+  `wait_received(4)`.
+- sender NOT closed on session close, alone: case 4 still PASSES -- ids are
+  never reused (issue 08), so the stale send finds no session. Defence in
+  depth, as intended.
+- sender not closed AND `WsSessionTable::next_id` recycling ids: case 4 fails
+  -- the stale frame reaches client 2 ahead of its own reply. Issue 05's
+  misdelivery hazard, reproduced over a real socket.
+
+utest.websock.live 5 cases / 65 assertions, 10/10 consecutive runs;
+utest.websock 39/498; umbrella 49/49; `xo-build --sweep` ok. CI still not
+observed.
+
 ## Done when
 
 - a test starts a `Webserver`, connects a real websocket client, and covers
