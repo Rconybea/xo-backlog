@@ -388,7 +388,7 @@ utest.websock.live 6/103 (3/3), umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
 **5e, 2026-09-27 -- the application's holds; refcount accounting.**
-Implemented, awaiting review and commit in the umbrella. Example and page
+Umbrella `62ff35a5`. Example and page
 only; no library change.
 
 - Example: `Ticker::visit_sinks` (under its lock); `JsonPrinter_Ticker`
