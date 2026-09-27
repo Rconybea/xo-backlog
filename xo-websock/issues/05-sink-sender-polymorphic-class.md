@@ -242,6 +242,45 @@ production per-session sender with `close()`, and the misdelivery test.
 utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
 `xo-build --sweep` ok in both stages.
 
+**Step B, 2026-09-26 -- one sender per session; production sender folded in**
+(RC chose option 1). Implemented, awaiting review and commit in the umbrella.
+
+Why B grew: a session's router holding an `rp<Webserver>`-backed sender would
+be a cycle. `notify_ws_session_close` does not release the
+`WebsocketSessionRecd` -- it stays in `session_v_` until the slot is reused --
+so server -> record -> router -> sender -> server would outlive the session and
+the webserver would never be freed. Hence C's raw-pointer `WsSessionSender`,
+and with a raw pointer, `close()` cannot wait.
+
+- `WsSessionRouter(UrlRouter const &, rp<WsSender>, rp<PrintJson>)`;
+  `SinkFactory` and `ReplyFn` gone -- the router has no `std::function`
+  members. It makes its sinks with `WebsocketSink::make(sender_, pjson_, ...)`,
+  so replies and frames share one sender, in one order.
+- `WsSessionSender` (private, `xo-websock/src/websock/Webserver.cpp`): plain
+  `WebserverImpl *` (friend, for the protected `send_text`), session id,
+  `std::atomic<bool> open_`; `send_text` drops once closed. One per session,
+  made in `notify_ws_session_open`, held by `WebsocketSessionRecd`.
+  `close_sender()` runs in `notify_ws_session_close` BEFORE `unsubscribe_all`,
+  and for every record in `~WebserverImpl` after the service thread joins
+  (backstop, so a retained sink never reaches a freed server).
+- Deleted: `WebsocketSink::make(rp<Webserver>, pjson, session_id, ...)` and
+  step A's interim `WebserverSessionSender`.
+- Tests: the fixture holds one `RecordingSender` (records text, and parses into
+  `Recorder::reply_v_`, which now holds replies AND frames). `FakeSink` and
+  `sub_id_of` gone -- the router makes real sinks. Sink identity checked by
+  pointer against `subscribed_v_`; "the sink carries the client's id" now sends
+  a frame and reads its envelope. Falsified with a compiling change (router
+  gives sinks `sub_id + 1`): 3 cases fail.
+- NOT tested: `WsSessionSender` and `close()` -- private to `Webserver.cpp`,
+  exercised only with a live socket. That is step C.
+
+utest.websock 26 cases / 219 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages.
+
+Remaining (step C): a test that a retained sink cannot write into a later
+session reusing the id, and that a closed sender drops -- needs a way to reach
+`WsSessionSender` / `WebserverImpl` from a test.
+
 ## Done when
 
 - `WsSender` exists; `WebsocketSink::SendFn` and `WsSessionRouter::ReplyFn` are
