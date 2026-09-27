@@ -148,8 +148,7 @@ its xo-websock build registers both executables (`ctest --test-dir
 xo-websock/.build -N`). CI not yet observed -- whether localhost sockets work
 in both pipelines is unverified until a push.
 
-**Step B, 2026-09-26 -- cases 2-4.** Implemented, awaiting review and
-commit in the umbrella. `xo-websock/utest/WebserverLive.test.cpp` only.
+**Step B, 2026-09-26 -- cases 2-4.** Umbrella `a134c88d`. `xo-websock/utest/WebserverLive.test.cpp` only.
 
 - `live-send-reaches-the-receiver-and-its-reply-comes-back` (case 2): a
   `StreamReceiver` gets the msg as sent; its reply through the handed sink
