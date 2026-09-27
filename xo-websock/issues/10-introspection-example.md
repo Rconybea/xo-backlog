@@ -75,6 +75,48 @@ and draws the object graph.
 register/unregister) so the page redraws without asking. Deferred: the page's
 own subscription changes the state it observes, so hooks need care.
 
+## Plan: increments (RC, 2026-09-27)
+
+Supersedes the two-step proposal above: start with an almost empty but
+working example, then add detail one piece at a time.
+
+1. **Almost-empty example** -- no library change. Snapshot = `{listen_port,
+   state}` from the public API; page draws one box. d3 from CDN; page files
+   copied into the build dir (RC).
+2. registered endpoints (`UrlRouter` listing)
+3. sessions (`WsSessionTable` listing)
+4. subscriptions per session (`WsSessionRouter` listing)
+5. identities + refcounts -> shared sender / shared endpoint drawn as edges
+6. push instead of pull
+
+## Progress
+
+**Increment 1, 2026-09-27.** Implemented, awaiting review and commit in the
+umbrella.
+
+- `xo-websock/example/introspect/introspect.cpp` -> `websock_ex_introspect
+  [port]` (default 7681; 0 = OS-picked, printed). Registers `/introspect`
+  whose `IntrospectReceiver` (a `StreamReceiver`) answers `"refresh"` with a
+  reflected `IntrospectSnapshot {listen_port, state}`; anything else is an
+  error reply (the router turns the exception into one). SIGINT/SIGTERM stop
+  and join cleanly.
+- `mount-origin/index.html`, `introspect.js`: d3 7.9.0 from cdnjs; connects
+  with protocol `lws-minimal`, subscribes, Refresh button (and one refresh on
+  subscribe), draws one svg box sized to its label, shows the raw frame.
+- `xo-websock/example/CMakeLists.txt` (new) + `add_subdirectory(example)`;
+  under `XO_ENABLE_EXAMPLES`; POST_BUILD copies `mount-origin` beside the
+  executable (the server's origin is `./mount-origin`, cwd-relative).
+
+Verified 2026-09-27: run on port 0 from the build dir; `curl` `GET /` -> 200
+(index.html), `GET /introspect.js` -> 200; node 22's global `WebSocket`
+(protocol `lws-minimal`) got `{"cmd":"subscribed",...,"sub_id":0}` then
+`{"stream":"/introspect","sub_id":0,"seq":0,"event":{"_name_":"IntrospectSnapshot","listen_port":43421,"state":"running"}}`.
+PrintJson adds `"_name_"`. SIGTERM -> clean stop. `xo-build --sweep
+--with-examples` ok in both stages; umbrella 49/49.
+
+NOT verified: the page in a real browser (the d3 drawing). No automated test
+for the example.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
