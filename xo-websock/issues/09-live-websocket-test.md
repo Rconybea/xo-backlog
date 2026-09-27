@@ -185,6 +185,13 @@ utest.websock.live 5 cases / 65 assertions, 10/10 consecutive runs;
 utest.websock 39/498; umbrella 49/49; `xo-build --sweep` ok. CI still not
 observed.
 
+**CI, 2026-09-27** (as reported by RC, plus the Forgejo task list): run 506 at
+umbrella `b8b8a647` -- which includes `utest.websock.live` (landed
+`fd7c4287`, all 5 cases since `a134c88d`) -- `cmake-build (clang)` success;
+`cmake-build (gcc)` still running, past the xo-pywebsock stage. The nix
+smoke-test for that commit not yet run. Close when both cmake builds and the
+smoke-test are green.
+
 ## Done when
 
 - a test starts a `Webserver`, connects a real websocket client, and covers

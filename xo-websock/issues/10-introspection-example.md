@@ -114,8 +114,8 @@ Verified 2026-09-27: run on port 0 from the build dir; `curl` `GET /` -> 200
 PrintJson adds `"_name_"`. SIGTERM -> clean stop. `xo-build --sweep
 --with-examples` ok in both stages; umbrella 49/49.
 
-NOT verified: the page in a real browser (the d3 drawing). No automated test
-for the example.
+Page verified in a real browser by RC, 2026-09-27: draws correctly. No
+automated test for the example.
 
 **Found in RC's first real run: started from anywhere but its build dir, the
 server served lws's fallback page** (`<img src="/libwebsockets.org-logo.svg">
