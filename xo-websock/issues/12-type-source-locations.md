@@ -293,7 +293,7 @@ nix. (Note: this change edits xo-cmake, so under nix every package rebuilds
 -- xo-cmake issue 07.)
 
 **Step 2, 2026-09-27 -- the introspect example merges its closure's maps
-(RC: merge, not link).** Uncommitted, awaiting RC's review.
+(RC: merge, not link).** Umbrella `e4ad10fa` (as revised below).
 
 - `xo-cmake/cmake/xo_macros/xo-type-src-merge.py` (installed beside the
   macros; interim home -- belongs in xo-top, xo-cmake issue 07):
