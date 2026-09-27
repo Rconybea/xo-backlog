@@ -565,7 +565,7 @@ declarations) later, when the edge schema exists.
 - behind a configure-time switch, a build step (xo-cmake) produces
   `types.json` (`canonical_name` -> repo-relative file + line) for a target,
   from clang-query, scoped to `xo-umbrella2/`, anonymous namespaces skipped
-- xo-websock printers report `_type` (reflection's canonical name; the
+- xo-websock printers report `_type_` (reflection's canonical name; the
   concrete class where the printer knows it)
 - the introspect page links each node to its type's definition, through a
   provider chosen at runtime (Forgejo prefix + sha; optionally the local
