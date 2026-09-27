@@ -277,9 +277,10 @@ and with a raw pointer, `close()` cannot wait.
 utest.websock 26 cases / 219 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages.
 
-Remaining (step C): a test that a retained sink cannot write into a later
-session reusing the id, and that a closed sender drops -- needs a way to reach
-`WsSessionSender` / `WebserverImpl` from a test.
+Remaining (step C): a test that a closed sender drops. The "retained sink
+writes into a later session reusing the id" half is now structural -- ids are
+never reused, `.xo-backlog/xo-websock/issues/08`. `close()` still guards a sink
+retained past the SERVER. Needs a way to reach `WsSessionSender` from a test.
 
 ## Done when
 

@@ -98,6 +98,44 @@ Same question as 05 step C.
   `lws_write_pending_traffic`, dtor), `LWS_CALLBACK_HTTP_BIND_PROTOCOL`
 - `xo-websock/include/xo/websock/Webserver.hpp` -- `send_text` signature
 
+## Progress
+
+**2026-09-26 -- implemented** (RC: `uint64_t`; option 1, `WsSessionTable`).
+Awaiting review and commit in the umbrella.
+
+- New `xo-websock/include/xo/websock/WsSessionTable.hpp`: header-only template
+  over the per-session record. `next_id()` (counter from 1, only increases),
+  `insert(id, unique_ptr)`, `take(id)` (removes, hands the record over),
+  `with_session(id, fn)` / `for_each(fn)` (fn runs under the table's mutex),
+  `find_owner_thread(id)` (pointer returned with the mutex released; valid
+  only where nothing can `take()` concurrently -- the service thread),
+  `size()`. One mutex.
+- `WebserverImpl` holds `WsSessionTable<WebsocketSessionRecd> session_table_`
+  in place of `session_v_` / `free_session_id_v_`.
+  - the id's ONLY assignment: `LWS_CALLBACK_HTTP_BIND_PROTOCOL`,
+    `websrv->next_session_id()`. `per_vhost_data__minimal::next_session_id_`
+    and the free-list overwrite in `notify_ws_session_open` are gone.
+  - close: `take()` first, then with the lock released `close_sender()`,
+    `unsubscribe_all()`; the record is destroyed at the end of
+    `notify_ws_session_close` (before lws deletes the `OutputBuffer`).
+  - `send_text` (any thread): `with_session`; a closed/unknown id is logged and
+    dropped -- the `assert(false)` is gone. Fixes the unlocked `session_v_`
+    read racing `resize()`.
+  - `perform_ws_cmd`: `find_owner_thread`, command run unlocked.
+  - `lws_write_pending_traffic`, dtor backstop: `for_each`.
+  - ids `uint64_t` in `OutputBuffer`, `WsSessionSender`, `perform_ws_cmd`,
+    `send_text` incl. `Webserver.hpp`; partial-write log prints `%llu`.
+- New `xo-websock/utest/WsSessionTable.test.cpp`, 4 cases with a fake record:
+  never reused over 50 open/close rounds in both close orders; a closed
+  session unreachable by every route, including after a newer session opens;
+  `with_session` reaches exactly its session; `for_each` live only.
+  Falsified with a compiling recycling `next_id()` (`size() + 1`): the
+  never-reused case fails at its first duplicate.
+- NOT tested: `WebserverImpl`'s use of the table (live socket only).
+
+utest.websock 30 cases / 439 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages.
+
 ## Done when
 
 - session ids are `uint64_t`, assigned from one counter, never reused
