@@ -283,6 +283,39 @@ Verified: frame is `{"server": {"_name_": "Webserver", "id": "0x...",
 utest.websock 44/555, utest.websock.live 6/90, umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
+**5b, 2026-09-27 -- DynamicEndpoint native.** Implemented, awaiting review
+and commit in the umbrella.
+
+- `JsonPrinter_DynamicEndpoint` (`xo-websock/src/websock/websock_json.cpp`),
+  registered by `WebsockAppcx` (issue 11): `{_name_, id, refcount, kind,
+  stem, pattern, has_receive}`.
+- `UrlRouter::visit_endpoints(EndpointVisitor)` / `Webserver::
+  visit_endpoints` replace `endpoints()`: the visitor sees each live
+  `DynamicEndpoint` under the router's lock, http then stream, each by stem,
+  WITHOUT an rp<> copy -- so a printed refcount is what the rest of the
+  program holds. `EndpointVisitor` is a `std::function`, as
+  `MemorySizeVisitor` is (xo-arena).
+- `EndpointInfo` removed; `EndpointInfo.hpp` renamed `EndpointKind.hpp`
+  (`git mv`, staged) -- now `EndpointKind`, `endpoint_kind_descr`,
+  `EndpointVisitor`.
+- Tests: `url-router-visits-its-endpoints` (order, unregistered drops out),
+  `url-router-visit-sees-the-endpoint-itself` (address = `find_stream`'s;
+  refcount 1, then 2 with find's rp held), `webserver-visits-its-endpoints`,
+  json test checks `_name_`/id/refcount/has_receive; live: the `/fw`
+  endpoint's refcount is 2 with one subscription. Falsified with a compiling
+  change (visit holding rp copies): three refcount checks fail.
+- Page: refcount badge on each endpoint box.
+
+Observed (headless Chrome, two node clients held): `/hello/${name}` 1 (the
+map), `/demo/${id}` 4 (map + three subscriptions -- the edges drawn),
+`/introspect` **3** = map + the page's subscription + ONE MORE: the snapshot
+is printed inside the `/introspect` receiver, which `WsSessionRouter::send`
+calls on a COPY of the subscription record (`lookup_active` copies it out
+under the lock), and that copy holds the endpoint by rp<>. An observer
+effect -- exactly the "refcount > drawn edges" case 5e is to flag.
+utest.websock 45/560, utest.websock.live 6/94 (3/3), umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
