@@ -283,7 +283,8 @@ Verified: frame is `{"server": {"_name_": "Webserver", "id": "0x...",
 utest.websock 44/555, utest.websock.live 6/90, umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
-**5b, 2026-09-27 -- DynamicEndpoint native.** Umbrella `f9dbfb08`.
+**5b, 2026-09-27 -- DynamicEndpoint native.** Implemented, awaiting review
+and commit in the umbrella.
 
 - `JsonPrinter_DynamicEndpoint` (`xo-websock/src/websock/websock_json.cpp`),
   registered by `WebsockAppcx` (issue 11): `{_name_, id, refcount, kind,
