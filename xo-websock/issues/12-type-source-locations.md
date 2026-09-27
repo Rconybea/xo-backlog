@@ -177,6 +177,26 @@ reveals it (a consistency check the generator can assert).
   closure. Clear ownership, no duplication. A -> B is a filter plus a merge,
   so A closes nothing off.
 
+### Merge tool (RC, 2026-09-27)
+
+A tool, in xo-cmake, that for any SET of xo subsystems produces the source
+map of that set's SUPPORT: the union of the (B) maps of every subsystem the
+set depends on, directly or indirectly, plus the set itself.
+
+- The closure is already computable: `xo-deps --deps-of=<lib>` over
+  `.build/subsystem-edges`. For xo-websock (measured 2026-09-27):
+  `xo-arena xo-callback xo-facet xo-flatstring xo-indentlog2 xo-ppsink
+  xo-printable2 xo-printjson xo-randomgen xo-refcnt xo-reflect
+  xo-reflectable2 xo-reflectutil xo-subsys xo-testutil xo-timeutil
+  xo-websock xo-webutil`.
+- Cross-check against (A): the 13 lower subsystems the spike saw types from
+  are all in that closure; the closure adds 4 more (printable2, randomgen,
+  testutil, timeutil) whose types xo-websock's TUs happen not to include. So
+  merge(B over closure) is a superset of (A) for the same target.
+- Under (B) the maps are disjoint by construction -- each type is defined in
+  exactly one subsystem's directory -- so the merge is a plain union; a name
+  in two maps is an error to report, not resolve.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
@@ -191,6 +211,9 @@ declarations) later, when the edge schema exists.
   types; a program's viewer merges the maps of its link closure. (A -- one
   map of everything a target sees -- is an accepted intermediate step, not
   the end state.)
+- an xo-cmake tool merges the (B) maps of a SET of subsystems' support
+  (direct and indirect dependencies, via the subsystem graph that
+  `xo-deps` reads), reporting any type found in two maps
 
 - behind a configure-time switch, a build step (xo-cmake) produces
   `types.json` (`canonical_name` -> repo-relative file + line) for a target,
