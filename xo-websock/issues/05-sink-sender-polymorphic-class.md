@@ -243,7 +243,7 @@ utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
 `xo-build --sweep` ok in both stages.
 
 **Step B, 2026-09-26 -- one sender per session; production sender folded in**
-(RC chose option 1). Implemented, awaiting review and commit in the umbrella.
+(RC chose option 1). Umbrella `ab07d783`.
 
 Why B grew: a session's router holding an `rp<Webserver>`-backed sender would
 be a cycle. `notify_ws_session_close` does not release the
