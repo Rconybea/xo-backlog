@@ -217,8 +217,8 @@ utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
 sink; B the router takes one sender (no `ReplyFn` / `SinkFactory`); C the
 production per-session sender with `close()`, and the misdelivery test.
 
-**Step A, 2026-09-26 -- `WsSender` interface; sinks take one.** Implemented,
-awaiting review and commit in the umbrella.
+**Step A, 2026-09-26 -- `WsSender` interface; sinks take one.** Umbrella
+`4180f4db`.
 
 - New `xo-websock/include/xo/websock/WsSender.hpp`: `send_text(std::string)`,
   `is_open()`. Derives `ref::Refcount`, NOT `ref::Displayable` as sketched
