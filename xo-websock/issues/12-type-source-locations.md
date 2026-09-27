@@ -444,6 +444,36 @@ Option OFF again (`.build`, the four standalone builds): no header TUs in
 the database (820 entries); ctest 49/49; `xo-build --sweep --with-examples`
 73/73 build, 47 utest ok + 26 without tests.
 
+**Map staleness + a parser bug, 2026-09-27.** Uncommitted, awaiting RC's
+review. After RC deleted xo-jit's ghosts (`eeaccd9d`) and xo-expression's
+(`d2f0a86d`):
+
+- **A deleted source did not re-run the map**: the glob re-configures and
+  drops it from `DEPENDS`, but the remaining inputs are no newer than the
+  map, so make calls it current (xo-jit kept its conflict). Fix
+  (`xo_type_source_map`): the sorted source set written to
+  `<build>/xo-type-src-map/sources.txt` (`file(CONFIGURE)`: only on change),
+  and a `DEPENDS` of the map. Checked on xo-jit: no change -> no re-run; a
+  header added -> re-run; deleted -> re-run.
+- **A type defined on the line clang printed last was dropped.** clang
+  prints a location relative to the last printed: `col:N` alone when the
+  line is unchanged (`<col:32, col:61> col:39 struct X definition` --
+  e.g. `template <typename... Tags> struct tag_list {};`). The parser
+  followed clang's last FILE, not its last LINE. Now both, on every
+  location in order (`LOC_RE`); a record's line is where the parser stands
+  after its name (the line's last location) -- replacing the name-location
+  / range-start guess. Tests 21: column-only carry-over (regression) and
+  name line over range start (guard).
+
+Result (all maps regenerated, option on): 1091 -> **1094**: +1
+`xo::jit::activation_record` (`activation_record.hpp:119`, ghosts deleted),
++1 `xo::scm::ProcedureExprInterface` (`ProcedureExprInterface.hpp:13`,
+ghost deleted), +1 `xo::detail::tag_list` (`xo-subsys` `AppContext.hpp:271`,
+parser fix); no entry moved or lost; every entry checked: 0 bad. Remaining
+conflict from debris: `xo::scm::Primitives` (xo-procedure2 `primitives.hpp`,
+included by nothing). Option OFF again; ctest 49/49; `xo-build --sweep
+--with-examples` 73/73 build, 47 utest ok + 26 without tests.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
