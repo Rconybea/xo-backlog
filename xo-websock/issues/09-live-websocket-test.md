@@ -58,6 +58,62 @@ starts a server, connects a client, and reads what arrives. So the parts of
 Overlaps `.xo-backlog/xo-websock/issues/03` (browser-stepped flywheel demo):
 the same started-server-plus-client setup.
 
+## Decided (RC, 2026-09-26)
+
+- client: libwebsockets' own client mode, in C++ (`WsTestClient`)
+- port: 0, with a new `Webserver::listen_port()`. Verified from the header:
+  `lws-context-vhost.h` documents port 0 as "the kernel will pick a random
+  port", read back with `lws_get_vhost_listen_port()`. Client mode is compiled
+  in (`LWS_WITH_CLIENT` in the installed 4.3.5 `lws_config.h`).
+- a separate executable, `utest.websock.live`, registered with ctest
+- the stream endpoint built in C++
+- two steps: A = infrastructure + case 1; B = cases 2-5
+
+## Progress
+
+**Step A, 2026-09-26.** Implemented, awaiting review and commit in the
+umbrella.
+
+- `Webserver::listen_port()` (`xo-websock/include/xo/websock/Webserver.hpp`):
+  0 until listening and after stopping. Set on the service thread right after
+  `lws_create_context`, from `lws_get_vhost_listen_port`.
+- `xo-websock/utest/WsTestClient.{hpp,cpp}`: lws client on its own thread;
+  `wait_connected` / `send` / `wait_received(n)` / `received` / `close`, every
+  wait bounded by a timeout. `send`/`close` wake it with `lws_cancel_service`;
+  `EVENT_WAIT_CANCELLED` asks for a writeable callback on the connection.
+- `xo-websock/utest/WebserverLive.test.cpp`, case 1
+  `live-subscribe-then-frames`: port 0, connect, subscribe, `subscribed` with
+  a sub_id, then two events pushed from the TEST's thread arrive as frames with
+  the right stream / sub_id / seq / event. The sink is taken from the
+  subscribe function via a condition variable, not from the `subscribed`
+  reply -- the reply is sent BEFORE the subscribe function runs (issue 06).
+- `xo-websock/utest/CMakeLists.txt`: `utest.websock.live` links
+  `websockets_shared` itself (websock links it PRIVATE).
+
+**Bug found and fixed: stopping a running server deadlocked.**
+`WebserverImpl::stop_webserver` held `mutex_` while calling
+`interrupt_stop_webserver`, which locks `mutex_` again (not recursive): the
+caller blocked on itself, and the service thread -- out of its loop, since
+`interrupt_flag_` was already set -- blocked on the same mutex setting
+`state_ = stopped`. Found with gdb (`thread apply all bt`): thread 1 in
+`interrupt_stop_webserver` <- `stop_webserver` <- the test's teardown; the
+service thread in `run()` taking `mutex_`. Never exercised before -- nothing
+started a server in a test, and the demos stop by process exit. Fix: decide
+under the lock, interrupt after releasing it. The first run of the live test,
+before the fix, is its falsification (hung; killed by `timeout`).
+
+Also noticed, NOT fixed: `interrupt_stop_webserver` and
+`unregister_stream_endpoint` read `lws_cx_` from the caller's thread while the
+service thread writes it at start and stop -- unsynchronized.
+
+Results: live test passed 5/5 consecutive runs (~0.12 s). Falsified with a
+compiling change (`EVENT_WAIT_CANCELLED` not calling
+`lws_write_pending_traffic`): fails at its first `wait_received`. Umbrella
+ctest 49/49 (`utest.websock.live` new). `xo-build --sweep` ok in both stages;
+its xo-websock build registers both executables (`ctest --test-dir
+xo-websock/.build -N`). CI not yet observed -- whether localhost sockets work
+in both pipelines is unverified until a push.
+
 ## Done when
 
 - a test starts a `Webserver`, connects a real websocket client, and covers
