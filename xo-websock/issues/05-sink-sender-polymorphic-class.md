@@ -177,6 +177,36 @@ through a `std::stringstream`. Removing the `std::function` removes one heap
 allocation per subscription, not per message. If per-message allocation is the
 real target, that is a separate and larger change.
 
+## Progress
+
+**Step 1, 2026-09-26 -- `StreamReceiver`** (RC: smallest scope first; name and
+`rp<StreamReceiver>` chosen by RC). Implemented, awaiting review and commit in
+the umbrella.
+
+- New `xo-webutil/include/xo/webutil/StreamReceiver.hpp`: `class StreamReceiver
+  : public ref::Refcount` with pure virtual
+  `receive(rp<WebsocketSink> const &, Json::Value const &)` -- non-const, since
+  a receiver (e.g. the flywheel's step handler) mutates its own state. The
+  threading contract moved here from the alias; `Json::Value` and
+  `WebsocketSink` stay forward-declared, so xo-webutil still has no jsoncpp
+  dependency.
+- `StreamReceiveFn` is gone. `StreamEndpointDescr` and `DynamicEndpoint` hold
+  `rp<StreamReceiver>`; the accessor is `receiver()`. Null means "no receiver":
+  `has_receive()` and the "stream does not accept messages" reply unchanged.
+- No production code supplied a receive function
+  (`xo-reactor2websock/src/reactor2websock/reactor_endpoints.cpp` passes three
+  arguments), so nothing outside xo-webutil / xo-websock changed.
+- Tests: the four receive lambdas became subclasses -- `RecordingReceiver`,
+  `ThrowingReceiver`, `FrameReceiver` (`xo-websock/utest/WsSessionRouter.test.cpp`),
+  `NullReceiver` (`xo-websock/utest/UrlRouter.test.cpp`). Falsified with a
+  compiling change (`DynamicEndpoint::receive` not calling the receiver): 4
+  cases fail.
+
+utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
+`xo-build --sweep` ok in both stages.
+
+Remaining: `WsSender` (the class, wiring, the retained-sink misdelivery test).
+
 ## Done when
 
 - `WsSender` exists; `WebsocketSink::SendFn` and `WsSessionRouter::ReplyFn` are
