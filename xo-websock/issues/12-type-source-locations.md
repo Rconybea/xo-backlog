@@ -503,8 +503,8 @@ per-entry check tested only the last name component and missed them; the
 correct names (`xo::mm::IGCObject_Any`, ..) are present. Option OFF; ctest
 49/49; sweep 73/73 build, 47 utest ok + 26 without tests.
 
-**A failed header TU contributes nothing, 2026-09-27.** Uncommitted,
-awaiting RC's review. Guards against the malformed names above recurring:
+**A failed header TU contributes nothing, 2026-09-27.** Umbrella
+`44cc7c7b`. Guards against the malformed names above recurring:
 a header TU that clang fails on is warned about and its dump DISCARDED
 (error recovery can mis-nest namespaces); a type it defines that a real TU
 reaches is still mapped from that TU. Test (22): the fixture's broken header
