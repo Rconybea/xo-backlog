@@ -198,7 +198,7 @@ the umbrella.
   arguments), so nothing outside xo-webutil / xo-websock changed.
 - Tests: the four receive lambdas became subclasses -- `RecordingReceiver`,
   `ThrowingReceiver`, `FrameReceiver` (`xo-websock/utest/WsSessionRouter.test.cpp`),
-  `NullReceiver` (`xo-websock/utest/UrlRouter.test.cpp`). Falsified with a
+  `MarkerReceiver` (`xo-websock/utest/UrlRouter.test.cpp`; a marker making stream endpoints distinguishable from http ones via `has_receive()`). Falsified with a
   compiling change (`DynamicEndpoint::receive` not calling the receiver): 4
   cases fail.
 
