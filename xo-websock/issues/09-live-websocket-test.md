@@ -213,6 +213,15 @@ success (578).
   `-DENABLE_TESTING=1`; the doCheck gap, noted in issue 11). Its smoke-test
   passing says nothing about this test.
 
+**nix now runs them too (RC, 2026-09-27).** `pkgs/xo-websock.nix`: `lib` +
+`doCheck ? true` args, `++ lib.optionals doCheck ["-DENABLE_TESTING=1"]`,
+test-only `xo-testutil`, `xo-indentlog2` (from `xo-websock/utest/CMakeLists.txt`)
+-- the doCheck-sweep pattern, `pkgs/xo-alloc2.nix`. Verified
+`nix-build ci-nxfs.nix -A xo-websock`: checkPhase ran
+`utest.websock` Passed, `utest.websock.live` Passed (0.09 s) -- localhost
+sockets work in the nix build sandbox. Awaiting review and commit in the
+umbrella; the nix CI picks it up from there.
+
 ## Done when
 
 - a test starts a `Webserver`, connects a real websocket client, and covers
