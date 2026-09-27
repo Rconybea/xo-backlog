@@ -391,6 +391,60 @@ standalone (`xo-websock/.build`, option on): list names installed maps + own
 build-dir map, endpoint 18 / 259; option OFF: list removed, endpoint empty,
 ctest 49/49; `xo-build --sweep --with-examples` 73/73 build, 47 utest ok + 26 without tests.
 
+**Header TUs, 2026-09-27 (RC: one-line TU per header).** Uncommitted,
+awaiting RC's review. Closes the header-only gap above.
+
+- `xo_type_source_map()`: per header (`*.hpp`, `*.h`, not `/.build/`), a
+  one-line `<build>/xo-type-src-map/<rel>.hpp.cpp` (`#include "<abs header>"`,
+  `file(CONFIGURE)`). Deferred to the END of the subsystem's directory
+  (`cmake_language(DEFER)`: `xo_export_cmake_config` can precede
+  `add_subdirectory(src)`), `_xo_type_src_header_tus` makes them an `OBJECT`
+  library, `EXCLUDE_FROM_ALL` -- never built; it exists for its
+  compile-database entries. Flags: linked to every library in
+  `all_libraries_${PROJECT_NAME}` (usage requirements, transitively), plus
+  each compiled library's own `INCLUDE_DIRECTORIES` / `COMPILE_DEFINITIONS`
+  via `$<TARGET_PROPERTY>`; a `MODULE_LIBRARY` (python binding) cannot be
+  linked -- the property copies only. And `CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES`
+  in that directory, as `xo_include_options2` does per library directory --
+  without it clang, run from the database, finds no `<cstdint>` (it is a
+  DIRECTORY variable; found by 50+ spurious header failures).
+- Generator: `--header-tu-dir`. Real TUs dumped first WITH `-MD` (headers
+  each includes); then only header TUs for headers none reached. Depfile
+  flags stripped from database commands. A header that does not compile on
+  its own: a warning naming clang's FIRST error, not fatal. Summary: "N of M
+  headers dumped alone".
+- Tests (19): a header no TU includes is mapped; a header a TU includes is
+  not dumped again ("2 of 3 headers dumped alone" -- falsified by dumping all);
+  a non-self-contained header is a warning.
+
+Result (umbrella `.build`, option on; 981 header TUs, 2m11s wall at -j4):
+72 maps, **944 -> 1091 types** (step 1's 962 less later churn); 33 maps grew;
+the header-only four now xo-subsys 12, xo-allocutil 16, xo-callback 7,
+xo-statistics 3. Every entry checked mechanically (its line names the type;
+its file is in its own subsystem): 0 bad. Standalone (option on) for the
+four: identical to in-tree, and to the installed maps.
+
+Found:
+- **3 maps LOST a type**, to DEAD headers now reached, making a conflict
+  (conflicts are dropped): `xo::jit::activation_record`
+  (`activation_record.hpp` vs `.new.hpp` / `.orig.hpp`),
+  `xo::scm::ProcedureExprInterface` (xo-expression `FunctionExprInterface.hpp`
+  defines it too), `xo::scm::Primitives` (xo-procedure2 `init_primitives.hpp`
+  and `primitives.hpp`). Open for RC: delete the debris, and/or let a
+  location seen from a REAL TU win over one seen only through a header TU.
+- **33 headers do not compile on their own** -- a free self-containment
+  check. E.g. xo-statistics `Accumulator.hpp` (`nmaespace`), `Histogram.hpp`
+  (`logutil/scope.hpp`); includes of headers that no longer exist
+  (xo-object2 `DStruct.hpp`: `xo/gc/Collector.hpp`; xo-alloc2 `gc/*Collector2*`);
+  missing includes (xo-callback `CallbackSet.hpp`: `rp`; xo-allocutil
+  `gc_ptr.hpp`: `<concepts>`; xo-tokenizer2 `buffer.hpp`: `<span>`; xo-alloc2
+  `abox.hpp`: `<iostream>`). Full list: rerun with the option on
+  (`grep 'does not compile on its own'`).
+
+Option OFF again (`.build`, the four standalone builds): no header TUs in
+the database (820 entries); ctest 49/49; `xo-build --sweep --with-examples`
+73/73 build, 47 utest ok + 26 without tests.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
