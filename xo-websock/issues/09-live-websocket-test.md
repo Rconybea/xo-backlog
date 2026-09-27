@@ -1,6 +1,6 @@
 # 09 — a live end-to-end websocket test
 
-Status: open
+Status: done 2026-09-27, umbrella `df753952` (nix tests)
 Type: test
 Raised: 2026-09-26, from `.xo-backlog/xo-websock/issues/07` (closed without it)
 
@@ -219,8 +219,13 @@ test-only `xo-testutil`, `xo-indentlog2` (from `xo-websock/utest/CMakeLists.txt`
 -- the doCheck-sweep pattern, `pkgs/xo-alloc2.nix`. Verified
 `nix-build ci-nxfs.nix -A xo-websock`: checkPhase ran
 `utest.websock` Passed, `utest.websock.live` Passed (0.09 s) -- localhost
-sockets work in the nix build sandbox. Awaiting review and commit in the
-umbrella; the nix CI picks it up from there.
+sockets work in the nix build sandbox. Umbrella `df753952`; RC confirmed
+the utests pass in his nix build.
+
+**Closed 2026-09-27 (RC).** Cases 1-4 live, case 5 covered by
+`WsSessionTable.test.cpp` + case 4 (no live observable for a session id);
+runs in the cmake pipeline (clang, gcc) and, from `df753952`, the nix
+pipeline.
 
 ## Done when
 
