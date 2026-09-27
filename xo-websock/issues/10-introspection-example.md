@@ -199,8 +199,7 @@ Verified: headless Chrome with a node client held open on `/demo/1` shows
 sessions" heading. utest.websock 42/528, utest.websock.live 6/82, umbrella
 49/49, `xo-build --sweep --with-examples` ok.
 
-**Increment 4, 2026-09-27 -- subscriptions.** Implemented, awaiting review
-and commit in the umbrella.
+**Increment 4, 2026-09-27 -- subscriptions.** Umbrella `d4e942ea` (with 5a).
 
 - Library: `SubscriptionInfo {sub_id, stream_name, endpoint_pattern}` (in
   `SessionInfo.hpp`); `WsSessionRouter::subscriptions()` -- active only, by
@@ -257,8 +256,8 @@ Increments:
   accounted for; page flags refcount > drawn edges
 - then layout rework, then push
 
-**5a, 2026-09-27.** Implemented, awaiting review and commit -- in the same
-uncommitted tree as increment 4 (not yet committed either).
+**5a, 2026-09-27.** Umbrella `d4e942ea`, together with increment 4.
+Printer registration to move to an appcx: `.xo-backlog/xo-websock/issues/11`.
 
 - New `xo-websock/include/xo/websock/websock_json.hpp` /
   `src/websock/websock_json.cpp`: `provide_websock_json_printers(PrintJson*)`
