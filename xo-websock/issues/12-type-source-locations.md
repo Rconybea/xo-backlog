@@ -291,6 +291,60 @@ Not yet: an `xo-build` switch to turn the option on in per-subsystem builds;
 nix. (Note: this change edits xo-cmake, so under nix every package rebuilds
 -- xo-cmake issue 07.)
 
+**Step 2, 2026-09-27 -- the introspect example merges its closure's maps
+(RC: merge, not link).** Uncommitted, awaiting RC's review.
+
+- `xo-cmake/cmake/xo_macros/xo-type-src-merge.py` (installed beside the
+  macros; interim home -- belongs in xo-top, xo-cmake issue 07):
+  `--print-closure --edges E --root S`; `--output O maps..`; or `--output O
+  --edges E --root S --map-template T [--root-map M]` (closure computed at
+  build time; T has `{subsystem}`). Union; a missing map is a note; a name in
+  two maps is warned and left out, listed under `conflicts`. Output
+  `{"format", "subsystems", "types", "conflicts"}`.
+- `xo_cxx.cmake`: `xo_type_src_map_closure(target output)`, no-op unless
+  `XO_ENABLE_SOURCE_MAP`. In-tree (`XO_SUBMODULE_BUILD`):
+  `${XO_UMBRELLA_BINARY_DIR}/subsystem-edges` and
+  `${XO_UMBRELLA_BINARY_DIR}/{subsystem}/types.json`, ordered after every
+  closure member's `xo_types_json_*` target. Installed: xo-cmake's installed
+  `etc/xo/subsystem-edges` and `${CMAKE_INSTALL_FULL_DATADIR}/{subsystem}/types.json`.
+  Its own python lookup: the example subdir is configured BEFORE
+  `xo_export_cmake_config`.
+- `xo-websock/example/introspect/CMakeLists.txt`:
+  `xo_type_src_map_closure(${SELF_EXE}_types .../mount-origin/types.json)`.
+- Generator fix: a missing compile database is an empty map with a note,
+  not a failure. Header-only subsystems built on their own have no TUs, so
+  cmake writes no `compile_commands.json` -- xo-subsys, xo-allocutil,
+  xo-callback failed their builds. Regression test added (16 tests).
+
+Verified:
+- in-tree (`.build`, option on): `mount-origin/types.json`, 18 subsystems,
+  258 types, 0 conflicts;
+- installed (`xo-build --with-deps xo-websock -- -DXO_ENABLE_SOURCE_MAP=ON`):
+  22/22 ok, 22 maps, 320 types, 0 conflicts;
+- option OFF again everywhere (`.build` and the 22 per-subsystem builds);
+  ctest 49/49; `xo-build --sweep --with-examples` 73/73 build, 47 utest ok +
+  26 without tests.
+
+Found:
+- **`xo-build --sweep` does not install xo-cmake** (by design,
+  `bin/xo-build.in`: "excluding the xo-cmake bootstrap"), so a sweep after a
+  macro change runs against the OLD installed macros: xo-websock failed with
+  `Unknown CMake command "xo_type_src_map_closure"`. Install xo-cmake first
+  (`xo-build --configure --build --install xo-cmake`).
+- **The installed flavour's closure is WRONG today -- stale
+  `xo-cmake/etc/xo/subsystem-edges`** (committed and installed; `.build`'s is
+  current). For xo-websock it yields 7 former dependencies (xo-alloc,
+  xo-allocutil, xo-object, xo-ordinaltree, xo-ratio, xo-reactor, xo-unit) and
+  misses 3 current ones (xo-facet, xo-printable2, xo-reflectable2); hence 22
+  vs 18. `xo-build --with-deps` reads the same file. Fix is a recapture
+  (`./reconfigure --capture-subsystem-edges`), not a merge change.
+- Header-only subsystems (xo-subsys, xo-allocutil, xo-callback,
+  xo-statistics) get EMPTY maps -- no TU includes their headers from inside
+  their own source dir. Open question for RC: e.g. a generated one-line TU
+  per header for the dump, or accept the gap.
+- The installed flavour's merged map does not rebuild when a member's
+  installed map changes (its only file dependency is the root's own map).
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
