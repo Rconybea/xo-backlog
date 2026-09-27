@@ -262,7 +262,7 @@ utest.websock 37 cases / 489 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages.
 
 **Step 6, 2026-09-26 -- Webserver + python unregister API** (RC).
-Implemented, awaiting review and commit in the umbrella.
+Umbrella `a19de4bd`.
 
 - `UrlRouter::unregister_http` / `unregister_stream` now return the removed
   `rp<DynamicEndpoint>` (null if none) instead of `bool`; the webserver needs
