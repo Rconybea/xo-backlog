@@ -351,7 +351,7 @@ utest.websock.live 6/101 (3/3), umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
 **5d, 2026-09-27 -- subscription + sink native; the Info layer is gone.**
-Implemented, awaiting review and commit in the umbrella.
+Umbrella `0cfba5b2`.
 
 - `WsSessionRouter::Subscription` forward declaration moved to public
   (still opaque outside `WsSessionRouter.cpp`) so its printer can be keyed on
