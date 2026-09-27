@@ -474,6 +474,35 @@ conflict from debris: `xo::scm::Primitives` (xo-procedure2 `primitives.hpp`,
 included by nothing). Option OFF again; ctest 49/49; `xo-build --sweep
 --with-examples` 73/73 build, 47 utest ok + 26 without tests.
 
+**The 33 non-self-contained headers, 2026-09-27.** Umbrella `3d762c02`,
+`172ecfd3`, `4c2ac246` (RC's commits). Triage: reachable from a COMPILED TU
+(compile database roots; includes resolved to paths, quoted bare names within
+the subsystem) -- 6 live, 27 not.
+
+- Deleted (RC: "delete all of them"): the 27, plus two unbuilt sources
+  (`xo-object/src/object/object.cpp`, `xo-object2/src/object2/GCObjectConverter.cpp`);
+  also xo-procedure2 `primitives.hpp` (RC). Two CMake comments naming them
+  updated. Installed copies removed from `~/local/include` (install never
+  deletes: the sweep would otherwise still find them).
+- Live fixes: `abox.hpp` + `<iostream>`; `gc_ptr.hpp` + `<compare>`;
+  `CallbackSet.hpp` includes `<xo/refcnt/Refcounted.hpp>`, xo-callback's
+  `xo_headeronly_dependency(callback refcnt)` restored (`callbackConfig.cmake.in`
+  already had `find_dependency(refcnt)`); `Printable.hpp` drops its unused,
+  undeclared `<xo/alloc2/Allocator.hpp>` (printable2 and alloc2 are siblings)
+  -- no includer relied on it; `UtestListener.hpp` defines
+  `CATCH_CONFIG_EXTERNAL_INTERFACES` when the caller has not, and its unused
+  `stats` parameter is unnamed (the next error, once it compiled).
+
+Result (all maps regenerated, option on): **0** headers fail alone; conflicts
+only xo-ordinaltree's 5; 1053 types: -29 from deleted files, +4
+(`xo::scm::Primitives`, `ProcedureExprInterface`, `tag_list`,
+`xo::obj::object`), and -22 MALFORMED names gone -- e.g.
+`std::xo::xo::mm::IGCObject_Any`: error-recovery ASTs of broken header TUs
+(xo-alloc2's `Collector2.hpp` family) nested namespaces wrongly. The
+per-entry check tested only the last name component and missed them; the
+correct names (`xo::mm::IGCObject_Any`, ..) are present. Option OFF; ctest
+49/49; sweep 73/73 build, 47 utest ok + 26 without tests.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
