@@ -71,8 +71,8 @@ the same started-server-plus-client setup.
 
 ## Progress
 
-**Step A, 2026-09-26.** Implemented, awaiting review and commit in the
-umbrella.
+**Step A, 2026-09-26.** Umbrella `fd7c4287` (includes the `stop_webserver`
+deadlock fix below).
 
 - `Webserver::listen_port()` (`xo-websock/include/xo/websock/Webserver.hpp`):
   0 until listening and after stopping. Set on the service thread right after
@@ -102,9 +102,29 @@ started a server in a test, and the demos stop by process exit. Fix: decide
 under the lock, interrupt after releasing it. The first run of the live test,
 before the fix, is its falsification (hung; killed by `timeout`).
 
-Also noticed, NOT fixed: `interrupt_stop_webserver` and
-`unregister_stream_endpoint` read `lws_cx_` from the caller's thread while the
-service thread writes it at start and stop -- unsynchronized.
+**Race on `lws_cx_`, fixed after `fd7c4287`** (RC: "add it to step A";
+landed separately since A was already committed). Awaiting review and commit.
+`interrupt_stop_webserver` and `unregister_stream_endpoint` read `lws_cx_` from
+the caller's thread while the service thread wrote it at start and stop: a data
+race on the pointer, and a use-after-free window (a non-null read, then
+`lws_context_destroy`, then `lws_cancel_service` on freed memory) that an
+atomic alone would not close.
+
+- new `std::mutex cx_mutex_`; new `WebserverImpl::wake_service_thread()`, the
+  only way other threads reach the context: null check AND
+  `lws_cancel_service` under the lock. Safe to hold across the call -- it
+  writes a pipe, never blocks or calls back.
+- `run()` works on a local context; publishes it to `lws_cx_` under the lock
+  after creation, and nulls it under the lock BEFORE `lws_context_destroy`.
+- `interrupt_stop_webserver` sets `interrupt_flag_` then wakes; a stop before
+  the context is published is still seen, since `run()` checks the flag
+  before its first `lws_service`.
+- Verified: live test 10/10, utest.websock 39/498, umbrella 49/49,
+  `xo-build --sweep` ok. NOT shown race-free: that needs ThreadSanitizer, a
+  separate build configuration, not set up.
+
+Also noticed, NOT fixed: if `lws_create_context` fails, `run()` returns
+without setting `state_ = stopped`, so `join_webserver()` waits forever.
 
 Results: live test passed 5/5 consecutive runs (~0.12 s). Falsified with a
 compiling change (`EVENT_WAIT_CANCELLED` not calling
