@@ -241,9 +241,32 @@ only** (RC: bounded; no Webserver/python API yet). Umbrella `1ba706e8`.
 utest.websock 26 cases / 215 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages.
 
-Remaining: removal ends live subscriptions (service thread, `"reason":
-"endpoint removed"`); then Webserver + python unregister API -- and issue 05's
-`WsSender` before the former.
+**Step 5, 2026-09-26 -- the router operation** (RC). Implemented, awaiting
+review and commit in the umbrella. (Issue 05 landed first, as planned: the
+session's sender holds a plain `WebserverImpl *`, so no cycle.)
+
+- `std::size_t WsSessionRouter::end_subscriptions_on(rp<DynamicEndpoint> const &)`:
+  under the lock, retires every ACTIVE slot whose endpoint is the given one
+  (by `rp<>` identity, not stem); then, lock released, in sub_id order, runs
+  that endpoint's unsubscribe and replies
+  `{"cmd": "unsubscribed", "sub_id": N, "reason": "endpoint removed"}`.
+  Returns the count. Service thread, like `perform_cmd`.
+- Tests (`[removal]` in `xo-websock/utest/WsSessionRouter.test.cpp`, 3 cases):
+  ends only the removed endpoint's subscriptions (another stream's survives
+  and still receives), replies with the reason in sub_id order, ended ids
+  retired, a second call ends nothing; an already-unsubscribed slot is not
+  unsubscribed again; an old endpoint replaced at the same stem ends only its
+  own. Falsified with compiling changes: match by stem (the replacement case
+  fails); slots not retired (3 cases fail).
+
+utest.websock 37 cases / 489 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages.
+
+Remaining: drive it -- `Webserver::unregister_*_endpoint` removes from
+`UrlRouter` at once, then queues work to the service thread (woken like
+`send_text`, via `lws_cancel_service`) that calls `end_subscriptions_on` for
+each session (`session_table_.for_each` / issue 08); plus the xo-pywebsock
+bindings.
 
 ## Consequences
 
