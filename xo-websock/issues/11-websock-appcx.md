@@ -1,6 +1,6 @@
 # 11 — xo-websock gets an Appcx; json printers registered there
 
-Status: open
+Status: done 2026-09-27, umbrella `f9dbfb08`
 Type: refactor
 Raised: 2026-09-27 (RC), from `.xo-backlog/xo-websock/issues/10` (5a)
 
@@ -95,7 +95,7 @@ xo.printjson: `configure()` once per process.
 
 ## Progress
 
-**2026-09-27.** Implemented, awaiting review and commit in the umbrella.
+**2026-09-27.** Umbrella `f9dbfb08`.
 
 - xo-websock: `init_websock.hpp`/`.cpp` (`S_websock_tag`; `require()` depends
   on printjson; `init()` empty), `cx/WebsockConfig.hpp` (empty),
