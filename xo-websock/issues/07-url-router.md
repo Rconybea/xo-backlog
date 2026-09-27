@@ -212,8 +212,7 @@ utest.websock 24 cases / 199 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages (73/73; 47 ok, 26 no tests).
 
 **Step 4, 2026-09-26 -- unregister + duplicate rejection, in `UrlRouter`
-only** (RC: bounded; no Webserver/python API yet). Implemented, awaiting review
-and commit in the umbrella.
+only** (RC: bounded; no Webserver/python API yet). Umbrella `1ba706e8`.
 
 - `register_http` / `register_stream` throw `std::runtime_error` on a stem
   already in that map; the message names both patterns and says to unregister
