@@ -91,8 +91,8 @@ working example, then add detail one piece at a time.
 
 ## Progress
 
-**Increment 1, 2026-09-27.** Implemented, awaiting review and commit in the
-umbrella.
+**Increment 1, 2026-09-27.** Umbrella `3c60fca4` (with the mount_origin fix
+below).
 
 - `xo-websock/example/introspect/introspect.cpp` -> `websock_ex_introspect
   [port]` (default 7681; 0 = OS-picked, printed). Registers `/introspect`
