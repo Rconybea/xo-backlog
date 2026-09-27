@@ -199,6 +199,38 @@ Verified: headless Chrome with a node client held open on `/demo/1` shows
 sessions" heading. utest.websock 42/528, utest.websock.live 6/82, umbrella
 49/49, `xo-build --sweep --with-examples` ok.
 
+**Increment 4, 2026-09-27 -- subscriptions.** Implemented, awaiting review
+and commit in the umbrella.
+
+- Library: `SubscriptionInfo {sub_id, stream_name, endpoint_pattern}` (in
+  `SessionInfo.hpp`); `WsSessionRouter::subscriptions()` -- active only, by
+  sub_id, under the router's lock. `SessionInfo::subscriptions_` replaces
+  increment 3's `n_subscription_` (a count is `.size()`).
+- Tests: `subscriptions-lists-the-active-ones` (router unit: a retired
+  sub_id is not listed; the name asked for vs the serving endpoint's
+  pattern); the live sessions test checks the list. Falsified with a
+  compiling change (pattern replaced by the stream name): fails at the
+  pattern check.
+- Example: `/demo/${id}` is a ticker -- keeps its sinks by callback id; the
+  main thread sends each a counter once a second, copying the sinks under the
+  ticker's lock and sending with it released (a send enters the server, whose
+  thread may be in subscribe, waiting for that lock). Snapshot sessions carry
+  `subscriptions: [{sub_id, stream, endpoint}]`.
+- Page: each session's subscriptions stacked under it; a dashed curve from
+  each subscription to the stream endpoint serving it (matched by pattern),
+  so shared use of one endpoint shows as converging curves.
+
+Verified: headless Chrome with two node clients held open (one on `/demo/1`
+and `/demo/2`, one on `/demo/1`) -- three curves converge on `/demo/${id}`,
+the page's own `/introspect` subscription curves to `/introspect`. Ticks
+over ~12 s: `/demo/1` 24 (two subscribers), `/demo/2` 12. utest.websock
+43/541, utest.websock.live 6/84 (3/3 runs), umbrella 49/49,
+`xo-build --sweep --with-examples` ok.
+
+Layout debt, NOT addressed: "uses" curves cross session and subscription
+boxes -- readable, busy. Candidate for its own increment (grouped columns or
+a d3 force layout).
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
