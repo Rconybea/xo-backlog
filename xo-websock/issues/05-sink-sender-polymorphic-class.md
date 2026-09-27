@@ -196,11 +196,20 @@ the umbrella.
 - No production code supplied a receive function
   (`xo-reactor2websock/src/reactor2websock/reactor_endpoints.cpp` passes three
   arguments), so nothing outside xo-webutil / xo-websock changed.
-- Tests: the four receive lambdas became subclasses -- `RecordingReceiver`,
-  `ThrowingReceiver`, `FrameReceiver` (`xo-websock/utest/WsSessionRouter.test.cpp`),
-  `MarkerReceiver` (`xo-websock/utest/UrlRouter.test.cpp`; a marker making stream endpoints distinguishable from http ones via `has_receive()`). Falsified with a
-  compiling change (`DynamicEndpoint::receive` not calling the receiver): 4
-  cases fail.
+- Tests: the three receive lambdas in `xo-websock/utest/WsSessionRouter.test.cpp`
+  became subclasses -- `RecordingReceiver`, `ThrowingReceiver`,
+  `FrameReceiver`. Falsified with a compiling change (`DynamicEndpoint::receive`
+  not calling the receiver): 4 cases fail.
+- **`EndpointKind`** (RC, same step). `UrlRouter.test.cpp` had used a receiver
+  purely as a marker, to tell a stream endpoint from an http one via
+  `has_receive()`. Instead `DynamicEndpoint` records `EndpointKind {http,
+  stream}`, set by `make_http` / `make_stream`, exposed as `kind()`; the test
+  checks that and its streams carry no receiver. `http_response` asserts http;
+  `subscribe` / `unsubscribe` / `receive` assert stream (and `receive` a
+  non-null receiver), so a mix-up fails at the assert rather than as
+  `bad_function_call`. Falsified: `make_stream` recording `http` aborts at the
+  `subscribe` assert, and fails `url-router-keeps-http-and-stream-apart` at its
+  kind check.
 
 utest.websock 26 cases / 215 assertions (unchanged); umbrella 48/48;
 `xo-build --sweep` ok in both stages.
