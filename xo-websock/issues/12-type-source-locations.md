@@ -515,6 +515,34 @@ no `std::`, no repeated segment like `xo::xo::`): 0 bad. Option OFF; ctest
 49/49. No sweep: the change is only in the generator, which runs only with
 the option on.
 
+**Step 3, 2026-09-27 -- printers report `_type`.** Uncommitted, awaiting
+RC's review. Decided (RC): `_type` is the FULL canonical name (template
+arguments included; the page strips `<...>` to look it up), of the type the
+printer READS -- so the Webserver printer, which reads only the interface,
+reports `xo::web::Webserver`, not `WebserverImpl`.
+
+- Everywhere `_name_` is emitted, `_type` follows it:
+  - xo-printjson's generic struct printer: `tp.td()->canonical_name()`;
+  - hand-written printers, `xo::reflect::type_name<T>()` (the same string):
+    xo-printjson ObjectSlot, RootSet (`DHandleArena<ObjectSlot>`),
+    Flywheel (`AllocFlywheel`); xo-websock DynamicEndpoint, Webserver,
+    WebsocketSink (`WebsocketSinkImpl` in its override, `WebsocketSink` in the
+    base), Subscription (`WsSessionRouter::Subscription`), WsSessionSender
+    (`WsSessionSender<WebserverImpl>`), WsSession (`WebsocketSessionRecd`);
+    the introspect example's Ticker.
+- Tests: the websock utests that checked `_name_` now check `_type` too
+  (exact; a prefix for the template). Exact-string json tests updated
+  (utest.printjson 4, utest.object2 flywheel frame): expected `_type` BUILT
+  from `type_name<T>()`, not spelled -- test types in anonymous namespaces
+  are `{anonymous}` under gcc, `(anonymous namespace)` under clang.
+- End to end (node's WebSocket against introspect, option on, a /demo
+  subscription so the ticker holds a sink): 8 distinct `_type`s in a
+  snapshot, every one found in `/dyn/types` with template args stripped --
+  e.g. `WsSessionSender<xo::web::WebserverImpl>` ->
+  `xo-websock/include/xo/websock/WsSessionSender.hpp:38`,
+  `WsSessionRouter::Subscription` -> `xo-websock/src/websock/WsSessionRouter.cpp:33`.
+- Option OFF; ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without tests.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
