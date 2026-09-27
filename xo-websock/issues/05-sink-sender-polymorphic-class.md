@@ -282,6 +282,26 @@ writes into a later session reusing the id" half is now structural -- ids are
 never reused, `.xo-backlog/xo-websock/issues/08`. `close()` still guards a sink
 retained past the SERVER. Needs a way to reach `WsSessionSender` from a test.
 
+**Step C, 2026-09-26 -- `WsSessionSender<Target>`, tested** (RC: template).
+Implemented, awaiting review and commit in the umbrella.
+
+- Moved out of `Webserver.cpp` into
+  `xo-websock/include/xo/websock/WsSessionSender.hpp` as a template over its
+  target, needing only `target->send_text(uint64_t, std::string)`.
+  `Webserver.cpp` uses `WsSessionSenderImpl = WsSessionSender<WebserverImpl>`
+  (friend, for the protected `send_text`). Gains a `session_id()` accessor.
+- New `xo-websock/utest/WsSessionSender.test.cpp`, 4 cases with a
+  `FakeTarget`: forwards tagged with its session id; drops once closed (also
+  through `rp<WsSender>`); `close()` idempotent; a closed sender never follows
+  its target pointer (null target). Falsified with a compiling change
+  (`send_text` ignoring `open_`): 3 cases fail, the null-target one by SIGSEGV.
+- Noted in the class comment: `close()` racing a `send_text()` on another
+  thread may let that one through; harmless, since the webserver drops sends to
+  a closed session (issue 08).
+
+utest.websock 34 cases / 449 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages.
+
 ## Done when
 
 - `WsSender` exists; `WebsocketSink::SendFn` and `WsSessionRouter::ReplyFn` are
