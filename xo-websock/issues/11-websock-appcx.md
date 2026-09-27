@@ -84,6 +84,53 @@ the plainer shape.
   falsification of 5a). Whether `Webserver::make` should require evidence
   (`InitEvidence` / creation evidence) that the appcx exists.
 
+## Decided (RC, 2026-09-27)
+
+`Webserver::make(WebsockAppcx const & cx, WebserverConfig const &)` -- the
+server takes its PrintJson from the context, so no server exists without the
+printers (compile-time; precedent: `AllocFlywheel` takes `FacetAppcx`,
+`xo-facet/src/facet/AllocFlywheel.cpp`). Replaces `make(config,
+rp<PrintJson>)`; `make` no longer installs printers. Python mirrors
+xo.printjson: `configure()` once per process.
+
+## Progress
+
+**2026-09-27.** Implemented, awaiting review and commit in the umbrella.
+
+- xo-websock: `init_websock.hpp`/`.cpp` (`S_websock_tag`; `require()` depends
+  on printjson; `init()` empty), `cx/WebsockConfig.hpp` (empty),
+  `cx/WebsockAppcx.hpp` + `src/websock/WebsockAppcx.cpp` (depends on
+  `PrintJsonAppcx`; ctor calls `provide_websock_json_printers`; exposes
+  `print_json()`, creation evidence, placeholder `visit_pools`).
+- `Webserver::make(WebsockAppcx const &, WebserverConfig const &)`.
+- Tests: `websock_unit_main.cpp` builds
+  `AppContext<indentlog2, reflect, printjson, websock>`; new
+  `utest/websock_test_appcx.hpp` (`xo::ut::websock_appcx()`) for both test
+  executables. Example builds the same stack.
+- xo-pywebsock: `WebsockConfig`, `WebsockAppcx`, `configure(config,
+  printjson_appcx)` (once per process, throws on a second call);
+  `Webserver.make(cx, ws_config)` / `make_webserver(cx, ws_config)` with
+  `keep_alive<0,1>`. CMake: header dependency on xo_pyprintjson;
+  `pkgs/xo-pywebsock.nix` gains xo-pyprintjson.
+- **Latent xo-printjson bug, fixed:** installed `cx/PrintJsonAppcx.hpp` had
+  `#include "PrintJson.hpp"` -- resolves only when the include path reaches
+  `xo/printjson/`. xo-pywebsock was the first installed consumer without it:
+  sweep stage 1 failed there (`fatal error: PrintJson.hpp: No such file`).
+  Now `"xo/printjson/PrintJson.hpp"`, as the next line already spelled its
+  sibling. No other `cx/` header has the pattern.
+
+Verified: utest.websock 44/555, utest.websock.live 6/90 (3/3), umbrella
+49/49, `xo-build --sweep --with-examples` ok (after the header fix); example
+serves its snapshot via the context; python by hand: chain
+indentlog2 -> reflect -> printjson -> websock configure, both makes,
+second configure refused, old one-arg make -> TypeError;
+`nix-build ci-nxfs.nix -A xo-pywebsock` ok (25 derivations).
+
+**Noticed, not fixed:** the xo-websock nix package runs NO tests -- its
+checkPhase prints `No tests were found!!!` (`pkgs/xo-websock.nix` passes no
+`-DENABLE_TESTING=1`). The known doCheck-sweep gap; nix never runs
+utest.websock / utest.websock.live.
+
 ## Done when
 
 - xo-websock has `init_websock.hpp`, `cx/WebsockConfig.hpp`,
