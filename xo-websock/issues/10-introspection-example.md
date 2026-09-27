@@ -138,8 +138,7 @@ origin config + startup check), same uncommitted change:
   utest.websock 39/498, utest.websock.live 5/65, umbrella 49/49,
   `xo-build --sweep --with-examples` ok.
 
-**Increment 2, 2026-09-27 -- registered endpoints.** Implemented, awaiting
-review and commit in the umbrella.
+**Increment 2, 2026-09-27 -- registered endpoints.** Umbrella `4f41c8a3`.
 
 - Library: new `xo-websock/include/xo/websock/EndpointInfo.hpp` -- plain value
   `EndpointInfo {kind, stem, uri_pattern}`, `endpoint_kind_descr()`, and
