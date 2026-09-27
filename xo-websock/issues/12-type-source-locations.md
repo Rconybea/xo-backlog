@@ -225,6 +225,67 @@ set depends on, directly or indirectly, plus the set itself.
 3. Printers report `_type`.
 4. The page links, via a runtime-configured provider.
 
+## Progress
+
+**Step 1, 2026-09-27 -- every subsystem generates and installs its own map.**
+Implemented, awaiting review and commit in the umbrella.
+
+- `xo-cmake/cmake/xo_macros/xo-type-source-map.py` (installed beside the
+  macros; found via `CMAKE_CURRENT_FUNCTION_LIST_DIR`, so in-tree and
+  installed alike): all of a subsystem's TUs (library, utest, example) from
+  the compile database, dumped in parallel; keeps types defined under its
+  source dir; skips anonymous namespaces and function-local classes;
+  out-of-line nested definitions resolved via `parent 0x..`; enums included;
+  aliases and specializations not separate entries. Output
+  `{"format": "xo-type-source-map/1", "subsystem", "types": {name: {file,
+  line}}, "conflicts": {..}}`, paths repo-relative.
+- `xo_cxx.cmake`: `option(XO_ENABLE_SOURCE_MAP ... OFF)`; `xo_type_source_map()`
+  called from `xo_export_cmake_config` (71 of 73 subsystems call it; not
+  xo-procedure2, xo-numeric) -> target `xo_types_json_<subsystem>` (ALL),
+  output `<subsystem build dir>/types.json`, installed
+  `share/<subsystem>/types.json`. Without clang++/python3: a warning, no map.
+- Tests: `xo-cmake/utest/test_xo_type_source_map.py` -- a synthetic tree with
+  its own compile database (namespace / nested / out-of-line nested classes,
+  template + specialization, enum, alias, anonymous namespace,
+  function-local, another subsystem's type); two parse regressions (below);
+  gcc-internal include filtering. Run by the existing `utest.xo-loc` ctest
+  (python unittest discovery). Falsified: no parent resolution; no
+  function-local skip; each regression.
+
+Found by running every subsystem (72 maps):
+
+- **Two parser bugs, both about clang's "last file printed" state** (a
+  location's file is printed only when it changes): (1) the file was tracked
+  only on decl lines -- but it also advances on e.g. `TemplateArgument`
+  lines (no address): `xo::nested::begin` landed in `Prettifier.hpp` instead
+  of `pretty.hpp`; (2) a path inside a quoted TYPE string (`'.. (lambda at
+  /x.cpp:3:5) ..'`) is not a printed location: ppsink's `xo::nested::*`
+  leaked into xo-process's map. Both fixed, both with regression tests.
+- **gcc's internal headers break clang**: where a compile command lists
+  `.../lib/gcc/<triple>/<ver>/include{,-fixed}` (xo-kalmanfilter under nix),
+  clang fails (`conflicting types for '_mm_prefetch'`, xmmintrin.h). Dropped
+  from the flags.
+- **xo-ordinaltree defines 5 names twice** -- e.g.
+  `xo::tree::detail::IteratorBase` in both `rbtree/Iterator.hpp` and
+  `bplustree/Iterator.hpp` (fine only because no TU includes both; an ODR
+  hazard). Conflicts made NON-fatal (a call taken without RC): warned, left
+  out of `types`, listed under `conflicts` -- a naming problem in the code
+  should not fail the build.
+
+Result (umbrella `.build`, option on, then switched back OFF): 72/72 maps,
+**962 types**, 0 TU failures, ~5 min serial for all. Every entry checked
+mechanically: its line declares the type, and its file is in its own
+subsystem -- all but ONE: `xo::print::ppdetail`
+(`xo-indentlog/.../ppdetail_atomic.hpp:23`, `#define ppdetail_atomic
+ppdetail`) -- a class NAMED BY A MACRO points at the macro. Known
+limitation. Install checked: `share/xo-websock/types.json` (31 types).
+Option OFF: no map targets. ctest 49/49 (117 python tests in
+`utest.xo-loc`); `xo-build --sweep --with-examples` ok.
+
+Not yet: an `xo-build` switch to turn the option on in per-subsystem builds;
+nix. (Note: this change edits xo-cmake, so under nix every package rebuilds
+-- xo-cmake issue 07.)
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
