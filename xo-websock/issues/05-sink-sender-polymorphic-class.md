@@ -1,6 +1,6 @@
 # 05 — replace std::function callbacks in the websocket session path with polymorphic classes
 
-Status: open
+Status: done 2026-09-26, umbrella `3ee4bccf`
 Type: refactor
 Raised: 2026-09-26, follow-up to `.xo-backlog/xo-websock/issues/04`
 
@@ -283,7 +283,7 @@ never reused, `.xo-backlog/xo-websock/issues/08`. `close()` still guards a sink
 retained past the SERVER. Needs a way to reach `WsSessionSender` from a test.
 
 **Step C, 2026-09-26 -- `WsSessionSender<Target>`, tested** (RC: template).
-Implemented, awaiting review and commit in the umbrella.
+Umbrella `3ee4bccf`.
 
 - Moved out of `Webserver.cpp` into
   `xo-websock/include/xo/websock/WsSessionSender.hpp` as a template over its
