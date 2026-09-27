@@ -261,11 +261,40 @@ session's sender holds a plain `WebserverImpl *`, so no cycle.)
 utest.websock 37 cases / 489 assertions; umbrella 48/48; `xo-build --sweep`
 ok in both stages.
 
-Remaining: drive it -- `Webserver::unregister_*_endpoint` removes from
-`UrlRouter` at once, then queues work to the service thread (woken like
-`send_text`, via `lws_cancel_service`) that calls `end_subscriptions_on` for
-each session (`session_table_.for_each` / issue 08); plus the xo-pywebsock
-bindings.
+**Step 6, 2026-09-26 -- Webserver + python unregister API** (RC).
+Implemented, awaiting review and commit in the umbrella.
+
+- `UrlRouter::unregister_http` / `unregister_stream` now return the removed
+  `rp<DynamicEndpoint>` (null if none) instead of `bool`; the webserver needs
+  the endpoint to end its subscriptions. Existing tests unchanged (`rp<>` tests
+  as bool).
+- `Webserver::unregister_http_endpoint` / `unregister_stream_endpoint`
+  (`bool`), documented in `Webserver.hpp`. http: just `UrlRouter`. stream:
+  out of `UrlRouter` at once (new subscribes fail), then pushed on
+  `WebserverImpl::removed_endpoint_v_` (own mutex) and the service thread
+  woken with `lws_cancel_service`, as `interrupt_stop_webserver` does.
+- `WebserverImpl::lws_end_removed_subscriptions`, run from
+  `LWS_CALLBACK_EVENT_WAIT_CANCELLED` before `lws_write_pending_traffic`:
+  swaps out the queue, collects routers under the session table's lock, then
+  calls `end_subscriptions_on` with it RELEASED (replies re-enter
+  `send_text` -> the table lock, not recursive).
+- xo-pywebsock: `Webserver.unregister_http_endpoint(uri_pattern)`,
+  `unregister_stream_endpoint(uri_pattern)`. Checked by hand against the
+  module the umbrella builds, `.build/python/xo/websock.*.so` (import
+  `xo.websock`): methods present, docstrings, `False` for an unknown pattern.
+  (A stale `.build/xo-pywebsock/src/pywebsock/xo_pywebsock.*.so` from
+  2026-09-13 lingers from an earlier layout -- importing THAT shows none of
+  this.)
+- New `xo-websock/utest/Webserver.test.cpp`, 2 cases, on a server made but
+  never started: exact-pattern unregister, true/false results, duplicate
+  rejected until unregistered, http and stream removed separately.
+- NOT tested: the live path -- queue, wakeup, drain, the `unsubscribed`
+  reaching a real client. Needs a started server, a websocket client, and a
+  stream endpoint; none in `utest.websock`, and no client (python websockets,
+  websocat) in this environment. The router half is covered by step 5.
+
+utest.websock 39 cases / 498 assertions; umbrella 48/48; `xo-build --sweep`
+ok in both stages.
 
 ## Consequences
 
