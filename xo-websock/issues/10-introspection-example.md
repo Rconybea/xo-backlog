@@ -174,6 +174,32 @@ refresh returns all three endpoints in order; headless Chrome
 utest.websock 41/527, utest.websock.live 5/65, umbrella 49/49,
 `xo-build --sweep --with-examples` ok.
 
+**Increment 3, 2026-09-27 -- sessions.** Implemented, awaiting review and
+commit in the umbrella.
+
+- Library: new `xo-websock/include/xo/websock/SessionInfo.hpp` --
+  `SessionInfo {session_id, sender_open, n_subscription}`.
+  `Webserver::sessions()` (sorted by id) collects via a new `const`
+  `WsSessionTable::for_each`, each record's `info()` taking its router's lock
+  inside the table's (lock order table -> router; a router never calls out
+  holding its lock).
+- Tests: `session-table-const-for-each-reads-live-sessions` (unit);
+  `live-sessions-lists-each-connection` (live: two clients, one subscribed;
+  ids ascending in connection order, both open, counts 0 / 1; a closed
+  session leaves the listing). Server-side bookkeeping runs on its own thread,
+  so the live test polls with a deadline (`wait_until`). Falsified with a
+  compiling change (`info()` reporting 0 subscriptions): fails at the count.
+  5/5 runs.
+- Example: snapshot gains `sessions: [{id, sender_open, n_subscription}]`;
+  page draws them in a row under the endpoint columns, linked up to the
+  server (dashed if the sender is closed).
+
+Verified: headless Chrome with a node client held open on `/demo/1` shows
+"session 1 · 1 sub" (node) and "session 2 · 1 sub" (the page itself, on
+`/introspect`). Cosmetic, left: the link to session 1 crosses the "websocket
+sessions" heading. utest.websock 42/528, utest.websock.live 6/82, umbrella
+49/49, `xo-build --sweep --with-examples` ok.
+
 ## Open
 
 - **Identity:** raw addresses (simple, exactly what they are) or stable
