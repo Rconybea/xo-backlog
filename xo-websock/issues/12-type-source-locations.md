@@ -611,6 +611,8 @@ as `/etc/passwd` (outside `/dyn`: no endpoint, 404), `a/../a/b` as `a/b`,
 checks are defence in depth, not reachable over http; an example has no
 utest harness to reach them directly. Option OFF; ctest 49/49; sweep 73/73
 build, 47 utest ok + 26 without.
+RC, in a browser: `/dyn/src/xo-websock/include/xo/websock/WsSessionSender.hpp#L38`
+works.
 
 **`reconfigure` switch, 2026-09-27 (RC).** Uncommitted, awaiting RC's
 review. `xo-cmake/share/xo-macros/xo-reconfigure.in`:
