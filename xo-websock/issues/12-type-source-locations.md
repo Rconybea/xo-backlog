@@ -545,7 +545,7 @@ reports `xo::web::Webserver`, not `WebserverImpl`.
 - Option OFF; ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without tests.
 
 **Step 4a, 2026-09-27 -- xo-websock serves any content type (library).**
-Uncommitted, awaiting RC's review. RC: design the IDEAL shape first,
+Umbrella `465a211b`. RC: design the IDEAL shape first,
 unconstrained by the existing `HttpEndpointFn`; then the path from here --
 no dual form, no unaccounted debt. Decided (RC):
 
