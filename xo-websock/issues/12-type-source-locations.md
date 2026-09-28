@@ -544,6 +544,47 @@ reports `xo::web::Webserver`, not `WebserverImpl`.
   `WsSessionRouter::Subscription` -> `xo-websock/src/websock/WsSessionRouter.cpp:33`.
 - Option OFF; ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without tests.
 
+**Step 4a, 2026-09-27 -- xo-websock serves any content type (library).**
+Uncommitted, awaiting RC's review. RC: design the IDEAL shape first,
+unconstrained by the existing `HttpEndpointFn`; then the path from here --
+no dual form, no unaccounted debt. Decided (RC):
+
+- xo-webutil: `HttpStatus` (strongly typed, `explicit` from int, converts
+  to int; named ctors `ok() forbidden() not_found() internal_error()`);
+  `ContentType` enum (`json html text`) + `content_type_str`; `HttpRequest`
+  (`uri()`, `var(name)`, `vars()` -- a class, so query/method/headers can come
+  later without touching handlers); `HttpResponse` (public ctor `(HttpStatus,
+  ContentType, body)`; named ctors `json html text not_found forbidden
+  internal_error`, errors an escaped minimal html page); `html_escape`;
+  `using HttpHandler = std::function<HttpResponse (HttpRequest const &)>`.
+  `HttpEndpointDescr(pattern, HttpHandler)` is the ONLY form: `HttpEndpointFn`
+  and `endpoint_fn()` deleted.
+- Patterns (`DynamicEndpoint`): `${name}` matches one segment `[^/]+`
+  (was `[[:alnum:]]+`: no `-`, `_`, `.`); a LAST `${name...}` matches the
+  rest, slashes included (elsewhere: `std::invalid_argument`); fixed text is
+  regex-escaped (was not: `.` matched anything). The handler is called ONLY
+  on a match -- else `not_found` (was: called with empty vars). Streams share
+  the pattern code; their dispatch is unchanged.
+- Server (`Webserver.cpp`): sends the response's status and Content-Type; an
+  exception from a handler becomes `internal_error` (was: into lws' C
+  callback); no endpoint -> `not_found` (was: a 200 "json" html page); logs
+  the length, not the body.
+- Path taken (RC: one atomic change): the 3 producers converted
+  (xo-reactor2websock `http_endpoint_descr`; introspect `/hello/${name}` --
+  now `html`, name escaped -- and `/types`), and the tests. Not touched: the
+  disabled old demo `websock_utest_main.cpp` (`if(FALSE)`, issue 01, already
+  stale). NB the edit RC rejected earlier (a dual form) had reached disk; those
+  4 files were restored to HEAD first.
+- Tests: utest.webutil `HttpResponse.test.cpp` (status, request, response,
+  content-type strings, handler); utest.websock `[DynamicEndpoint]` 6 cases
+  (segment var incl. `my-file_1.hpp`, rest var, rest-must-be-last, literal
+  `.`, no-match -> 404 without calling the handler, custom status/type);
+  utest.websock.live `live-http-status-and-content-type` over a raw socket
+  (200 json, 200 html, 404 no-match, 404 no endpoint, 500 on throw and the
+  server still serving). curl on the example: `/dyn/hello/wor-ld.x` 200
+  text/html; `/dyn/types` 200 application/json; `/dyn/hello/a/b` and
+  `/dyn/nope` 404. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
