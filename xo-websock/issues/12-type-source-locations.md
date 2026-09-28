@@ -585,8 +585,8 @@ no dual form, no unaccounted debt. Decided (RC):
   text/html; `/dyn/types` 200 application/json; `/dyn/hello/a/b` and
   `/dyn/nope` 404. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
 
-**Step 4b, 2026-09-27 -- the uncommitted-tree provider.** Uncommitted,
-awaiting RC's review. `introspect.cpp` only.
+**Step 4b, 2026-09-27 -- the uncommitted-tree provider.** Umbrella
+`a29a6ba9`. `introspect.cpp` only.
 
 - `--src-tree=ROOT` (off unless given; not a directory -> exit 1):
   `/dyn/src/${path...}` answers `SourceTree::serve(path, maps)` -- an html
@@ -614,8 +614,8 @@ build, 47 utest ok + 26 without.
 RC, in a browser: `/dyn/src/xo-websock/include/xo/websock/WsSessionSender.hpp#L38`
 works.
 
-**`reconfigure` switch, 2026-09-27 (RC).** Uncommitted, awaiting RC's
-review. `xo-cmake/share/xo-macros/xo-reconfigure.in`:
+**`reconfigure` switch, 2026-09-27 (RC).** Umbrella `a38f638d`.
+`xo-cmake/share/xo-macros/xo-reconfigure.in`:
 `--enable-source-map` / `--disable-source-map` set `XO_ENABLE_SOURCE_MAP`
 (default: as configured, `@XO_ENABLE_SOURCE_MAP@`); every run that
 configures prints `xo-reconfigure: XO_ENABLE_SOURCE_MAP=ON (was OFF)` (or
