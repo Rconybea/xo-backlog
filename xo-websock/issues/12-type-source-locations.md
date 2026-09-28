@@ -585,6 +585,33 @@ no dual form, no unaccounted debt. Decided (RC):
   text/html; `/dyn/types` 200 application/json; `/dyn/hello/a/b` and
   `/dyn/nope` 404. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
 
+**Step 4b, 2026-09-27 -- the uncommitted-tree provider.** Uncommitted,
+awaiting RC's review. `introspect.cpp` only.
+
+- `--src-tree=ROOT` (off unless given; not a directory -> exit 1):
+  `/dyn/src/${path...}` answers `SourceTree::serve(path, maps)` -- an html
+  page of the file, a line per `<span id="L<n>">` with a number linking to
+  itself, `:target` highlighted, a sticky header naming the file and warning
+  that the working tree may have moved on since the build.
+- Confinement, in order: empty -> 404; absolute -> 403; a `.`, `..` or empty
+  segment -> 403; `canonical(ROOT/path)` (symlinks followed) missing -> 404,
+  outside ROOT -> 403; not a regular file -> 404; not the file of any type
+  in the merged maps -> 404 (so no general file server).
+- `TypeMaps`: `merged()` (the union, as json) now shared by `write_merged`
+  and `names_file(rel)`; both read the maps per request.
+
+Checked live (curl, option on, `--src-tree` = the repo): a mapped header ->
+200 text/html, `#L38` is `class WsSessionSender`, `<` escaped; a symlink in
+the tree to `/etc` -> 403 "outside the source tree"; `CMakeLists.txt`
+(unmapped) -> 404; a missing file, a directory -> 404; without `--src-tree`
+-> 404 (no endpoint). Found: libwebsockets NORMALIZES the uri before any
+handler sees it -- `/dyn/src/../../etc/passwd` (curl `--path-as-is`) arrived
+as `/etc/passwd` (outside `/dyn`: no endpoint, 404), `a/../a/b` as `a/b`,
+`//etc` as `/etc` -> `etc/passwd` -> 404. So the handler's `..` and absolute
+checks are defence in depth, not reachable over http; an example has no
+utest harness to reach them directly. Option OFF; ctest 49/49; sweep 73/73
+build, 47 utest ok + 26 without.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
