@@ -626,6 +626,32 @@ on `.build` -- the cache and the regenerated script follow each time.
 xo-cmake reinstalled (satellite builds use the installed template). Still
 not: an `xo-build` switch.
 
+**Step 4c, 2026-09-27 -- the page links to source.** Uncommitted, awaiting
+RC's review. The introspect example only (`introspect.cpp`,
+`mount-origin/{index.html,introspect.js}`).
+
+- Server: `/dyn/types` adds `"link"`: `--src-link=TEMPLATE` (`{file}`,
+  `{line}`; e.g. a forgejo commit url) if given, else with `--src-tree`
+  `/dyn/src/{file}#L{line}`, else null. `TypeMaps::write_merged` folded into
+  `merged()`.
+- Page: loads `/dyn/types` on subscribe and on every Refresh (a rebuild
+  changes the maps); each box keeps its object's `_type_` (server,
+  endpoints, sessions, senders, subscriptions -> `Subscription`, ticker);
+  `source_of(type)` strips template args, looks up, fills the template.
+  Hover: an svg `<title>` -- the type and `file:line`, or "(no source
+  location)" / "(no link provider)". Click: opens the link in a new tab
+  (pointer cursor, thicker border on hover). A line under the status says
+  which provider is in use, or why there are no links.
+
+Checked (option on): `/dyn/types` link is null / the tree template / the
+`--src-link` template (which wins over `--src-tree`). End to end, the PAGE'S
+OWN `source_of()` (introspect.js run in node's vm, DOM stubbed) over a live
+snapshot's 8 `_type_`s: every link fetched is 200 and its `#L<n>` line
+declares the type (`class Webserver`, `struct WsSessionRouter::Subscription`,
+`class WsSessionSender`, ...). Not checked: the drawing itself -- for RC in a
+browser. Option OFF; ctest 49/49; sweep 73/73 build, 47 utest ok + 26
+without.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
