@@ -612,6 +612,18 @@ checks are defence in depth, not reachable over http; an example has no
 utest harness to reach them directly. Option OFF; ctest 49/49; sweep 73/73
 build, 47 utest ok + 26 without.
 
+**`reconfigure` switch, 2026-09-27 (RC).** Uncommitted, awaiting RC's
+review. `xo-cmake/share/xo-macros/xo-reconfigure.in`:
+`--enable-source-map` / `--disable-source-map` set `XO_ENABLE_SOURCE_MAP`
+(default: as configured, `@XO_ENABLE_SOURCE_MAP@`); every run that
+configures prints `xo-reconfigure: XO_ENABLE_SOURCE_MAP=ON (was OFF)` (or
+just the value when unchanged); the usage text names the flags and the
+current value. Like the testing flags, `--clobber` ignores them. Checked:
+dry runs of each; a real `--enable-source-map` then `--disable-source-map`
+on `.build` -- the cache and the regenerated script follow each time.
+xo-cmake reinstalled (satellite builds use the installed template). Still
+not: an `xo-build` switch.
+
 ## Related
 
 Issue 10's faithfulness discussion (2026-09-27): every node a real object
