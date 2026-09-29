@@ -626,8 +626,8 @@ on `.build` -- the cache and the regenerated script follow each time.
 xo-cmake reinstalled (satellite builds use the installed template). Still
 not: an `xo-build` switch.
 
-**Step 4c, 2026-09-27 -- the page links to source.** Uncommitted, awaiting
-RC's review. The introspect example only (`introspect.cpp`,
+**Step 4c, 2026-09-27 -- the page links to source.** Umbrella `3726e52b`.
+The introspect example only (`introspect.cpp`,
 `mount-origin/{index.html,introspect.js}`).
 
 - Server: `/dyn/types` adds `"link"`: `--src-link=TEMPLATE` (`{file}`,
@@ -651,6 +651,27 @@ declares the type (`class Webserver`, `struct WsSessionRouter::Subscription`,
 `class WsSessionSender`, ...). Not checked: the drawing itself -- for RC in a
 browser. Option OFF; ctest 49/49; sweep 73/73 build, 47 utest ok + 26
 without.
+
+**Webserver reports its actual type, 2026-09-28 (RC).** Uncommitted,
+awaiting RC's review. Revises step 3's rule for Webserver: `_type_` is the
+object's ACTUAL type where the printer can find it -- here via `self_tp()`
+-- else the type the printer reads.
+
+- `xo-reflect/include/xo/reflect/SelfTaggingDisplayable.hpp` (new): as
+  `SelfTagging` (`virtual TaggedRcptr self_tp() = 0`, non-const), but
+  deriving `ref::Displayable`. Both inherit `ref::Refcount`, not a virtual
+  base, so a class could not inherit both.
+- `Webserver : reflect::SelfTaggingDisplayable` (was `ref::Displayable`);
+  `WebserverImpl::self_tp()` returns `Reflect::make_rctp(this)`.
+- The Webserver json printer: `_type_` from
+  `const_cast<Webserver *>(websrv)->self_tp().td()->canonical_name()` --
+  `const_cast` because reflection does not yet distinguish const data
+  pointers (RC); taken before `refcount` is read, since the TaggedRcptr
+  holds a reference while it lives.
+- `Webserver.test.cpp` expects `xo::web::WebserverImpl`. End to end (page's
+  `source_of()`): the Webserver box links to
+  `xo-websock/src/websock/Webserver.cpp#L591`, `class WebserverImpl`.
+  ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
 
 ## Related
 
