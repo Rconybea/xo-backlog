@@ -652,8 +652,8 @@ declares the type (`class Webserver`, `struct WsSessionRouter::Subscription`,
 browser. Option OFF; ctest 49/49; sweep 73/73 build, 47 utest ok + 26
 without.
 
-**Webserver reports its actual type, 2026-09-28 (RC).** Uncommitted,
-awaiting RC's review. Revises step 3's rule for Webserver: `_type_` is the
+**Webserver reports its actual type, 2026-09-28 (RC).** Umbrella
+`07dcd2d7`. Revises step 3's rule for Webserver: `_type_` is the
 object's ACTUAL type where the printer can find it -- here via `self_tp()`
 -- else the type the printer reads.
 
