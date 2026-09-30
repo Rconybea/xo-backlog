@@ -1,6 +1,6 @@
 # 13 — introspect: a context menu on each box
 
-Status: open -- increment 1 built (uncommitted); refs / expand to come
+Status: open -- increment 1 done (umbrella `5ebd6ac6`); refs / expand to come
 Type: feature / example
 Raised: 2026-09-29 (RC)
 
@@ -57,7 +57,7 @@ grep -n 'g.on("click"' xo-websock/example/introspect/mount-origin/introspect.js
 - Escape, a click elsewhere, resize or leaving the window closes it
 - left-click behaves as decided
 
-## Increment 1, 2026-09-29
+## Increment 1, 2026-09-29 -- umbrella `5ebd6ac6`
 
 RC: "go ahead". Chosen to leave both open decisions settable later: left-click
 UNCHANGED (opens source) until "expand" gives it something else to do; menu
