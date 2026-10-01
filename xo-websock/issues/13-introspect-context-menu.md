@@ -90,3 +90,56 @@ keyboard-style contextmenu (no pointer position) opens it at the box, and
 Escape returns focus to the box. NOT checked: a real Menu key / Shift+F10
 (CDP key events do not make headless chrome fire contextmenu); clipboard
 contents; the look -- for RC in a browser.
+
+## Expand members -- design (RC, 2026-09-30)
+
+- Members come from the PRINTERS, opt-in per member (cycles stay under the
+  printer's control, and the useful level of abstraction is not predictable):
+  `"_members_": [{"_name_": <C++ member name>, "_type_": <declared type>,
+  "_value_": <printed as usual: scalar, object, {"ref": id}, null>}]`. The
+  printer's existing keys (`id`, `refcount`, `endpoints`, ...) stay: several
+  are not members. Kind (rp / pointer / owned / container / value) is derived
+  by the page from `_type_`.
+- Type information from xo-reflect: every type in scope is reflected.
+- Generic printer for reflected structs: (c) unchanged for now -- `_members_`
+  only from hand-written printers -- then migrate to (b), `_members_` only.
+- Rejected for now: a static member layout from clang's FieldDecls (the map
+  generator could record them), and a printer-free automatic layout.
+
+## Expand members, step 0, 2026-10-01 -- reflect xo-websock's types
+
+Uncommitted, awaiting RC's review.
+
+- `WebsockAppcx(cfg, reflect_appcx, printjson_appcx)` (template ctor takes
+  both from `deps`); calls `websock_reflect_types(reflect_appcx.type_table())`
+  (new `websock_reflect.{hpp,cpp}`) before installing printers. pywebsock's
+  `configure(config, reflect_appcx, printjson_appcx)` follows (imports
+  `xo.reflect`, as pyprintjson does).
+- `static void reflect_self(reflect::TypeDescrTable *)` on each public class,
+  `TypeDescrTable` forward-declared in the header; the `.cpp` reflects its
+  implementation types too (RC): `Webserver` (+ `WebserverImpl`,
+  `WebserverConfig`, `WebsocketSessionRecd`, `WsSessionSender<WebserverImpl>`,
+  `WsSessionTable<WebsocketSessionRecd>`), `WebsocketSink` (+
+  `WebsocketSinkImpl`), `WsSessionRouter` (calls
+  `WsSessionRouter::Subscription::reflect_self`), `DynamicEndpoint`,
+  `UrlRouter`. No members yet: added as printers opt in. The table argument
+  is unused: `StructReflector` registers in the process-wide table (RC: ok).
+- xo-reflect `StructReflector`: `have_to_self_tp` also for
+  `SelfTaggingDisplayable` (RC), so a base pointer reflects as its actual
+  type. Test `struct-reflect-self-tagging-displayable-most-derived` -- failed
+  before.
+- Consequence (RC chose (c)): a `Webserver*` now reflects as `WebserverImpl`,
+  for which no printer existed, so the generic struct printer printed it.
+  The Webserver printer moved to `Webserver.cpp`, keyed on `WebserverImpl`
+  ("we're not really adding a printer: there is no use case for looking up a
+  printer on an interface"); `_type_` is `type_name<WebserverImpl>()` -- the
+  `self_tp()` + `const_cast` route is gone. `WebsocketSink` is plain
+  `Displayable`, so its printer is unaffected.
+- Test `websock-types-are-reflected`: all 12 types complete structs, and a
+  `Webserver*` resolves to `WebserverImpl` -- fails with the
+  `websock_reflect_types` call removed. ctest 49/49; headless-chrome page
+  test passes (server box from the moved printer); sweep 73/73 build, 47
+  utest ok + 26 without.
+
+Next: a `JsonMembers` helper in xo-printjson, and `_members_` on the server's
+printer; then expand on the page.
