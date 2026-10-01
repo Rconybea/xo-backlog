@@ -117,9 +117,12 @@ Uncommitted, awaiting RC's review.
   `xo.reflect`, as pyprintjson does).
 - `static void reflect_self(reflect::TypeDescrTable *)` on each public class,
   `TypeDescrTable` forward-declared in the header; the `.cpp` reflects its
-  implementation types too (RC): `Webserver` (+ `WebserverImpl`,
-  `WebserverConfig`, `WebsocketSessionRecd`, `WsSessionSender<WebserverImpl>`,
-  `WsSessionTable<WebsocketSessionRecd>`), `WebsocketSink` (+
+  implementation types too, and only those (RC): `Webserver` (+
+  `WebserverImpl`, `WebsocketSessionRecd`, `WsSessionSender<WebserverImpl>`,
+  `WsSessionTable<WebsocketSessionRecd>`); `WebserverConfig` -- defined
+  inline in `Webserver.hpp`, not in `Webserver.cpp` -- has its own
+  `reflect_self` in a new `WebserverConfig.cpp`, called directly by
+  `websock_reflect_types`; `WebsocketSink` (+
   `WebsocketSinkImpl`), `WsSessionRouter` (calls
   `WsSessionRouter::Subscription::reflect_self`), `DynamicEndpoint`,
   `UrlRouter`. No members yet: added as printers opt in. The table argument
