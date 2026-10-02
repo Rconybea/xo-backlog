@@ -216,3 +216,30 @@ DECLARED type's `TypeDescr` (`Reflect::require<Declared>()`). NB `rp<T>` and
 `webserver-prints-as-json` checks the server's six: struct, atomic, atomic,
 pointer, struct, struct. ctest 49/49; sweep 73/73 build, 47 utest ok + 26
 without.
+
+## Expand on the page, step 2, 2026-10-02 -- automatic layout (ELK)
+
+Uncommitted, awaiting RC's review. The introspect page only (`introspect.js`,
+`index.html`).
+
+- `layout()` now builds the object graph only -- nodes, and edges with a
+  kind: `link` (server -> endpoints, sessions), `owns` (session -> sender,
+  subscriptions), `uses` (subscription -> stream endpoint), `holds` (ticker ->
+  subscription); refcount accounting unchanged. No coordinates, no column
+  headings.
+- `draw()` renders the boxes, measures them, hands ELK (elkjs 0.12.0,
+  `elk.bundled.js` from jsdelivr -- not on cdnjs -- beside d3) a graph with
+  their sizes: `layered`, direction DOWN, ORTHOGONAL edge routing, spacing
+  leaving room for the refcount badges. Boxes are placed and edges drawn as
+  ELK routed them, one `path.edge.<kind>` each. Asynchronous: a newer draw
+  supersedes one still laying out (`draw_seq`).
+- Checked in headless chrome (two extra websocket clients: 3 sessions, 4
+  subscriptions, a ticker hold): 16 boxes, 20 edges, 0 overlapping boxes;
+  after two back-to-back Refreshes the same, no duplicates; the context-menu
+  test (`cdp_menu.mjs`) passes unchanged. Screenshot reviewed: ownership flows
+  down from the server; uses / holds edges drawn in their styles.
+- Seen, not changed: (1) wider than the window with several sessions (about
+  1420px) -- the page scrolls, as before; scale-to-fit possible later. (2)
+  `/introspect`'s badge red (4, 3 expected) -- not the layout (accounting
+  unchanged): likely the server holding the endpoint while it runs the very
+  `receive` that takes the snapshot. Worth confirming.
