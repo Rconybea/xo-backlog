@@ -243,3 +243,32 @@ Uncommitted, awaiting RC's review. The introspect page only (`introspect.js`,
   `/introspect`'s badge red (4, 3 expected) -- not the layout (accounting
   unchanged): likely the server holding the endpoint while it runs the very
   `receive` that takes the snapshot. Worth confirming.
+
+## Expand on the page, step 3, 2026-10-02 -- expand
+
+Uncommitted, awaiting RC's review. The introspect page only.
+
+- A box whose object has `_members_` is expandable (`.expandable`, a ▸/▾
+  before its label): left-click, Enter, or the menu's new first item
+  "Expand"/"Collapse" toggles it. Left-click no longer opens source (RC);
+  "Open source" stays in the menu. Open boxes and members are remembered
+  across refreshes (`expanded`: box ids and member paths).
+- An open box grows a row per member: `name: Type [metatype] = value`. Type
+  shortened (namespaces dropped; the full name, and file:line if mapped, as
+  its tooltip); clicking it opens its source. Value: a scalar inline (JSON,
+  cut at 40 chars); an object by its short `_name_`, and if it has
+  `_members_` of its own it toggles open in place, indented (▸/▾); a vector
+  `[n]`; an `_error_` dimmed with ⚠; `{"ref": id}` -> an edge (kind `member`)
+  from an ELK port on the box's right side at that row to the referenced
+  object's box. Box size from the measured rows; ELK reflows.
+- Checked in headless chrome (`expand.mjs`, scratch): the server expandable,
+  an endpoint (no `_members_`) not; a real left-click opens it: 6 rows
+  (`listen_port_: atomic<int> [atomic] = <port>`), box 40 -> 156px, no
+  overlaps; a CONSTRUCTED snapshot (no live object has a ref member or nested
+  members yet) adds a ref member -> one member edge, starting on the box's
+  right edge at its row and ending on the referenced box -- and a nested
+  member: closed, then opened in place by clicking its row (the box stays
+  open); Enter closes the box. The context-menu test passes with Expand
+  first. Screenshot reviewed.
+- Seen: a right-side port to a box below-left loops around (correct, not
+  pretty) -- revisit once real ref members exist.
