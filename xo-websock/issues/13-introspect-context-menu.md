@@ -208,7 +208,7 @@ Next: the page's "Expand".
 
 ## Expand on the page, step 1, 2026-10-02 -- `_metatype_`
 
-Uncommitted, awaiting RC's review. `JsonMembers` writes `"_metatype_"` after
+Umbrella `218cd240`. `JsonMembers` writes `"_metatype_"` after
 `_type_` on every entry, error entries included: `metatype2str` of the
 DECLARED type's `TypeDescr` (`Reflect::require<Declared>()`). NB `rp<T>` and
 `T*` are both `pointer`; `std::atomic<int>` and an enum (`Runstate`) are
