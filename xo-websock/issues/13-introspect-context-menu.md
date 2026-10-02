@@ -150,7 +150,8 @@ printer; then expand on the page.
 
 ## Expand members, steps 1-2, 2026-10-02 -- `JsonMembers`; the server's members
 
-Uncommitted, awaiting RC's review. Decided (RC): an unprintable member is an
+Umbrella `6606d613` (JsonMembers + the server's members), `b3e525ae`
+(PrintJson reflected). Decided (RC): an unprintable member is an
 error ENTRY, not a throw; `member_as<Declared>` tried; explicit `end()`;
 `JsonPrinter_Webserver` a friend of `WebserverImpl`.
 
@@ -189,3 +190,29 @@ xo::json::PrintJson"). ctest 49/49; sweep 73/73 build, 47 utest ok + 26
 without.
 
 Next: the page's "Expand".
+
+## Expand on the page -- plan (RC, 2026-10-02)
+
+- (A): an expanded box grows a compartment of member rows, and the layout
+  reflows. Needs a FULLY AUTOMATIC layout -- which a later goal needs anyway
+  (toggling which parts of the object graph are shown at all). Absorbs issue
+  10's layout rework.
+- Engine: ELK (elkjs, layered; variable node sizes, nesting, ports), from
+  jsdelivr alongside d3 (not on cdnjs).
+- Member tags: xo-reflect's metatype of the declared type.
+- Left-click toggles expand; "Open source" stays in the menu.
+- Steps: (1) `_metatype_` on members; (2) ELK layout replacing the
+  hand-placed columns, same boxes and edges; (3) expand: member rows, nested
+  objects expand in turn, `{"ref"}` values as edges from their rows, declared
+  type links to source; (4) later: show/hide parts of the graph.
+
+## Expand on the page, step 1, 2026-10-02 -- `_metatype_`
+
+Uncommitted, awaiting RC's review. `JsonMembers` writes `"_metatype_"` after
+`_type_` on every entry, error entries included: `metatype2str` of the
+DECLARED type's `TypeDescr` (`Reflect::require<Declared>()`). NB `rp<T>` and
+`T*` are both `pointer`; `std::atomic<int>` and an enum (`Runstate`) are
+`atomic`. Tests: `JsonMembers.test.cpp` expectations carry it (failed before);
+`webserver-prints-as-json` checks the server's six: struct, atomic, atomic,
+pointer, struct, struct. ctest 49/49; sweep 73/73 build, 47 utest ok + 26
+without.
