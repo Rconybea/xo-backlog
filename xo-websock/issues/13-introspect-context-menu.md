@@ -108,7 +108,8 @@ contents; the look -- for RC in a browser.
 
 ## Expand members, step 0, 2026-10-01 -- reflect xo-websock's types
 
-Uncommitted, awaiting RC's review.
+Umbrella `4edde25e`. At that commit: full build clean, ctest 49/49, sweep
+73/73 build, 47 utest ok + 26 without.
 
 - `WebsockAppcx(cfg, reflect_appcx, printjson_appcx)` (template ctor takes
   both from `deps`); calls `websock_reflect_types(reflect_appcx.type_table())`
