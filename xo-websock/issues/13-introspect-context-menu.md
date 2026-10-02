@@ -180,6 +180,12 @@ error ENTRY, not a throw; `member_as<Declared>` tried; explicit `end()`;
   `webserver-prints-as-json` pins the names, types, values-or-error.
   ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
 
-Open: reflect `xo::json::PrintJson` (xo-printjson) so `pjson_` prints; then
-the omission utest ("print every websock object, no `_error_`") can hold.
+Then (RC: "yes, reflect PrintJson"): `PrintJson::reflect_self(table)` (no
+members), called by `PrintJsonAppcx`'s ctor -- which now uses the
+`ReflectAppcx` it was already handed. `pjson_` prints. The server-json test
+now walks the whole output and requires no `_error_` anywhere -- fails with
+the `reflect_self` call removed ("pjson_: type not reflected:
+xo::json::PrintJson"). ctest 49/49; sweep 73/73 build, 47 utest ok + 26
+without.
+
 Next: the page's "Expand".
