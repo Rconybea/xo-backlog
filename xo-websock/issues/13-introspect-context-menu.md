@@ -147,3 +147,39 @@ Umbrella `4edde25e`. At that commit: full build clean, ctest 49/49, sweep
 
 Next: a `JsonMembers` helper in xo-printjson, and `_members_` on the server's
 printer; then expand on the page.
+
+## Expand members, steps 1-2, 2026-10-02 -- `JsonMembers`; the server's members
+
+Uncommitted, awaiting RC's review. Decided (RC): an unprintable member is an
+error ENTRY, not a throw; `member_as<Declared>` tried; explicit `end()`;
+`JsonPrinter_Webserver` a friend of `WebserverImpl`.
+
+- xo-printjson `JsonMembers` (`JsonMembers.{hpp,cpp}`): ctor writes
+  `, "_members_": [`; `member(name, value)` / `member_as<Declared>(name,
+  value)` write `{"_name_", "_type_": <declared, type_name<>>, "_value_":
+  <PrintJson::print_aux>}`; `end()` writes `]`, dtor asserts it was called.
+  A member is printable iff its TARGET type -- unwrapping `rp<>`, `T*`,
+  `std::vector<>` at compile time, since reflection cannot report a
+  pointer's pointee -- has a json printer or is a complete reflected struct;
+  else `{"_name_", "_type_", "_error_": "type not reflected: X"}`.
+  `PrintJson::has_printer(td)` added. Tests (`JsonMembers.test.cpp`, 5): empty;
+  scalars and strings; reflected struct by value, pointer and vector; an
+  unreflected struct by value and pointer -> error entries, the rest still
+  printed; `member_as<std::atomic<std::int32_t>>`.
+- `WebserverImpl`'s printer adds `_members_`: `ws_config_`,
+  `listen_port_` (`member_as<std::atomic<std::int32_t>>`), `state_`
+  (`member_as<Runstate>`, its name), `pjson_`, `url_router_`,
+  `session_table_`. Friendship: `friend JsonPrinter_Webserver;`, the printer
+  forward-declared in the anonymous namespace first -- `friend class
+  JsonPrinter_Webserver;` does not look into the anonymous namespace and
+  befriended a new `xo::web::JsonPrinter_Webserver` (compile errors showed it).
+- Live (introspect): `ws_config_`, `url_router_`, `session_table_` print as
+  their reflected structs (no members yet); `listen_port_` `std::atomic<int>`
+  7689; `state_` `xo::web::Runstate` "running"; `pjson_` -> `"_error_":
+  "type not reflected: xo::json::PrintJson"` -- the omission check working.
+  `webserver-prints-as-json` pins the names, types, values-or-error.
+  ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
+
+Open: reflect `xo::json::PrintJson` (xo-printjson) so `pjson_` prints; then
+the omission utest ("print every websock object, no `_error_`") can hold.
+Next: the page's "Expand".
