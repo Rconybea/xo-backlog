@@ -275,7 +275,7 @@ Umbrella `84d03b1a`. The introspect page only.
 
 ## Members for WebsocketSessionRecd, 2026-10-02
 
-Uncommitted, awaiting RC's review. Decided (RC): a ref member type
+Umbrella `4d1f6ff9`. Decided (RC): a ref member type
 (`member_ref`); `outbound_q_` shown as its size (2b), "better than not
 mentioned"; skip `mutex_`.
 
