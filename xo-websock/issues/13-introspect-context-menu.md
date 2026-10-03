@@ -898,7 +898,7 @@ inside boxes.
 
 ## Collapsing a box no longer hides what it shows, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `27ff8ddf`. The introspect page only (`introspect.js`).
 RC: collapsing a box dropped its edges -- hiding what only it kept shown --
 "at my instruction, but I think that was a mistake": collapsing should leave
 the set of drawn boxes unchanged.
@@ -921,7 +921,7 @@ the set of drawn boxes unchanged.
 
 ## A ref row's triangle follows its target box, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `27ff8ddf`. The introspect page only (`introspect.js`).
 RC: session 1's `sender_` triangle did not toggle whether the sender is
 drawn.
 

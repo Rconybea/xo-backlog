@@ -1,6 +1,6 @@
 # 02 — CI checkout built `main`'s tip at job start, not the run's commit
 
-Status: fix `f2938083` broke checkout (dubious ownership); its fix not yet committed
+Status: fixed 2026-10-03 -- umbrella `f2938083` + `f2c74154` (safe.directory); CI check pending
 Type: bug
 
 ## Symptom
@@ -102,4 +102,4 @@ docker run --rm -v $D:/__w/ws -w /__w/ws -e GITHUB_SHA=$SHA docker-xo-builder:v2
 # old: "detected dubious ownership"; with the safe.directory line first: checked out dcfe96bd...
 ```
 
-Umbrella: not yet committed.
+Umbrella `f2c74154`.
