@@ -993,3 +993,17 @@ Umbrella `0a931674` (with the right-justification section). RC, on the
 - Tests: the types-view tests' expectations are back to ` = `; rows.mjs
   (compact) reads `name: value`. All 12 browser tests pass; screenshot
   reviewed.
+
+## Subscription boxes get a fill: pale rose, 2026-10-03
+
+Umbrella: not yet committed. `index.html` only. RC asked how box colours are
+chosen -- a fixed palette per box KIND (`layout()`'s `kind`, a CSS class;
+pale fill + darker outline of one hue), hand-picked in the page's first
+version (`3c60fca4`); not derived from the C++ type, so a new kind would
+fall to SVG's default black fill. RC: give WsSessionRouter::Subscription
+(the "subscription" kind, the one white box) a pale colour.
+
+- `.node.subscription > rect`: fill `#fceef3` (pale rose -- a hue no other
+  kind uses, so not confused with stream green or session lilac); outline
+  unchanged (`#7a4fa0`, its session's purple). Screenshot reviewed: an open
+  subscription (60% fill opacity) is fainter still, but distinct.
