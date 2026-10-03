@@ -460,3 +460,39 @@ tests pass. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
 Every xo-websock box type now has members: server, session (router nested),
 sender, subscription, endpoint; plus the server's url router and session
 table. Only the example's own ticker has none.
+
+## Showing / hiding parts of the graph -- plan (RC, 2026-10-03)
+
+- Collapse an ownership subtree into its owner (option 2). The displayed graph
+  is always connected (to the server); edges into hidden boxes are DROPPED,
+  not redirected. Rejected for now: hiding single boxes, filters by kind,
+  neighbourhood focus.
+- Default: only the Webserver box; it cannot be hidden.
+- Two kinds of expand: a disclosure triangle beside a box shows/hides its
+  CHILDREN (owned boxes); left-click opens its MEMBERS, as before.
+- Layout: a `tree`-command-like layout (children indented from the owner's
+  left edge, a spine with a branch to each; non-tree edges in a gutter on the
+  right) -- as an ALTERNATIVE to ELK, selectable (RC: a tree may not suit
+  other drawings). Smooth d3 transitions between layouts, for either; a
+  force-directed layout judged a poor fit (circle collisions vs wide boxes,
+  no ownership direction, unstable across refreshes).
+- Steps: (1) drop the ticker box; (2) collapse/expand children (ELK);
+  (3) transitions; (4) the tree layout as an alternative.
+
+## Step 1, 2026-10-03 -- drop the ticker box
+
+Uncommitted, awaiting RC's review. RC: (a) -- the box goes, the Ticker
+stays (`/demo` keeps ticking).
+
+- `introspect.cpp`: `IntrospectSnapshot` no longer holds the ticker; it
+  carries `app_holds` -- the ids of the sinks the application holds (by
+  most-derived address, the id the sink's printer writes), for refcount
+  accounting only. `JsonPrinter_Ticker` and its registration removed.
+- Page: no ticker box, no "holds" edges (code and style removed); the sink
+  accounting counts `app_holds` -- without it every `/demo` sink's badge
+  would be red, one hold unexplained.
+- Checked in headless chrome (`noticker.mjs`, scratch): no ticker box, no
+  holds edges, `app_holds` one id, the `/demo` subscription's badge 2 (slot
+  + ticker) and NOT red; the nine other browser tests pass (`expand.mjs` now
+  checks there is no ticker box). ctest 49/49; sweep 73/73 build, 47 utest ok
+  + 26 without.
