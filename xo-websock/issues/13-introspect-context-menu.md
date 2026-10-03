@@ -1206,3 +1206,30 @@ browser.
   Shift + drag pans by exactly the drag; Shift + drag from a box doesn't;
   Shift + wheel zooms -- also when reported as deltaX (k 1.52 -> 2.30);
   the constraint checks pass with Shift. All 14 browser tests pass.
+
+## Rows slide with their box's outline, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: opening a whole box is right (old text fades, new text appears once the
+outline is ready), but opening a NESTED element draws text outside the box
+until the transition catches up.
+
+- Cause: opening a box, every row is new -- invisible until the outline has
+  grown. Opening a nested row, the rows BELOW it already exist; the sizing
+  pass set their new y at once, while the outline grew over t_move: for that
+  time they sat below the box's old bottom. Same sideways: a nested row can
+  widen the right-justified name column, moving existing rows right at once.
+- Fix: before a draw re-renders a box's rows, each row already on screen
+  records where it was (`__was`: text x, y, separator column -- the
+  separator tspan is rebuilt each draw, so it must be read first). After the
+  sizing pass, `slide_rows()` puts every moved row back there and transitions
+  it to its new place -- t_move, cubic in-out, the outline's own duration
+  and easing (now explicit there too), so a row inside the old outline and
+  inside the new stays inside throughout. The triangle squares (each now
+  knows its row, `__text`) move by the row's y and separator-column change.
+- Checked in headless chrome (`transitions.mjs`, sampling every 20 ms that
+  no visible row's bottom / right passes its box's): opening url_router_
+  (nested), opening session_table_ below it, closing url_router_ -- worst
+  0 px, 45 samples each; session_table_'s row slides through 12 positions.
+  The same checks with `slide_rows` switched off: 27 px outside, and a
+  1-position jump -- so they do catch it. All 14 browser tests pass.
