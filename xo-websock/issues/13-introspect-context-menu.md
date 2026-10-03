@@ -1185,3 +1185,24 @@ one box must stay inside the viewport.
   one box centre in view, at the viewport's edge; dragging back (+40, +30)
   moves the graph by exactly that; 8 hard wheel-ins on an empty corner
   (zoom 300%) still leave a box centre in view. All 14 browser tests pass.
+
+## Pan / zoom only with Shift, 2026-10-03
+
+Umbrella: not yet committed (with the three sections above). RC: pan and
+zoom only with Shift pressed; otherwise let events fall through to the
+browser.
+
+- d3.zoom's filter now requires `shiftKey`: without it d3 takes nothing --
+  the wheel scrolls the page, a drag is the browser's. Shift + drag on the
+  background pans (a drag from a box still doesn't); Shift + wheel zooms.
+- Browsers treat Shift+wheel as a sideways scroll; some report it in
+  `deltaX` with `deltaY` 0, which d3's default wheel delta ignores. Custom
+  `wheelDelta`: d3's formula on `deltaY || deltaX`.
+- The hand cursor shows only while Shift is held (`svg#graph.panning`,
+  toggled on keydown / keyup, cleared on window blur). The zoom readout's
+  tooltip names the gestures.
+- Checked in headless chrome (`anchor.mjs`): a drag WITHOUT Shift does not
+  pan; the wheel without Shift scrolls the page (scrollY 200), no zoom;
+  Shift + drag pans by exactly the drag; Shift + drag from a box doesn't;
+  Shift + wheel zooms -- also when reported as deltaX (k 1.52 -> 2.30);
+  the constraint checks pass with Shift. All 14 browser tests pass.
