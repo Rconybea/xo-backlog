@@ -557,7 +557,7 @@ The introspect page only (`introspect.js`, `index.html`).
 
 ## Member edges leave the bottom; hover pairs a row with its edge, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `90c18b4e`. The introspect page only (`introspect.js`,
 `index.html`). RC: edges from the boxes' right side dogleg back to the left.
 
 - Tried, in headless chrome, "Show all" with the server's maps, session 1
@@ -579,7 +579,7 @@ Umbrella: not yet committed. The introspect page only (`introspect.js`,
 
 ## Ownership edges not drawn; member edges enter top-left, 2026-10-03
 
-Umbrella: not yet committed (with the previous section). RC: a connection
+Umbrella `90c18b4e`. RC: a connection
 drew twice -- grey ownership edge (from the box's corner: portless edges on
 a FIXED_POS box) and purple member edge; "I don't know a reason to see the
 ownership edges visually"; member edges should arrive offset from the
@@ -596,7 +596,7 @@ target's top-left corner, so a descending edge need not dogleg left.
 
 ## Visibility from wanted edges, 2026-10-03
 
-Umbrella: not yet committed (with the two sections above). The introspect
+Umbrella `90c18b4e`. The introspect
 page only. RC: state was missing for which edges to display -- collapsing
 lost an edge but left its box floating; a box shown by the triangle or menu
 got no edge once ownership edges stopped drawing. RC: collapsing a box should
@@ -634,7 +634,7 @@ without a ref row draws its edge as if the row were open.
 
 ## Node placement: network simplex, 2026-10-03
 
-Umbrella: not yet committed (with the three sections above). RC: the
+Umbrella `90c18b4e`. RC: the
 Webserver box jumps away from the left margin when sub 0 opens.
 
 - Cause: ELK's default node placement, Brandes-Koepf, computes four
