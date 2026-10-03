@@ -421,7 +421,7 @@ Umbrella `c542269b`.
 
 ## Members for DynamicEndpoint, 2026-10-02
 
-Uncommitted, awaiting RC's review.
+Umbrella `8ee4099e`.
 
 - `JsonPrinter_DynamicEndpoint` moved out of `websock_json.cpp`'s anonymous
   namespace into `xo::web`, befriended by name in `DynamicEndpoint.hpp`. Its
