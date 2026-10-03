@@ -1092,3 +1092,24 @@ Umbrella `f5a15096`. The introspect page only (`introspect.js`,
   ends at 1; open-then-close within 80 ms ends closed, at its final place,
   fully shown; no box left half-faded. The 13 other browser tests pass
   unchanged.
+
+## Refcount badges dropped, 2026-10-03
+
+Umbrella: not yet committed. The introspect example: `introspect.js`,
+`index.html`, `introspect.cpp`. RC: drop the refcount badge --
+insufficiently interesting detail.
+
+- Page: no badge (drawing, CSS); no refcount accounting in `layout()` (the
+  "expected" holds a badge was compared with, turning it red); `badge_r`
+  -- the room left above boxes for a badge -- gone from placement, svg size,
+  edge paths and `anchor_shift()`.
+- C++: `IntrospectSnapshot::app_holds_` (its comment: "for refcount
+  accounting only") removed, with `Ticker::visit_sinks()` (its only use) and
+  `IntrospectReceiver`'s Ticker pointer; and the `JsonMembers.hpp` include,
+  there only for `json_id`.
+- The library printers' `refcount` fields stay in the json ("Show JSON").
+- Closes the open "red /introspect badge (4 vs 3)" item: no badge to be red.
+  Its cause (likely the endpoint held during `receive`) was never confirmed.
+- Checked: clean build, no warnings; ctest 49/49; `noticker.mjs` now checks
+  no badges, no `app_holds` in the snapshot, `server.refcount` still in the
+  json. All 14 browser tests pass.
