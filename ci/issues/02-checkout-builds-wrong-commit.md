@@ -1,6 +1,6 @@
 # 02 — CI checkout built `main`'s tip at job start, not the run's commit
 
-Status: fixed 2026-10-03, umbrella not yet committed
+Status: fixed 2026-10-03 -- umbrella `f2938083` (first CI run after it: the check)
 Type: bug
 
 ## Symptom
