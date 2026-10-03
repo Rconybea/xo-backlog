@@ -442,3 +442,21 @@ Umbrella `8ee4099e`.
   check moved from an endpoint to the ticker (endpoints now have members);
   the other browser tests pass. ctest 49/49; sweep 73/73 build, 47 utest ok
   + 26 without.
+
+## Members for WsSessionSender, 2026-10-03
+
+Uncommitted, awaiting RC's review. `JsonPrinter_WsSessionSender` moved out of
+`Webserver.cpp`'s anonymous namespace into `xo::web`, befriended by name in
+`WsSessionSender.hpp`. Its `_members_`: `target_` (`member_ref<WebserverImpl *>`:
+the server, printed in full elsewhere -> an edge to the server box),
+`session_id_`, `open_` (`member_as<std::atomic<bool>>`, its `load()`).
+
+Tests: live `live-sessions-lists-each-connection` -- each sender: `target_`'s
+ref == the server's id, `session_id_` == its session's, `open_` true.
+Headless chrome (`sender_expand.mjs`, scratch): a sender box expands to three
+rows; one member edge, `target_` -> the server box; the eight other browser
+tests pass. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
+
+Every xo-websock box type now has members: server, session (router nested),
+sender, subscription, endpoint; plus the server's url router and session
+table. Only the example's own ticker has none.
