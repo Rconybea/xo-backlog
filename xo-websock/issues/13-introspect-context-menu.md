@@ -272,3 +272,36 @@ Umbrella `84d03b1a`. The introspect page only.
   first. Screenshot reviewed.
 - Seen: a right-side port to a box below-left loops around (correct, not
   pretty) -- revisit once real ref members exist.
+
+## Members for WebsocketSessionRecd, 2026-10-02
+
+Uncommitted, awaiting RC's review. Decided (RC): a ref member type
+(`member_ref`); `outbound_q_` shown as its size (2b), "better than not
+mentioned"; skip `mutex_`.
+
+- xo-printjson: `JsonMembers::member_ref<Declared>(name, void const * p)` ->
+  `"_value_": {"ref": json_id(p)}` or null -- for an object printed in full
+  elsewhere (printing it here would repeat it, or recurse). `json::json_id(p)`
+  (the address, as ostream writes it) now lives in xo-printjson;
+  xo-websock's `web::json_id` calls it, so ids and refs cannot drift. Test
+  `json-members-member-ref` (ref and null).
+- The session printer (`JsonPrinter_WsSession`, friend of
+  `WebsocketSessionRecd`; forward-declared in the anonymous namespace): after
+  its keys, `_members_`: `output_buf_` (`OutputBuffer*`; `OutputBuffer` now
+  reflected in `Webserver::reflect_self`), `sender_`
+  (`member_ref<rp<WsSessionSenderImpl>>` -- the sender is printed in full
+  under "sender"), `router_` (value, a `WsSessionRouter` struct, no members
+  yet), `outbound_q_` (`member_as<std::deque<std::string>>`, "<n> queued":
+  xo-reflect has no deque). `output_buf_` and the queue size read together
+  under the session's mutex -- held only briefly elsewhere (send_text,
+  lws_write_pending, unsubscribe_all), never while printing.
+- Page: `short_type` also drops anonymous-namespace qualifiers, folds `> >`
+  to `>>`, and shows `basic_string<char>` as `string` (display only; the
+  tooltip keeps the full name).
+- Tests: live `live-sessions-lists-each-connection` checks each session's
+  four members, `sender_`'s ref == that session's sender id, and no
+  `_error_` anywhere in the snapshot. Headless chrome (`session_expand.mjs`,
+  scratch): a session box expands to 4 rows; `sender_` = → draws ONE member
+  edge, ending at that session's own sender box -- the first live ref
+  member; menu and expand tests still pass. Screenshot reviewed. ctest
+  49/49; sweep 73/73 build, 47 utest ok + 26 without.
