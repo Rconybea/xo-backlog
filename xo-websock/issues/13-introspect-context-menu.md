@@ -1061,7 +1061,7 @@ hides it), so the drawing moves instead.
 
 ## Step 3, 2026-10-03 -- transitions
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `f5a15096`. The introspect page only (`introspect.js`,
 `index.html`). RC: start on transitions; edges option (a), fade.
 
 - Every redraw animates, three phases: leaving boxes and all edges fade out
