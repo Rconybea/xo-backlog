@@ -1,6 +1,6 @@
 # 02 — CI checkout built `main`'s tip at job start, not the run's commit
 
-Status: fixed 2026-10-03 -- umbrella `f2938083` (first CI run after it: the check)
+Status: fix `f2938083` broke checkout (dubious ownership); its fix not yet committed
 Type: bug
 
 ## Symptom
@@ -71,3 +71,35 @@ the committed workflows with no diff).
   step, using `$GITHUB_SHA`, with no `git clone`.
 - Not yet run in CI: the first run after this lands is the check -- its
   checkout step should print the run's own `headSha`.
+
+## The fix broke checkout: "dubious ownership", 2026-10-03
+
+`f2938083`'s own run (37141547091) failed at checkout, both jobs:
+
+```bash
+gh run view 37141547091 --log-failed | grep -A3 'dubious'
+# fatal: detected dubious ownership in repository at '/__w/xo-umbrella2/xo-umbrella2'
+#         git config --global --add safe.directory /__w/xo-umbrella2/xo-umbrella2
+```
+
+The job runs in the docker-xo-builder container as root; the mounted
+workspace belongs to the runner's user. `git init .` makes that directory a
+repository, and git (>= 2.35.4) then refuses the next command (`git remote
+add`) in a repository owned by another user. The old `git clone .` was never
+followed by another git command, so never tripped it. The fetch-by-SHA test
+above ran in a directory I owned, so could not show it.
+
+Fix: `git config --global --add safe.directory "$PWD"` before `git init`, in
+all three templates (as actions/checkout does; global config of the
+throwaway container). On the forgejo host job (ci.yaml) the workspace is the
+runner user's own, so a no-op -- kept for uniformity. Regenerated.
+
+Reproduced locally in the CI image, root in a directory owned by uid 1029:
+
+```bash
+docker run --rm -v $D:/__w/ws -w /__w/ws -e GITHUB_SHA=$SHA docker-xo-builder:v2 sh -ec \
+  'git init --quiet . && git remote add origin https://github.com/Rconybea/xo-umbrella2.git && ...'
+# old: "detected dubious ownership"; with the safe.directory line first: checked out dcfe96bd...
+```
+
+Umbrella: not yet committed.
