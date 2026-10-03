@@ -360,7 +360,7 @@ sweep 73/73 build, 47 utest ok + 26 without.
 
 ## Members for UrlRouter, 2026-10-02
 
-Uncommitted, awaiting RC's review. Decided (RC): including (b), edges to
+Umbrella `896ba0e4`. Decided (RC): including (b), edges to
 objects printed nested in a box.
 
 - xo-printjson `JsonMembers::member_ref_map<Declared>(name, vector<pair<string,
