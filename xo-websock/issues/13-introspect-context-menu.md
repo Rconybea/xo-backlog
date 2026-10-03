@@ -818,7 +818,7 @@ on the box still toggles it.
 
 ## Menu: children counts both ways; "Hide <label>", 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `71cd5742`. The introspect page only (`introspect.js`).
 RC (changing an earlier instruction): "Hide children" should carry a count
 as "Show children" does, and a partly shown box should offer both -- e.g.
 the Webserver with only /introspect drawn: "Show children (+5)" and "Hide
