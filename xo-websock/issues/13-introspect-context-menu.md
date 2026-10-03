@@ -948,7 +948,7 @@ drawn.
 
 ## Names right-justified against the " = ", 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `0a931674`. The introspect page only (`introspect.js`).
 RC: right-justify member names relative to the anchored `=`.
 
 - The `=` column is unchanged: x0 + row_indent * depth, x0 the least that
@@ -965,7 +965,7 @@ RC: right-justify member names relative to the anchored `=`.
 
 ## No "=" in member rows, 2026-10-03
 
-Umbrella: not yet committed (with the previous section). RC: drop the `=`
+Umbrella: never committed as such -- superseded (next section) before `0a931674`. RC: drop the `=`
 entirely -- bold name vs normal value, and the alignment, cue enough.
 
 - The ` = ` tspan (class `meq`) stays as the alignment anchor but holds
@@ -978,7 +978,7 @@ entirely -- bold name vs normal value, and the alignment, cue enough.
 
 ## Separator ":" (types view keeps "="), 2026-10-03
 
-Umbrella: not yet committed (with the two sections above). RC, on the
+Umbrella `0a931674` (with the right-justification section). RC, on the
 "=" -less rows: "doesn't look as good as I expected. Let's try : instead of
 =".
 
