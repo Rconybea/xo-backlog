@@ -784,7 +784,7 @@ x0 + d*n, d the per-level text indent.
 
 ## Box menu button, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `dcfe96bd`. The introspect page only (`introspect.js`,
 `index.html`). RC: left-clicking the meatballs should show the menu; put
 them in a rounded square so they read as a UI element; left-click elsewhere
 on the box still toggles it.
