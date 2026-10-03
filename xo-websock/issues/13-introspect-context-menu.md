@@ -1209,7 +1209,7 @@ browser.
 
 ## Rows slide with their box's outline, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `937a9a52`. The introspect page only (`introspect.js`).
 RC: opening a whole box is right (old text fades, new text appears once the
 outline is ready), but opening a NESTED element draws text outside the box
 until the transition catches up.
