@@ -1,6 +1,6 @@
 # 03 — `DList.cpp` calls `barrier_assign()` without its definition (clang link failure)
 
-Status: diagnosed 2026-10-03; fix implemented, umbrella not yet committed
+Status: fixed 2026-10-03 -- umbrella `ccf65117` (gcc verified; clang CI pending)
 Type: bug
 
 ## Symptom
