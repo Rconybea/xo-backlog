@@ -499,7 +499,7 @@ stays (`/demo` keeps ticking).
 
 ## Step 2, 2026-10-03 -- show / hide children
 
-Uncommitted, awaiting RC's review. The introspect page only.
+Umbrella `3a793767`. The introspect page only.
 
 - A box's CHILDREN are the boxes it owns ("link" / "owns" edges). A ▸n / ▾
   left of a box with children shows / hides them -- also ArrowRight /
