@@ -655,7 +655,7 @@ Webserver box jumps away from the left margin when sub 0 opens.
 
 ## Menu: a Hide ▸ / Show ▸ entry per child, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `6dc304f5`. The introspect page only (`introspect.js`).
 RC: the menu offered "Show ▸ <child>" only for a child not drawn; add a
 "Hide ▸ <child>" for a child that is.
 
@@ -677,7 +677,7 @@ RC: the menu offered "Show ▸ <child>" only for a child not drawn; add a
 
 ## Parallel member edges merge, 2026-10-03
 
-Umbrella: not yet committed (with the previous section). The introspect page
+Umbrella `6dc304f5`. The introspect page
 only. RC: with every box drawn, session 1 drew two edges to its sender.
 
 - Cause (headless chrome, Show all): two refs from session 1's box to the
