@@ -895,3 +895,26 @@ inside boxes.
   clicking stream_map_'s square closes / reopens it; a ref row's square
   unwants / wants its edge; the children toggle is 16px with no square. All
   12 browser tests pass; hover screenshot reviewed.
+
+## Collapsing a box no longer hides what it shows, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: collapsing a box dropped its edges -- hiding what only it kept shown --
+"at my instruction, but I think that was a mistake": collapsing should leave
+the set of drawn boxes unchanged.
+
+- Reverses one rule of "Visibility from wanted edges" above (RC then:
+  "collapsing a box should also hide things it's connected to, unless those
+  things would be visible through some other edge"). Why it was plausible:
+  a collapsed box no longer shows the rows its edges come from, so the
+  edges looked orphaned. Since then member edges leave from a box's bottom
+  edge whether or not its rows are open, and carry their member path in a
+  tooltip -- so a collapsed box's edges read fine.
+- `toggle()` now only opens / closes; `drop_edges_from()` is gone.
+  Collapsing is now symmetric with closing a member row, which never
+  dropped edges.
+- Checked in headless chrome (`visibility.mjs`, collapse section rewritten):
+  collapsing the server keeps the same 5 boxes and the same member edges,
+  the server's leaving its collapsed box, its edges still wanted; collapsing
+  a sub keeps its `endpoint_` edge wanted, nothing drawn changes. All 12
+  browser tests pass.
