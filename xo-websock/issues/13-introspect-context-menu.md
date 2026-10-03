@@ -759,3 +759,25 @@ RC: align each `member = value` row on its `=`.
   the columns differ between groups, the group's longest name runs straight
   into its ` = ` (gap < 1px). All 12 browser tests pass; screenshots of both
   views reviewed.
+
+## " = " steps in with nesting: x0 + indent * depth, 2026-10-03
+
+Umbrella: not yet committed (supersedes the per-sibling-group rule of the
+previous section, never committed). RC: nested members' `=` should indent by
+the same amount the names indent -- a row at nesting level n puts its `=` at
+x0 + d*n, d the per-level text indent.
+
+- One x0 per box: the least that clears every row's name, i.e. the max over
+  rows of (unaligned ` = ` x - d * depth). Each ` = ` (tspan `meq`) gets
+  x0 + d * depth. d is now a named constant, `row_indent` (14px), used for
+  both the names' indent and the `=` step. Rows no longer carry `parent`.
+- Per-sibling-group alignment (previous section) is gone: it let a nested
+  group's `=` sit LEFT of its parent's (url_router_'s children at 583px vs
+  the top level's 591px) -- a ragged column RC's rule removes.
+- With server, url_router_, stream_map_, session_table_ open: `=` at 598 /
+  612 / 626 px for depths 0 / 1 / 2; x0 is set by `["/introspect"]` (depth
+  2); the Webserver box ~8px wider than per-group.
+- Checked in headless chrome: `rows.mjs` -- every row's `=` at x0 + 14 *
+  depth (spread 0.00px), rows at 3 depths, the tightest name-to-` = ` gap
+  0.00 (x0 is the least that fits). All 12 browser tests pass; screenshot
+  reviewed.
