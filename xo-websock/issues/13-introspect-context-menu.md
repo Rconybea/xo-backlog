@@ -739,7 +739,7 @@ a tooltip / context menu on the member name, so expanded boxes get narrower
 
 ## Rows align on " = " per sibling group, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella: never committed as such -- superseded (next section) before `406133a6`. The introspect page only (`introspect.js`).
 RC: align each `member = value` row on its `=`.
 
 - Offered (a) one `=` column per box (any depth) or (b) one per sibling
@@ -762,7 +762,7 @@ RC: align each `member = value` row on its `=`.
 
 ## " = " steps in with nesting: x0 + indent * depth, 2026-10-03
 
-Umbrella: not yet committed (supersedes the per-sibling-group rule of the
+Umbrella `406133a6` (supersedes the per-sibling-group rule of the
 previous section, never committed). RC: nested members' `=` should indent by
 the same amount the names indent -- a row at nesting level n puts its `=` at
 x0 + d*n, d the per-level text indent.
