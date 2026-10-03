@@ -308,7 +308,7 @@ mentioned"; skip `mutex_`.
 
 ## Members for WsSessionRouter, 2026-10-02
 
-Uncommitted, awaiting RC's review. Decided (RC): a C++ reference reported as
+Umbrella `30ae2734`. Decided (RC): a C++ reference reported as
 metatype `pointer`; `subscription_v_` as an array of refs.
 
 - xo-printjson `JsonMembers`: `member_ref<Declared>` accepts a reference
