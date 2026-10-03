@@ -593,3 +593,41 @@ target's top-left corner, so a descending edge need not dogleg left.
 - Checked in headless chrome: `expand.mjs` now also checks the member edge
   ends on the endpoint's top edge 24px from its left, and that no link /
   owns path is drawn; all 11 browser tests pass. Screenshot reviewed.
+
+## Visibility from wanted edges, 2026-10-03
+
+Umbrella: not yet committed (with the two sections above). The introspect
+page only. RC: state was missing for which edges to display -- collapsing
+lost an edge but left its box floating; a box shown by the triangle or menu
+got no edge once ownership edges stopped drawing. RC: collapsing a box should
+hide what it connects to, unless visible through another edge; a box shown
+without a ref row draws its edge as if the row were open.
+
+- State is now `wanted`, a set of ref edges keyed by row key (replaces
+  `shown`). Every ref anywhere in a box's members -- open or not -- is a
+  showable edge (`all_refs`); an owned child no owner ref reaches would get
+  its ownership edge as a fallback (none today).
+- DRAWN: the Webserver plus what wanted edges reach from it. Every wanted
+  edge between drawn boxes draws from its box's bottom, row open or not; so
+  does a visible ref row's edge to a box drawn anyway. An edge's tooltip
+  names its box and member path (e.g. `session_table_.session_map_["1"]`),
+  since its row may be closed.
+- Ref row ▸/▾ wants / unwants its edge. Box triangle and menu "Show ▸"
+  want the owner's ref edge to the child. Menu "Hide" unwants every edge
+  into the box. COLLAPSING A BOX unwants every edge out of it; what was
+  reached only through those goes. A member row closing (e.g. stream_map_)
+  does NOT (RC: its edges still visibly leave the open box). Show all wants
+  every edge but those into the Webserver (always drawn; wanting one keeps
+  nothing shown, and drew long back-edges); Hide all clears.
+- Wanted edges out of a box no longer drawn are kept (RC: my discretion):
+  show the box again and what hung off it returns.
+- Checked in headless chrome: `visibility.mjs` rewritten -- among others,
+  Hide session:1 drops its sender and sub, showing it again brings them
+  back; the triangle on a COLLAPSED server draws 6 member edges, tooltips
+  naming `session_map_["1"]` .. `stream_map_["/introspect"]`; closing
+  stream_map_ keeps both endpoints and edges; collapsing the server drops
+  everything it alone reached; collapsing a sub whose endpoint_ edge was
+  wanted keeps /demo/ (the server's edge still wants it). The five
+  expand tests that start from Show all now count only edges whose row is
+  open; `expand.mjs`'s port bound allows the 7th port. All 11 pass.
+  Screenshot of Show all reviewed.
