@@ -418,3 +418,27 @@ Umbrella `c542269b`.
   unique_ptr<WebsocketSessionRecd>> = {2}` -> rows `["1"]`, `["2"]`, edges to
   the two session boxes; the six other browser tests pass. ctest 49/49;
   sweep 73/73 build, 47 utest ok + 26 without.
+
+## Members for DynamicEndpoint, 2026-10-02
+
+Uncommitted, awaiting RC's review.
+
+- `JsonPrinter_DynamicEndpoint` moved out of `websock_json.cpp`'s anonymous
+  namespace into `xo::web`, befriended by name in `DynamicEndpoint.hpp`. Its
+  `_members_`: `kind_` (`member_as<EndpointKind>`, "http"/"stream"),
+  `uri_pattern_`, `uri_regex_` (`member_as<std::regex>`, "<n> captures" --
+  `mark_count()`), `var_v_` (the pattern's variable names), `http_handler_`,
+  `subscribe_fn_`, `unsubscribe_fn_` (`member_as<..>`: "set"/"empty"),
+  `receiver_` (`member_ref<rp<StreamReceiver>>`, by most-derived address:
+  receivers are printed nowhere -> "→ (not drawn)", or null).
+- Page: an array of scalars shows its contents inline (`var_v_ =
+  ["name"]`, cut at 40 chars) instead of `[n]`.
+- Tests: server-json -- `/status` (http) and `/fw/${id}` (stream): all eight
+  names; kind, pattern, "0 captures" / "1 captures", var_v_ [] / ["id"],
+  handler / subscribe presence, receiver null. Headless chrome
+  (`endpoint_expand.mjs`, scratch): `/introspect` (has a receiver) ->
+  `receiver_ = → (not drawn)`; `/hello/${name}` -> "1 captures", `var_v_ =
+  ["name"]`, handler "set", receiver null. `expand.mjs`'s "not expandable"
+  check moved from an endpoint to the ticker (endpoints now have members);
+  the other browser tests pass. ctest 49/49; sweep 73/73 build, 47 utest ok
+  + 26 without.
