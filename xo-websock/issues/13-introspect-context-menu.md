@@ -1030,3 +1030,31 @@ DynamicEndpoint::kind_.
   flatstring, deque<string>, enums); browser tests' expectations follow
   (`endpoint_expand.mjs`: `kind_ = stream` bare beside `uri_pattern_ =
   "/introspect"` quoted). All 12 pass.
+
+## The box you click in stays put, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: clicking in a box (e.g. a Subscription's endpoint_ ▾) re-lays out the
+graph and the box "runs away from the mouse"; anchor it -- or move the
+mouse along. Browsers cannot move the pointer (no API; Pointer Lock only
+hides it), so the drawing moves instead.
+
+- ANCHOR: a click or keydown inside a box (capture listeners on the svg:
+  the box, its rows, triangles, the children toggle beside it) or one of its
+  menu items (`show_menu()` -- the menu is outside the svg) names that box;
+  the next `draw()` consumes it.
+- After ELK, `anchor_shift()`: per axis, need = where the box was drawn -
+  where ELK put it; `shift` (the drawing's offset in the svg, >= 0: nothing
+  left of / above the svg) = max(0, need); the page scrolls by shift - need.
+  On screen a box sits at svg_left + x - scrollX, so it stays put. When
+  that scroll is past the page's end, the svg grows (`svg_min`) to make the
+  room -- otherwise the browser clamps the scroll and the box moves (seen:
+  16 and 85 px, in the first cut).
+- `shift` and `svg_min` persist across unanchored redraws (Refresh), so
+  they don't jump; Show all / Hide all reset both.
+- Checked in headless chrome (`anchor.mjs`, new, real mouse clicks):
+  opening a sub box from its label; its endpoint_ ▾ (hides /demo/) and ▸
+  (shows it); opening the server; session 2's children triangle; session
+  1's menu "Hide children" -- each time the box clicked in is at the same
+  screen position (< 1 px) while the layout changes; Refresh moves nothing;
+  Show all resets the shift. All 13 browser tests pass.
