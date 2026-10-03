@@ -1007,3 +1007,26 @@ fall to SVG's default black fill. RC: give WsSessionRouter::Subscription
   kind uses, so not confused with stream green or session lilac); outline
   unchanged (`#7a4fa0`, its session's purple). Screenshot reviewed: an open
   subscription (60% fill opacity) is fainter still, but distinct.
+
+## Unquoted values for non-string types, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: atomic values whose type is not a string should drop the quotes, e.g.
+DynamicEndpoint::kind_.
+
+- A scalar row whose json value is a string keeps json's quotes only when
+  its declared type (`_canonical_type_`) is a string type --
+  `is_string_type()`: the type ITSELF is `basic_string<..>` /
+  `basic_string_view<..>` / `char*` (const either side) / xo `flatstring<..>`.
+  Anchored at the start, so `deque<string>` is not (a first cut matched the
+  `basic_string` inside it). Otherwise bare: `kind_ = stream`,
+  `state_ = running`, `uri_regex_ = 0 captures`, `http_handler_ = set`,
+  `outbound_q_ = 0 queued` -- enums, and printers' summaries.
+- A row with no declared type (an element row) keeps json's rendering.
+  Arrays of scalars (e.g. `var_v_ = ["name"]`) keep json's rendering too --
+  a vector of strings, quoted rightly; a vector of enums would stay quoted
+  (none today).
+- Checked: the predicate on 10 spellings (gcc / clang char*, string_view,
+  flatstring, deque<string>, enums); browser tests' expectations follow
+  (`endpoint_expand.mjs`: `kind_ = stream` bare beside `uri_pattern_ =
+  "/introspect"` quoted). All 12 pass.
