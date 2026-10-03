@@ -652,3 +652,25 @@ Webserver box jumps away from the left margin when sub 0 opens.
   edge screenshots is now 1338px wide (was 1804). Network simplex centres a
   parent over its children, so with many children shown the Webserver sits
   mid-canvas rather than at the left margin -- but stays put.
+
+## Menu: a Hide ▸ / Show ▸ entry per child, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: the menu offered "Show ▸ <child>" only for a child not drawn; add a
+"Hide ▸ <child>" for a child that is.
+
+- A box's menu now lists one entry per child, in ownership order: `Hide ▸
+  <label>` if drawn, `Show ▸ <label>` if not (as before: wants the owner's
+  edge to it).
+- Hide ▸ <child> does what the child's own "Hide" does -- unwants every edge
+  into it (RC: option (a)). Rejected (b), unwanting only this box's edge to
+  it: the exact inverse of Show ▸, but when another wanted edge reaches the
+  child, the item appears to do nothing.
+- Checked in headless chrome (`visibility.mjs`): with both of session 1's
+  children drawn, its menu has `Hide ▸ sender`, `Hide ▸ sub 0 · /demo/1`, no
+  Show ▸; `Hide ▸ sender` drops the sender, keeps the sub, and the entry
+  flips to `Show ▸ sender`; with /demo/ reached by the server's edge AND the
+  sub's `endpoint_` edge, the server menu's `Hide ▸ /demo/${id}` still hides
+  it, the sub stays. `cdp_menu.mjs` reworked for the longer server menu:
+  checks the Hide ▸ entries, and that ArrowDown skips the disabled Hide and
+  the disabled Open source. All 11 browser tests pass.
