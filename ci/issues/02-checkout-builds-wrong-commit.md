@@ -1,6 +1,6 @@
 # 02 — CI checkout built `main`'s tip at job start, not the run's commit
 
-Status: fixed 2026-10-03 -- umbrella `f2938083` + `f2c74154` (safe.directory); CI check pending
+Status: fixed 2026-10-03 -- umbrella `f2938083` + `f2c74154` (safe.directory); confirmed in CI
 Type: bug
 
 ## Symptom
@@ -103,3 +103,16 @@ docker run --rm -v $D:/__w/ws -w /__w/ws -e GITHUB_SHA=$SHA docker-xo-builder:v2
 ```
 
 Umbrella `f2c74154`.
+
+## Confirmed in CI
+
+Run 37141752227 (`f2c74154`): checkout succeeded in both jobs; the gcc job
+passed. Its log names the commit built, which is the run's own:
+
+```bash
+gh api repos/rconybea/xo-umbrella2/actions/jobs/111257465734/logs | grep 'checked out'
+# checked out f2c741546386f3baa19e6d72ade7c6ff5787d5d8
+```
+
+(`gh run view --job N --log` printed nothing for it; the jobs/N/logs API
+does.)

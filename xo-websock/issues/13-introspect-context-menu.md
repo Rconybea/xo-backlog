@@ -962,3 +962,16 @@ RC: right-justify member names relative to the anchored `=`.
   (gap -0.78..0.00 px), none starts left of 12 + 14 * depth, the widest at
   it. All 12 browser tests pass (visibility.mjs once printed nothing in the
   batch run; alone, 48 checks ok -- not reproduced). Screenshot reviewed.
+
+## No "=" in member rows, 2026-10-03
+
+Umbrella: not yet committed (with the previous section). RC: drop the `=`
+entirely -- bold name vs normal value, and the alignment, cue enough.
+
+- The ` = ` tspan (class `meq`) stays as the alignment anchor but holds
+  `row_sep` -- two spaces -- so a value never touches a bold name. Rows read
+  `listen_port_  8790`, `url_router_  ▾`, `["/introspect"]  ▾ (→)`; with
+  "types", `listen_port_: atomic<int> [atomic]  8790` (no `=` there either).
+- Tests: 53 row-text expectations in the browser tests changed ` = ` ->
+  two spaces (string literals only; one template literal by hand). All 12
+  pass; screenshot reviewed.
