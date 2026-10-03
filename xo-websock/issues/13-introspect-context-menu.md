@@ -796,9 +796,11 @@ on the box still toggles it.
   the monospace font). Left-click opens the box menu just below it and does
   not toggle the box; elsewhere on the box, left-click toggles as before;
   right-click and Menu / Shift+F10 unchanged.
-- Looks: first a white-filled, outlined square -- RC: too busy. Now plain
-  (transparent fill, which still takes the click) until hovered: then a
-  light fill and outline.
+- Looks: first a white-filled, outlined square -- RC: too busy. Then plain
+  (transparent fill, which still takes the click) until hovered, hover a
+  light-blue fill and outline. Now (RC) hover is a borderless rounded square,
+  white at 60% opacity, so it takes the box's hue: pale blue on the
+  Webserver, pale lilac on a session.
 - Considered three stacked lines (hamburger): conventionally a page / app
   menu; dots (meatballs / kebab) conventionally a per-item actions menu,
   which this is. RC: stay with dots.
