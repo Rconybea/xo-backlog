@@ -841,3 +841,29 @@ children (-1)". And "Hide" should read "Hide <the box's name>".
   session 1". `cdp_menu.mjs` follows the new labels (server menu after Show
   all: "Hide children (-5)", "Hide Webserver :N (running)" disabled). All
   12 browser tests pass.
+
+## Row values: refs read `▸ (→)`; structs just `▸`, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: rows whose value has no handy label (e.g. a Subscription's `endpoint_`
+read `▾→`); the triangle looks bad with an arrow beside it.
+
+- A ref row now reads `▾ (→)` / `▸ (→)` (target drawn / not); the
+  `(hidden)` suffix is gone -- the triangle says it. A ref to the Webserver
+  (no triangle) reads `(→)`; one no box draws, `(→ not drawn)`. The `(→)`
+  marks the triangle as showing ANOTHER box, not rows in place.
+- What a ref refers to is the value's tooltip (`ref_tooltip()`): "refers
+  to <box label>" or "refers to an object printed inside <box label>",
+  "(hidden)" if so, and the id. I offered naming the target in the row
+  (`▾ (→ /demo/${id})`); RC: plain `(→)`.
+- Struct rows that open: just `▸` / `▾` -- the type is on the name's
+  tooltip and in the "types" view (was `▸ UrlRouter`). One that cannot open
+  still shows its name (`ws_config_ = WebserverConfig`). Arrays / maps keep
+  their counts (`▸ {2}`).
+- Rejected markers: `(pointer)` clashes with the metatype word (a reference
+  member is reported as pointer too); `(out)` vague.
+- Checked in headless chrome: `rows.mjs` adds the ref row text and its
+  tooltip ("refers to /introspect\n0x.."); every test's row-text
+  expectations follow (`▾ (→)`, `(→ not drawn)`, `= (→)`, `= ▸`). All 12
+  browser tests pass; screenshot reviewed -- the `→` glyph is small in the
+  monospace font (as `⋯` was).
