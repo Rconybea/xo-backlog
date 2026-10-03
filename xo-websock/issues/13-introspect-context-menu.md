@@ -1146,3 +1146,21 @@ applied to it separately from outside-the-graph display elements".
   puts the drawing inside the viewport; Show all resets the camera; the
   viewport's bottom is within 30 px of the window's. All 14 browser tests
   pass.
+
+## Zoom readout beside the controls, 2026-10-03
+
+Umbrella: not yet committed (with the previous section). RC first saw "a
+very long viewport, the Webserver box invisible" -- then: the mouse wheel,
+used to scroll the page, now zooms the graph (wanted, but new), shrinking the
+drawing out of sight. Asked for a magnification readout outside the
+viewport, among the controls.
+
+- `#zoom-level` after Fit: "zoom 100%", updated on every pan / zoom (the
+  d3.zoom handler); its tooltip says the wheel zooms the graph and dragging
+  its background pans.
+- Ruled out on the way: a stale cached page (the server sends
+  `cache-control: no-store`). A missing Fit button made the script throw
+  at load (simulated in headless chrome) -- now null-guarded.
+- Checked in headless chrome: `anchor.mjs` -- after a wheel zoom the
+  readout reads `zoom 152%` (k 1.516); after Show all, `zoom 100%`.
+  `cdp_menu.mjs` passes. Controls-bar screenshot reviewed.
