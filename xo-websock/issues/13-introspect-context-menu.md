@@ -554,3 +554,25 @@ The introspect page only (`introspect.js`, `index.html`).
   overlaps; Hide all. The ten other browser tests pass, ref-row expectations
   now `▾→`, the menu test's following the new "Hide" item. JS only: no
   ctest / sweep rerun.
+
+## Member edges leave the bottom; hover pairs a row with its edge, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: edges from the boxes' right side dogleg back to the left.
+
+- Tried, in headless chrome, "Show all" with the server's maps, session 1
+  and its `/demo/1` subscription open: EAST ports (before) 1802px wide, edges
+  run right then back; WEST ports 1967px -- ELK moves the server right to
+  route on its left, doglegs now rightward; SOUTH ports 1473px, edges flow
+  down with the ownership edges. ELK's layered DOWN layout wants edges out
+  of the bottom; any side port routes around the box. RC: keep SOUTH.
+- A ref row's port now sits on the box's bottom edge, near its left, 10px
+  apart in row order. An edge no longer starts at its row, so (RC) hovering
+  a ref row lights its member edge (orange, 3px, raised above the others)
+  and the row's name; hovering the edge lights its row.
+- Checked in headless chrome: `expand.mjs` now checks the edge leaves the
+  bottom edge near the left (was: the right edge at its row), and, with a
+  real mouse move, that hovering the row lights its edge and only that row,
+  moving away restores both, hovering the edge lights the row. The ten
+  other browser tests pass unchanged. Screenshot of a hover reviewed. JS
+  only: no ctest / sweep rerun.
