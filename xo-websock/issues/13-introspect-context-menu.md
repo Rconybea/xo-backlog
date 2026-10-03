@@ -867,3 +867,31 @@ read `▾→`); the triangle looks bad with an arrow beside it.
   expectations follow (`▾ (→)`, `(→ not drawn)`, `= (→)`, `= ▸`). All 12
   browser tests pass; screenshot reviewed -- the `→` glyph is small in the
   monospace font (as `⋯` was).
+
+## Triangles 25% larger; hover squares inside boxes, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: make the triangles ~25% larger, on a rounded square with
+the menu button's colour policy -- the square only for triangles drawn
+inside boxes.
+
+- Three kinds, all larger: the children toggle beside a box (`text.kids`,
+  13 -> 16px, no square); and in rows, the in-place toggle (struct / array /
+  map) and the ref toggle (`▸ (→)`) -- each now its own tspan, class `tri`,
+  at 125% of the row's font (12 -> 15px). The in-place triangle used to be
+  part of the value string (`▸ {2}`); now `▸` + ` {2}`, so row text reads
+  the same. A struct that opens has no value tspan at all (it was an empty
+  one).
+- `tri_buttons()`: behind each row triangle, a 16px rounded square (rx 3) --
+  SVG text takes no background, so a rect placed from the triangle's
+  measured bbox, after the `=` alignment. Plain (opacity 0) until the
+  triangle or the square is hovered, then white at 85% -- the menu button's
+  policy. Clicking the square does what clicking the triangle does
+  (dispatches the click to it). Clicking elsewhere on a row still toggles
+  it, as before.
+- Checked in headless chrome: `rows.mjs` -- a square per triangle (6 in the
+  opened Webserver box), triangles at 125% of the row font, squares square
+  and plain; hovering a triangle shows its square at 0.85, leaving hides it;
+  clicking stream_map_'s square closes / reopens it; a ref row's square
+  unwants / wants its edge; the children toggle is 16px with no square. All
+  12 browser tests pass; hover screenshot reviewed.
