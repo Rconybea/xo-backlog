@@ -945,3 +945,20 @@ drawn.
 - Checked in headless chrome: `visibility.mjs` -- after Show all, sender_
   reads ▾; clicking it hides the sender despite router_.sender_, and it
   reads ▸; clicking ▸ shows it again. All 12 browser tests pass.
+
+## Names right-justified against the " = ", 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: right-justify member names relative to the anchored `=`.
+
+- The `=` column is unchanged: x0 + row_indent * depth, x0 the least that
+  clears every name. A row's text now STARTS at its column less the width
+  of what precedes its ` = ` (measured unaligned: the name; with "types",
+  `name: Type [metatype]`), so every name ends at its `=`. Box width
+  unchanged; no name crosses its depth's indent, and the widest sits at it.
+- Nesting now reads from the `=` staircase rather than the names' left
+  edges, which are ragged (shown to RC before: a matter of taste).
+- Checked in headless chrome: `rows.mjs` -- every name ends at its `=`
+  (gap -0.78..0.00 px), none starts left of 12 + 14 * depth, the widest at
+  it. All 12 browser tests pass (visibility.mjs once printed nothing in the
+  batch run; alone, 48 checks ok -- not reproduced). Screenshot reviewed.
