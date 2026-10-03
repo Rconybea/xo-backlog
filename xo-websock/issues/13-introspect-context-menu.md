@@ -219,7 +219,7 @@ without.
 
 ## Expand on the page, step 2, 2026-10-02 -- automatic layout (ELK)
 
-Uncommitted, awaiting RC's review. The introspect page only (`introspect.js`,
+Umbrella `20f895c4`. The introspect page only (`introspect.js`,
 `index.html`).
 
 - `layout()` now builds the object graph only -- nodes, and edges with a
@@ -246,7 +246,7 @@ Uncommitted, awaiting RC's review. The introspect page only (`introspect.js`,
 
 ## Expand on the page, step 3, 2026-10-02 -- expand
 
-Uncommitted, awaiting RC's review. The introspect page only.
+Umbrella `84d03b1a`. The introspect page only.
 
 - A box whose object has `_members_` is expandable (`.expandable`, a ▸/▾
   before its label): left-click, Enter, or the menu's new first item
