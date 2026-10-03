@@ -526,7 +526,7 @@ Umbrella `3a793767`. The introspect page only.
 
 ## Step 2b, 2026-10-03 -- shown is per box
 
-Umbrella: not yet committed. RC: "are we displaying a box" should be a
+Umbrella `bfe2b441`. RC: "are we displaying a box" should be a
 property of each box -- e.g. `/types` without the sessions, or vice versa.
 The introspect page only (`introspect.js`, `index.html`).
 
