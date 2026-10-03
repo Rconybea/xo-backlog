@@ -1233,3 +1233,36 @@ until the transition catches up.
   0 px, 45 samples each; session_table_'s row slides through 12 positions.
   The same checks with `slide_rows` switched off: 27 px outside, and a
   1-position jump -- so they do catch it. All 14 browser tests pass.
+
+## Legend: one colour per C++ type, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC first proposed showing each box's short type inside it
+(a small grey line above the label, the menu button beside it); then,
+before any code: a legend pairing each colour with its short type instead.
+No in-box type line was built (my recommendation: the legend makes it
+redundant; revisit if colours prove not enough).
+
+- Colour is per box KIND, and kinds and C++ types were not one-to-one: http
+  and stream endpoints are both DynamicEndpoint, in amber and green. RC: drop
+  that distinction -- every endpoint is now amber (the dashed green "uses"
+  edge to a stream endpoint keeps its green).
+- `#legend`, one line between the source-link line and the viewport (not
+  in the camera: it doesn't pan or zoom): per colour a swatch and the short
+  type -- `WebserverImpl`, `DynamicEndpoint`, `WebsocketSessionRecd`,
+  `WsSessionSender<WebserverImpl>`, `Subscription` -- taken from the
+  snapshot's `_short_type_` (not hard-coded), with the canonical type as
+  tooltip. Every kind in the snapshot, drawn or not, so it doesn't flicker
+  as boxes show and hide. `size_view()` re-runs after it fills, so the
+  viewport still ends at the window's bottom.
+- Swatches are styled by the boxes' own CSS rules, which now match
+  `:is(.node, .swatch).<kind> > rect` (same specificity as before). A first
+  cut gave the swatch's group class `node <kind>`: every `g.node` lookup
+  (`document.querySelector("g.node.server")`, in most browser tests) then
+  found the legend's swatch -- 11 tests failed. Class `swatch` instead.
+- Checked in headless chrome (`noticker.mjs`): the five types in order;
+  each swatch has its boxes' fill; http and stream endpoints one colour;
+  the viewport still ends within the window. All 14 browser tests pass.
+  (Twice now a test printed nothing in a batch run and passed alone, twice
+  over -- transitions.mjs here, visibility.mjs before: the harness, not the
+  page, not investigated.)
