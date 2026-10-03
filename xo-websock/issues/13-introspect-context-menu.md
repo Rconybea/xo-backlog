@@ -918,3 +918,30 @@ the set of drawn boxes unchanged.
   the server's leaving its collapsed box, its edges still wanted; collapsing
   a sub keeps its `endpoint_` edge wanted, nothing drawn changes. All 12
   browser tests pass.
+
+## A ref row's triangle follows its target box, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: session 1's `sender_` triangle did not toggle whether the sender is
+drawn.
+
+- Cause, reproduced in headless chrome after Show all + opening session 1:
+  the session reaches its sender by `sender_` AND by `router_.sender_`
+  (parallel edges, merged into one line). The row's triangle toggled only
+  its own edge: clicking ▾ unwanted `session:1/sender_`; `router_.sender_`
+  still wanted, so the sender stayed drawn (and the merged line with it)
+  while the row read ▸. Not only parallel edges: any other edge into the
+  target (another box's) does the same.
+- Fix (RC: first option): the triangle follows the TARGET box -- ▾ while it
+  is drawn, by any path; clicking ▾ hides it as menu "Hide ▸ <child>" does
+  (unwants every edge into it; option (a) earlier); ▸ wants this row's
+  edge, as before. `toggle_ref()`; the row menu's Show ▸ / Hide ▸ <target>
+  use it too. Rejected: toggling the whole merged line (all this box's
+  parallel edges) -- fixes sender_ but not a target another box also
+  reaches.
+- Consequence: a ref row can no longer ADD a second wanted edge into a
+  target already drawn (its ▾ hides). `visibility.mjs`'s collapse section
+  used that as setup; it now sets the edge directly.
+- Checked in headless chrome: `visibility.mjs` -- after Show all, sender_
+  reads ▾; clicking it hides the sender despite router_.sender_, and it
+  reads ▸; clicking ▸ shows it again. All 12 browser tests pass.
