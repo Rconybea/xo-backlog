@@ -341,7 +341,7 @@ metatype `pointer`; `subscription_v_` as an array of refs.
 
 ## Members for Subscription, 2026-10-02
 
-Uncommitted, awaiting RC's review. `JsonPrinter_Subscription` (a struct with
+Umbrella `a2f82ef7`. `JsonPrinter_Subscription` (a struct with
 public members: no friendship) adds `_members_`: `sub_id_`, `stream_name_`,
 `endpoint_` (`member_ref<rp<DynamicEndpoint>>` -- printed in full in the
 server's endpoints), `callback_id_` (`member_as<CallbackId>`, its number:
