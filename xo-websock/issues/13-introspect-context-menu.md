@@ -791,7 +791,7 @@ on the box still toggles it.
 
 - The label's trailing `⋯` was an EXPAND hint (a box with members, while
   closed), not a menu. Now every box -- open or closed, with members or not
-  -- has a menu button just after its label: an 18x18 square (RC: equal x,
+  -- has a menu button just after its label: a square (RC: equal x,
   y extent) holding three drawn dots (SVG circles: the `⋯` glyph is tiny in
   the monospace font). Left-click opens the box menu just below it and does
   not toggle the box; elsewhere on the box, left-click toggles as before;
@@ -799,8 +799,9 @@ on the box still toggles it.
 - Looks: first a white-filled, outlined square -- RC: too busy. Then plain
   (transparent fill, which still takes the click) until hovered, hover a
   light-blue fill and outline. Now (RC) hover is a borderless rounded square,
-  white at 60% opacity, so it takes the box's hue: pale blue on the
-  Webserver, pale lilac on a session.
+  white, part-transparent, so it takes a hint of the box's hue. At 60%
+  opacity RC found it barely visible; now 85%, and the square 21x21 (15%
+  larger than 18).
 - Considered three stacked lines (hamburger): conventionally a page / app
   menu; dots (meatballs / kebab) conventionally a per-item actions menu,
   which this is. RC: stay with dots.
