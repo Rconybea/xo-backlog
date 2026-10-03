@@ -1116,7 +1116,7 @@ insufficiently interesting detail.
 
 ## The graph gets its own viewport and camera, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `e88d39da`. The introspect page only (`introspect.js`,
 `index.html`). RC: after anchoring, parts of the page -- the controls at
 the top, the "last frame" json -- end up left of the viewport; "the graph
 should be drawn in its own canvas, so that it can have a coord transform
@@ -1149,7 +1149,7 @@ applied to it separately from outside-the-graph display elements".
 
 ## Zoom readout beside the controls, 2026-10-03
 
-Umbrella: not yet committed (with the previous section). RC first saw "a
+Umbrella `e88d39da`. RC first saw "a
 very long viewport, the Webserver box invisible" -- then: the mouse wheel,
 used to scroll the page, now zooms the graph (wanted, but new), shrinking the
 drawing out of sight. Asked for a magnification readout outside the
@@ -1167,7 +1167,7 @@ viewport, among the controls.
 
 ## Panning / zooming keeps a box in view, 2026-10-03
 
-Umbrella: not yet committed (with the two sections above). RC: prevent
+Umbrella `e88d39da`. RC: prevent
 panning that takes the entire drawing out of view -- the centre of at least
 one box must stay inside the viewport.
 
@@ -1188,7 +1188,7 @@ one box must stay inside the viewport.
 
 ## Pan / zoom only with Shift, 2026-10-03
 
-Umbrella: not yet committed (with the three sections above). RC: pan and
+Umbrella `e88d39da`. RC: pan and
 zoom only with Shift pressed; otherwise let events fall through to the
 browser.
 
