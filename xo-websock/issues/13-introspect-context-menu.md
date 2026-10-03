@@ -481,7 +481,7 @@ table. Only the example's own ticker has none.
 
 ## Step 1, 2026-10-03 -- drop the ticker box
 
-Uncommitted, awaiting RC's review. RC: (a) -- the box goes, the Ticker
+Umbrella `9c5d830e`. RC: (a) -- the box goes, the Ticker
 stays (`/demo` keeps ticking).
 
 - `introspect.cpp`: `IntrospectSnapshot` no longer holds the ticker; it
