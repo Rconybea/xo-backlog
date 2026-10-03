@@ -576,3 +576,20 @@ Umbrella: not yet committed. The introspect page only (`introspect.js`,
   moving away restores both, hovering the edge lights the row. The ten
   other browser tests pass unchanged. Screenshot of a hover reviewed. JS
   only: no ctest / sweep rerun.
+
+## Ownership edges not drawn; member edges enter top-left, 2026-10-03
+
+Umbrella: not yet committed (with the previous section). RC: a connection
+drew twice -- grey ownership edge (from the box's corner: portless edges on
+a FIXED_POS box) and purple member edge; "I don't know a reason to see the
+ownership edges visually"; member edges should arrive offset from the
+target's top-left corner, so a descending edge need not dogleg left.
+
+- Ownership edges (link, owns) stay in the ELK graph, where they order the
+  layers top to bottom (priority 10), but are not drawn. A box only owned,
+  never referred to by an open row, now floats with no edge.
+- A box a member edge arrives at gets one NORTH port, `in_port_x` (24px)
+  from its left; every member edge into it targets that port.
+- Checked in headless chrome: `expand.mjs` now also checks the member edge
+  ends on the endpoint's top edge 24px from its left, and that no link /
+  owns path is drawn; all 11 browser tests pass. Screenshot reviewed.
