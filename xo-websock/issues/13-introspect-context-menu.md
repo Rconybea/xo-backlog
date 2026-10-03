@@ -523,3 +523,34 @@ Umbrella `3a793767`. The introspect page only.
   edges, of which the default view has none); the menu test's expectations
   follow the new "Hide children" item. Screenshot reviewed. ctest 49/49;
   sweep 73/73 build, 47 utest ok + 26 without.
+
+## Step 2b, 2026-10-03 -- shown is per box
+
+Umbrella: not yet committed. RC: "are we displaying a box" should be a
+property of each box -- e.g. `/types` without the sessions, or vice versa.
+The introspect page only (`introspect.js`, `index.html`).
+
+- Replaces step 2's `children_open` (per OWNER) with `shown` (box ids), kept
+  across refreshes. A box is DRAWN iff it is in `shown` or on the ownership
+  path from the server to one that is -- so the drawing stays connected; the
+  Webserver always. Hiding a box hides its descendants too. Edges with an
+  undrawn end still dropped.
+- Box triangle `▸k` (k = children not drawn) / `▾` (all drawn): shows all its
+  children / hides them all; ArrowRight / ArrowLeft the same.
+- Menu: "Hide" (disabled on the Webserver), and "Show ▸ <label>" per hidden
+  child, beside "Show children (k)" / "Hide children".
+- Ref rows (RC): a ref to a box other than the Webserver carries a `▸` / `▾`
+  before the arrow -- e.g. the compact Webserver's
+  `url_router_.stream_map_["/introspect"]`; `▸` shows that box (and the path
+  to it), so its edge appears; `▾` hides it.
+- Checked in headless chrome (`visibility.mjs`, scratch, replacing
+  `children.mjs`; real clicks): default only the server, `▸6`; the server's
+  Hide disabled; `stream_map_["/introspect"] = ▸→ (hidden)`, clicking the ▸
+  draws exactly the server and `/introspect` with one member edge, row
+  `▾→`, server toggle `▸5`; ▾ hides it again; showing `session:1:sub:0`
+  draws server, session:1, the sub -- not the sender nor session:2; the
+  session menu's "Show ▸ sender" and "Hide" (descendants go too); the box
+  triangle both ways; `/types` alone, session:1 alone; Show all 11 boxes, no
+  overlaps; Hide all. The ten other browser tests pass, ref-row expectations
+  now `▾→`, the menu test's following the new "Hide" item. JS only: no
+  ctest / sweep rerun.
