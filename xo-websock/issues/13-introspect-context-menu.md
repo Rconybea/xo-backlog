@@ -996,7 +996,7 @@ Umbrella `0a931674` (with the right-justification section). RC, on the
 
 ## Subscription boxes get a fill: pale rose, 2026-10-03
 
-Umbrella: not yet committed. `index.html` only. RC asked how box colours are
+Umbrella `cd8717c8`. `index.html` only. RC asked how box colours are
 chosen -- a fixed palette per box KIND (`layout()`'s `kind`, a CSS class;
 pale fill + darker outline of one hue), hand-picked in the page's first
 version (`3c60fca4`); not derived from the C++ type, so a new kind would
