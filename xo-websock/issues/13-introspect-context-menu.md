@@ -305,3 +305,36 @@ mentioned"; skip `mutex_`.
   edge, ending at that session's own sender box -- the first live ref
   member; menu and expand tests still pass. Screenshot reviewed. ctest
   49/49; sweep 73/73 build, 47 utest ok + 26 without.
+
+## Members for WsSessionRouter, 2026-10-02
+
+Uncommitted, awaiting RC's review. Decided (RC): a C++ reference reported as
+metatype `pointer`; `subscription_v_` as an array of refs.
+
+- xo-printjson `JsonMembers`: `member_ref<Declared>` accepts a reference
+  type (`metatype_of<T>`: no xo-reflect metatype for references -> pointer);
+  new `member_refs<Declared>(name, std::vector<void const *>)` -> an array,
+  each `{"ref": id}` or null (a released slot; positions kept). Tests (8):
+  a reference member; refs with a null slot.
+- `JsonPrinter_WsSessionRouter` (new; `xo::web`, not the anonymous namespace
+  -- the header befriends it by name): `{_name_, _type_, id, _members_}`:
+  `url_router_` (`member_ref<UrlRouter const &>`), `sender_`
+  (`member_ref<rp<WsSender>>`, by `dynamic_cast<void const *>` -- the
+  most-derived address, the id the sender's own printer writes), `pjson_`,
+  `readjson_` (`member_as<unique_ptr<Json::CharReader>>`, "set"/"null"),
+  `subscription_v_` (`member_refs`, read under the router's mutex). Skips
+  `mutex_`. Before this the router printed as a member-less generic struct.
+- Page: an array of objects / refs expands into `[i]` element rows (no type
+  or tag of their own); a ref to an object drawn as no box reads
+  "→ (not drawn)" -- e.g. `url_router_`, the server's, printed inside the
+  server.
+- Tests: live `live-sessions-lists-each-connection` -- each session's router
+  members; `sender_` ref == the session's sender id (most-derived address
+  matches); `subscription_v_`'s refs == the ids of the subscriptions printed
+  under the session. Headless chrome (`router_expand.mjs`, scratch): session 1
+  -> `router_` opens in place (the first live nested expand) ->
+  `subscription_v_` -> `[0] = →`; member edges end at session 1's sender
+  (twice: the session's and the router's `sender_`) and its subscription;
+  `url_router_` "→ (not drawn)", no edge; no overlaps. The session, menu and
+  expand tests still pass. Screenshot reviewed. ctest 49/49; sweep 73/73
+  build, 47 utest ok + 26 without.
