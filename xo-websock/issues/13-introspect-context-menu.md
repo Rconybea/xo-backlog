@@ -698,3 +698,41 @@ only. RC: with every box drawn, session 1 drew two edges to its sender.
   hover lighting both rows, row hover lighting the edge and that row only.
   The five tests filtering "edges whose row is open" read `row_keys`. All 11
   browser tests pass.
+
+## Compact member rows: type on tooltip + row menu, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: move a member's type name and metatype off the row, into
+a tooltip / context menu on the member name, so expanded boxes get narrower
+-- keeping a way to reach the type's definition.
+
+- A row reads `name = value` (was `name: Type [metatype] = value`).
+- Hovering the name: tooltip `name: Type  [metatype]`, the canonical type,
+  `file:line` (or "no source location"), and "ctrl-click: open source"
+  when linked.
+- Ctrl-click / cmd-click the name (RC: yes): opens the type's source; does
+  not toggle the row. (On macOS ctrl-click is a right-click: the row menu,
+  which has Open source.)
+- Right-click a row: a ROW menu, headed `name: Type` -- Open source, Copy
+  type name (canonical), Expand / Collapse if it opens, Show ▸ / Hide ▸
+  <target> on a ref row (wants / unwants its edge, as its ▸ / ▾).
+  Disabled with a reason where they don't apply (element rows: "no declared
+  type"). Right-click elsewhere on the box: the box menu, as before.
+  `show_menu()` now takes a heading and items, shared by both menus.
+- A "types" checkbox (RC: yes) beside Show all / Hide all puts types back
+  inline. Off by default.
+- Rows are not focusable, so the row menu is mouse-only; making them
+  focusable would change keyboard movement through the graph -- not done.
+- Webserver box (server open, url_router_, stream_map_, session_table_,
+  session_map_ open): 266px compact vs 595px with types; the expanded view
+  used for edge screenshots 1035px wide (was 1338).
+- Checked in headless chrome: `rows.mjs` (new, scratch; server with
+  `--src-tree`, `window.open` stubbed) -- compact rows and no type tspans;
+  the tooltip text; ctrl-click and cmd-click open
+  `/dyn/src/xo-websock/include/xo/websock/UrlRouter.hpp#L48` and leave the
+  row open; the row menu's head and items, its Open source; an element
+  row's menu (Open source disabled, Hide ▸ /introspect unwants the edge,
+  flips to Show ▸); right-click on the box header still the box menu;
+  types on -> `listen_port_: atomic<int> [atomic] = ..`, wider; off ->
+  back. The 11 earlier browser tests tick "types" at load (they find rows by
+  `name:` text) and pass unchanged.
