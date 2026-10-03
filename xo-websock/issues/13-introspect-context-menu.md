@@ -338,3 +338,22 @@ metatype `pointer`; `subscription_v_` as an array of refs.
   `url_router_` "→ (not drawn)", no edge; no overlaps. The session, menu and
   expand tests still pass. Screenshot reviewed. ctest 49/49; sweep 73/73
   build, 47 utest ok + 26 without.
+
+## Members for Subscription, 2026-10-02
+
+Uncommitted, awaiting RC's review. `JsonPrinter_Subscription` (a struct with
+public members: no friendship) adds `_members_`: `sub_id_`, `stream_name_`,
+`endpoint_` (`member_ref<rp<DynamicEndpoint>>` -- printed in full in the
+server's endpoints), `callback_id_` (`member_as<CallbackId>`, its number:
+`CallbackId` is not reflected; gcc spells the alias
+`CallbackIdImpl<CallbackId_tag>`), `sink_` (`member_ref<rp<WebsocketSink>>`
+by most-derived address -- printed in full under "sink"; on the page folded
+into the subscription box, so "→ (not drawn)").
+
+Tests: `WsSessionRouter.test.cpp` (the subscription json case) checks the
+five names and values, `endpoint_`'s ref == the printed endpoint ref,
+`sink_`'s ref == the printed sink's id, no `_error_`. Headless chrome
+(`sub_expand.mjs`, scratch): a subscription box expands to 5 rows; ONE member
+edge, from `endpoint_` to the `/demo` endpoint box; `sink_` says "not
+drawn"; the router, session, menu and expand tests still pass. ctest 49/49;
+sweep 73/73 build, 47 utest ok + 26 without.
