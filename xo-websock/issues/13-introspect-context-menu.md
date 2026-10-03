@@ -781,3 +781,34 @@ x0 + d*n, d the per-level text indent.
   depth (spread 0.00px), rows at 3 depths, the tightest name-to-` = ` gap
   0.00 (x0 is the least that fits). All 12 browser tests pass; screenshot
   reviewed.
+
+## Box menu button, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: left-clicking the meatballs should show the menu; put
+them in a rounded square so they read as a UI element; left-click elsewhere
+on the box still toggles it.
+
+- The label's trailing `⋯` was an EXPAND hint (a box with members, while
+  closed), not a menu. Now every box -- open or closed, with members or not
+  -- has a menu button just after its label: an 18x18 square (RC: equal x,
+  y extent) holding three drawn dots (SVG circles: the `⋯` glyph is tiny in
+  the monospace font). Left-click opens the box menu just below it and does
+  not toggle the box; elsewhere on the box, left-click toggles as before;
+  right-click and Menu / Shift+F10 unchanged.
+- Looks: first a white-filled, outlined square -- RC: too busy. Now plain
+  (transparent fill, which still takes the click) until hovered: then a
+  light fill and outline.
+- Considered three stacked lines (hamburger): conventionally a page / app
+  menu; dots (meatballs / kebab) conventionally a per-item actions menu,
+  which this is. RC: stay with dots.
+- The "has members" hint is dropped (RC: option (a)): the pointer cursor
+  shows only on boxes that open, and the menu's Expand is disabled, with a
+  reason, on the rest.
+- Box styles now select the box's own rect (`.node > rect`), so they don't
+  restyle the button's.
+- Checked in headless chrome: `cdp_menu.mjs` -- every box has a square
+  button, the label no longer contains `⋯`, a real left-click on the button
+  opens the box menu just below it and leaves the box as it was, a real
+  left-click on the label toggles the box with no menu. Plain and hover
+  screenshots reviewed. All 12 browser tests pass.
