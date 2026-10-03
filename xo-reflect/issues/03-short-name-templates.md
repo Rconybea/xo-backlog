@@ -1,6 +1,6 @@
 # 03 — `TypeDescr::short_name()` for template types; `rp<T>`
 
-Status: done 2026-10-03 -- umbrella `9e251d5a`; CI test fix `af3fe344`
+Status: done 2026-10-03 -- umbrella `9e251d5a`; CI fixes `af3fe344`, `b3ac8417`
 Type: feature
 
 `TypeDescr` carries two names: `canonical_name()` (full, unique) and
@@ -109,3 +109,39 @@ The same clang job had been failing earlier on an unrelated link error in
 xo-object2 (`RAllocator<..>::barrier_assign` undefined, e.g. run
 37098295886); CI builds xo-reflect first, so this test's failure has been
 masking it since `9e251d5a`. Expect it next. Not diagnosed yet.
+
+## CI again: pointer spacing differs by compiler, 2026-10-03
+
+Umbrella `b3ac8417`.
+
+With xo-reflect green under clang (`af3fe344`), the clang job reached
+xo-printjson and failed there (run 37134962597):
+
+```bash
+gh run view 37134962597 --log-failed | grep -A6 'with expansion' | cut -c1-300
+#  "_canonical_type_": "xo::ut::(anonymous namespace)::JmUnreflected *", "_short_type_": "JmUnreflected *"
+```
+
+`JsonMembers.test.cpp` (from `.xo-backlog/xo-printjson/issues/05`) spelled
+the short type `"JmUnreflected*"` -- gcc's. Clang writes a space before `*`
+and `&` (`Foo *`, `const Foo &`). Two changes (RC: both):
+
+1. `make_short_name()` now drops whitespace before `*` and `&` as well as
+   `>`, so a short name reads the same from either compiler (`Foo*`,
+   `const Foo&`, `Foo&&`). ShortName.test gains both spellings of each, a
+   vector of pointers and a function taking a reference (27 assertions).
+   The canonical name is untouched (it stays the compiler's spelling: the
+   key for lookups and the source map).
+2. JsonMembers.test builds both expected short types with
+   `make_short_name(type_of<..>())`, as its `entry()` helper does, rather
+   than spelling them.
+
+Scan for other compiler-specific spellings in today's tests:
+`grep -rnE '\{anonymous\}|[A-Za-z_>]\*"|[A-Za-z_>]&"|> >"' --include=*.test.cpp xo-*/utest`
+-- only comments and typeseq.test.cpp, which handles both spellings
+deliberately. The remaining literal type names in websock / reflect tests
+are named, non-anonymous, pointer-free, so spelled alike.
+
+gcc: build, ctest 49/49, utest.reflect short_name 27, utest.printjson 62,
+the 12 introspect browser tests. `xo-build --sweep -j 8`: 73 attempted, 73
+ok (build); 47 ok + 26 with no tests (utest); `--sweep ok`. Clang: the CI job.
