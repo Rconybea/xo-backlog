@@ -870,7 +870,7 @@ read `▾→`); the triangle looks bad with an arrow beside it.
 
 ## Triangles 25% larger; hover squares inside boxes, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `c7bfc177`. The introspect page only (`introspect.js`,
 `index.html`). RC: make the triangles ~25% larger, on a rounded square with
 the menu button's colour policy -- the square only for triangles drawn
 inside boxes.
