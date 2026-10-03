@@ -445,7 +445,7 @@ Umbrella `8ee4099e`.
 
 ## Members for WsSessionSender, 2026-10-03
 
-Uncommitted, awaiting RC's review. `JsonPrinter_WsSessionSender` moved out of
+Umbrella `d7027397`. `JsonPrinter_WsSessionSender` moved out of
 `Webserver.cpp`'s anonymous namespace into `xo::web`, befriended by name in
 `WsSessionSender.hpp`. Its `_members_`: `target_` (`member_ref<WebserverImpl *>`:
 the server, printed in full elsewhere -> an edge to the server box),
