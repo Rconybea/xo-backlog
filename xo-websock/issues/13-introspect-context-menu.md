@@ -701,7 +701,7 @@ only. RC: with every box drawn, session 1 drew two edges to its sender.
 
 ## Compact member rows: type on tooltip + row menu, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `870cd295`. The introspect page only (`introspect.js`,
 `index.html`). RC: move a member's type name and metatype off the row, into
 a tooltip / context menu on the member name, so expanded boxes get narrower
 -- keeping a way to reach the type's definition.
