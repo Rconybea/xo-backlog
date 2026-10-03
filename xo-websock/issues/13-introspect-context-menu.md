@@ -392,3 +392,29 @@ objects printed nested in a box.
   the server box; the server stays above its sessions. `router_expand`
   updated to the new expectation; the other browser tests pass. Screenshots
   reviewed. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
+
+## Members for WsSessionTable, 2026-10-02
+
+Uncommitted, awaiting RC's review.
+
+- `JsonPrinter_WsSessionTable<Recd>` (a template in `xo::web`, defined and
+  registered in `Webserver.cpp` for `WsSessionTable<WebsocketSessionRecd>`;
+  the table template befriends it -- `template <typename> friend class`, forward
+  declared above it): `{_name_, _type_, id, _members_}`: `next_id_` (read
+  directly: the public `next_id()` increments it), `session_map_` as a ref map
+  session id -> the session (printed in full in "sessions"), in id order,
+  copied under the table's mutex. Skips `mutex_`. (In the template, the
+  chained `.member_ref_map<..>` call would need `.template`: two statements
+  instead.)
+- Page: `short_type` also drops the standard library's default template
+  arguments (`default_delete`, `hash`, `equal_to`, `less`, `allocator`,
+  `char_traits`, brackets matched) and any space before `>` -- gcc spelled
+  the session map's full type, 5 lines wide.
+- Tests: server-json -- the idle server's table: an id, `next_id_` 1, an empty
+  `session_map_`. Live -- `session_map_` has every printed session by id, ref
+  == its id; `next_id_` beyond the last session id. Headless chrome
+  (`sesstable_expand.mjs`, scratch): server -> session_table_: `next_id_ = 3`,
+  `session_map_: unordered_map<long unsigned int,
+  unique_ptr<WebsocketSessionRecd>> = {2}` -> rows `["1"]`, `["2"]`, edges to
+  the two session boxes; the six other browser tests pass. ctest 49/49;
+  sweep 73/73 build, 47 utest ok + 26 without.
