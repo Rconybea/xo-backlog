@@ -1058,3 +1058,37 @@ hides it), so the drawing moves instead.
   1's menu "Hide children" -- each time the box clicked in is at the same
   screen position (< 1 px) while the layout changes; Refresh moves nothing;
   Show all resets the shift. All 13 browser tests pass.
+
+## Step 3, 2026-10-03 -- transitions
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: start on transitions; edges option (a), fade.
+
+- Every redraw animates, three phases: leaving boxes and all edges fade out
+  (`t_fade` 120 ms, while ELK lays out); boxes slide to their new places
+  (`t_move` 350 ms, cubic in-out) and outlines / badges resize; then arriving
+  boxes, rows that appeared, and the edges' new routes fade in (`t_show` 150
+  ms). The svg grows at once, shrinks only at the end (nothing clipped
+  mid-move). A new draw interrupts the last one's transitions and carries
+  on from where things are.
+- Edges fade rather than morph (RC: (a)): old and new orthogonal routes have
+  different bends; morphing polylines makes spaghetti.
+- Leaving boxes are inert while fading (`.node.leaving`, no pointer
+  events); one that comes back mid-fade has its fade stopped. Rows that go
+  disappear at once (their box shrinks over t_move) -- not faded.
+- An arriving box is invisible until placed: it is joined before the async
+  ELK layout, so would otherwise flash at (0,0). Arrival is marked by an
+  element PROPERTY (`__arriving`), not a class: the first cut used a class,
+  which `node.attr("class", ..)` rewrote before placement -- no box was ever
+  seen as arriving, all stayed at opacity 0.
+- With anchoring (above), the anchored box doesn't move; the rest glide
+  around it.
+- `settled()`: a promise resolved once the latest draw's transitions end
+  (+50 ms slack: d3 starts them on its next tick), for tests.
+- Checked in headless chrome (`transitions.mjs`, new; 3 runs green):
+  session 2 slides through 11 positions (y 336 -> 452) when the server
+  opens; edges transparent mid-move, opaque once settled; a hidden box fades
+  (0.48..0.74 mid-fade) then is removed; an arriving box starts at 0 and
+  ends at 1; open-then-close within 80 ms ends closed, at its final place,
+  fully shown; no box left half-faded. The 13 other browser tests pass
+  unchanged.
