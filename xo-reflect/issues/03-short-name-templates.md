@@ -1,6 +1,6 @@
 # 03 — `TypeDescr::short_name()` for template types; `rp<T>`
 
-Status: implemented 2026-10-03, umbrella not yet committed
+Status: done 2026-10-03 -- umbrella `9e251d5a`
 Type: feature
 
 `TypeDescr` carries two names: `canonical_name()` (full, unique) and
