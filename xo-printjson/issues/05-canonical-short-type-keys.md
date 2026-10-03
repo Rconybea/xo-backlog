@@ -1,6 +1,6 @@
 # 05 — `_type_` -> `_canonical_type_` + `_short_type_`
 
-Status: implemented 2026-10-03, umbrella not yet committed
+Status: done 2026-10-03 -- umbrella `3ee09e14`
 Type: feature
 
 RC: rename the json key `_type_` to `_canonical_type_` and add `_short_type_`,
