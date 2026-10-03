@@ -631,3 +631,24 @@ without a ref row draws its edge as if the row were open.
   expand tests that start from Show all now count only edges whose row is
   open; `expand.mjs`'s port bound allows the 7th port. All 11 pass.
   Screenshot of Show all reviewed.
+
+## Node placement: network simplex, 2026-10-03
+
+Umbrella: not yet committed (with the three sections above). RC: the
+Webserver box jumps away from the left margin when sub 0 opens.
+
+- Cause: ELK's default node placement, Brandes-Koepf, computes four
+  candidate placements (align with upper / lower neighbours, sweeping left /
+  right) and keeps the narrowest. In RC's view (server and sub 0 open;
+  /hello, session 1, sender, sub 0, /introspect shown; /introspect via
+  stream_map_), opening sub 0 (176 -> 457px) left two candidates within a
+  pixel of each other (786px); the one kept aligns the server with its edge
+  to /introspect: server x 32 -> 244.
+- Measured in that view, ELK options overridden in the tab: fixed LEFTDOWN
+  65 -> 65; BALANCED 138 -> 154; NETWORK_SIMPLEX 65 -> 65 and the narrowest
+  with sub 0 open (span 53..660 vs 53..839). RC: network simplex.
+- `"elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX"` on the root.
+  All 11 browser tests pass, no overlaps; the expanded view used for the
+  edge screenshots is now 1338px wide (was 1804). Network simplex centres a
+  parent over its children, so with many children shown the Webserver sits
+  mid-canvas rather than at the left margin -- but stays put.
