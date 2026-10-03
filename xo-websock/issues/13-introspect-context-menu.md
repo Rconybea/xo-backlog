@@ -1164,3 +1164,24 @@ viewport, among the controls.
 - Checked in headless chrome: `anchor.mjs` -- after a wheel zoom the
   readout reads `zoom 152%` (k 1.516); after Show all, `zoom 100%`.
   `cdp_menu.mjs` passes. Controls-bar screenshot reviewed.
+
+## Panning / zooming keeps a box in view, 2026-10-03
+
+Umbrella: not yet committed (with the two sections above). RC: prevent
+panning that takes the entire drawing out of view -- the centre of at least
+one box must stay inside the viewport.
+
+- `keep_a_box_in_view()`, d3.zoom's `constrain`: every gesture's proposed
+  transform passes through it. If some box's centre lands inside the
+  viewport, accepted as is; else the transform is corrected just enough to
+  put the centre NEAREST the viewport on its edge -- the drawing sticks
+  there (half that box showing), and dragging back moves at once. The
+  wheel is held to it too (zooming in on empty space, or far out toward a
+  corner). `drawn_at` now carries each box's size, for its centre.
+- Not constrained: the page's own camera moves (anchoring, Fit, the reset
+  on Show all / Hide all) -- d3's `zoom.transform` bypasses constrain; they
+  keep the drawing in view anyway.
+- Checked in headless chrome (`anchor.mjs`): four hard drags up-left leave
+  one box centre in view, at the viewport's edge; dragging back (+40, +30)
+  moves the graph by exactly that; 8 hard wheel-ins on an empty corner
+  (zoom 300%) still leave a box centre in view. All 14 browser tests pass.
