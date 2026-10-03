@@ -1033,7 +1033,7 @@ DynamicEndpoint::kind_.
 
 ## The box you click in stays put, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `4cd651c3`. The introspect page only (`introspect.js`).
 RC: clicking in a box (e.g. a Subscription's endpoint_ ▾) re-lays out the
 graph and the box "runs away from the mouse"; anchor it -- or move the
 mouse along. Browsers cannot move the pointer (no API; Pointer Lock only
