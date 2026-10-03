@@ -844,7 +844,7 @@ children (-1)". And "Hide" should read "Hide <the box's name>".
 
 ## Row values: refs read `▸ (→)`; structs just `▸`, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `10500227`. The introspect page only (`introspect.js`).
 RC: rows whose value has no handy label (e.g. a Subscription's `endpoint_`
 read `▾→`); the triangle looks bad with an arrow beside it.
 
