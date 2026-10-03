@@ -1095,7 +1095,7 @@ Umbrella `f5a15096`. The introspect page only (`introspect.js`,
 
 ## Refcount badges dropped, 2026-10-03
 
-Umbrella: not yet committed. The introspect example: `introspect.js`,
+Umbrella `9709b13d`. The introspect example: `introspect.js`,
 `index.html`, `introspect.cpp`. RC: drop the refcount badge --
 insufficiently interesting detail.
 
