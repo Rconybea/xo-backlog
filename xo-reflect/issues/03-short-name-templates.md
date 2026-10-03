@@ -1,6 +1,6 @@
 # 03 — `TypeDescr::short_name()` for template types; `rp<T>`
 
-Status: done 2026-10-03 -- umbrella `9e251d5a`; CI test fix not yet committed
+Status: done 2026-10-03 -- umbrella `9e251d5a`; CI test fix `af3fe344`
 Type: feature
 
 `TypeDescr` carries two names: `canonical_name()` (full, unique) and
