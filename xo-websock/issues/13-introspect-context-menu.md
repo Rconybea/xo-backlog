@@ -975,3 +975,21 @@ entirely -- bold name vs normal value, and the alignment, cue enough.
 - Tests: 53 row-text expectations in the browser tests changed ` = ` ->
   two spaces (string literals only; one template literal by hand). All 12
   pass; screenshot reviewed.
+
+## Separator ":" (types view keeps "="), 2026-10-03
+
+Umbrella: not yet committed (with the two sections above). RC, on the
+"=" -less rows: "doesn't look as good as I expected. Let's try : instead of
+=".
+
+- Compact view: `row_sep` is now `": "`, right after the right-justified
+  name: `listen_port_: 8830`, `url_router_: ▾`, `["/introspect"]: ▾ (→)`.
+- "types" view keeps ` = ` on every row: its left side already has a
+  colon (`name: Type [metatype]`), so `: ` there would read
+  `listen_port_: atomic<int> [atomic]: 8830`. Every row of that view, element
+  rows (no declared type) included -- a first cut gave element rows `: `
+  and typed rows ` = ` in the same view.
+- The two-space version (previous section) is superseded, never committed.
+- Tests: the types-view tests' expectations are back to ` = `; rows.mjs
+  (compact) reads `name: value`. All 12 browser tests pass; screenshot
+  reviewed.
