@@ -395,7 +395,7 @@ objects printed nested in a box.
 
 ## Members for WsSessionTable, 2026-10-02
 
-Uncommitted, awaiting RC's review.
+Umbrella `c542269b`.
 
 - `JsonPrinter_WsSessionTable<Recd>` (a template in `xo::web`, defined and
   registered in `Webserver.cpp` for `WsSessionTable<WebsocketSessionRecd>`;
