@@ -815,3 +815,29 @@ on the box still toggles it.
   opens the box menu just below it and leaves the box as it was, a real
   left-click on the label toggles the box with no menu. Plain and hover
   screenshots reviewed. All 12 browser tests pass.
+
+## Menu: children counts both ways; "Hide <label>", 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC (changing an earlier instruction): "Hide children" should carry a count
+as "Show children" does, and a partly shown box should offer both -- e.g.
+the Webserver with only /introspect drawn: "Show children (+5)" and "Hide
+children (-1)". And "Hide" should read "Hide <the box's name>".
+
+- `children_items()`: "Show children (+k)", k children not drawn, wants the
+  edges to just those (`show_children()`); "Hide children (-m)", m drawn,
+  hides just those (`hide_children()`). Each appears only when its count is
+  non-zero, so all-hidden shows only Show, all-drawn only Hide, partly shown
+  both. A box with no children keeps one disabled "Show children" ("owns no
+  boxes"). The box triangle (`toggle_children()`) now calls the same two
+  functions; its behaviour is unchanged.
+- "Hide" -> `Hide ${label}`, e.g. "Hide session 1", "Hide Webserver :7680
+  (running)" (still disabled on the Webserver). Labels keep the menu's
+  sentence case ("children", not "Children").
+- Checked in headless chrome (`visibility.mjs`): nothing drawn -> "Show
+  children (+6)" only; RC's case -> both "(+5)" and "(-1)"; "Hide children
+  (-1)" leaves the Webserver alone; "Show children (+5)" draws the other 5
+  (7 boxes); then only "Hide children (-6)", which clears them; "Hide
+  session 1". `cdp_menu.mjs` follows the new labels (server menu after Show
+  all: "Hide children (-5)", "Hide Webserver :N (running)" disabled). All
+  12 browser tests pass.
