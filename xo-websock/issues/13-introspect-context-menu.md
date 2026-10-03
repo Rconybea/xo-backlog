@@ -674,3 +674,27 @@ RC: the menu offered "Show ▸ <child>" only for a child not drawn; add a
   it, the sub stays. `cdp_menu.mjs` reworked for the longer server menu:
   checks the Hide ▸ entries, and that ArrowDown skips the disabled Hide and
   the disabled Open source. All 11 browser tests pass.
+
+## Parallel member edges merge, 2026-10-03
+
+Umbrella: not yet committed (with the previous section). The introspect page
+only. RC: with every box drawn, session 1 drew two edges to its sender.
+
+- Cause (headless chrome, Show all): two refs from session 1's box to the
+  same sender -- `session:1/sender_` (rp<WsSessionSender<WebserverImpl>>,
+  the record's) and `session:1/router_/sender_` (rp<WsSender>, the router,
+  a struct member printed in the session's box); same id. Both wanted by
+  Show all, both drawn. Accurate (the sender's badge 3: record, router,
+  sink) but clutter.
+- RC: merge parallel edges from the same box. `merge_parallel()`: one drawn
+  member edge -- and one bottom port -- per (source box, target box), in
+  order of its first member, carrying every member's row key and label.
+  Wanted-ness stays per row: the line is drawn while any of its members is
+  wanted or its row open. Tooltip lists them (`session 1 · sender_,
+  router_.sender_`). Hovering the line lights every row it stands for;
+  hovering a row lights the line and that row only.
+- Checked in headless chrome: `router_expand.mjs` now expects ONE edge to
+  the sender carrying both row keys and both labels in its tooltip, edge
+  hover lighting both rows, row hover lighting the edge and that row only.
+  The five tests filtering "edges whose row is open" read `row_keys`. All 11
+  browser tests pass.
