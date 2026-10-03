@@ -357,3 +357,38 @@ five names and values, `endpoint_`'s ref == the printed endpoint ref,
 edge, from `endpoint_` to the `/demo` endpoint box; `sink_` says "not
 drawn"; the router, session, menu and expand tests still pass. ctest 49/49;
 sweep 73/73 build, 47 utest ok + 26 without.
+
+## Members for UrlRouter, 2026-10-02
+
+Uncommitted, awaiting RC's review. Decided (RC): including (b), edges to
+objects printed nested in a box.
+
+- xo-printjson `JsonMembers::member_ref_map<Declared>(name, vector<pair<string,
+  void const *>>)` -> a json object, key -> ref or null, keys in the order
+  given. Test (9 cases). NB xo-reflect has no map metatype: a std::map /
+  unordered_map member reports `atomic`.
+- `JsonPrinter_UrlRouter` (new, `xo::web`, befriended by name in
+  `UrlRouter.hpp`; registered via `provide_url_router_json_printers`): `{_name_,
+  _type_, id, _members_}` -- NOW WITH AN ID (the generic struct printer gave
+  none) -- `http_map_` and `stream_map_` as ref maps (stem -> endpoint,
+  printed in full in the server's endpoint list), copied under the router's
+  mutex, sorted by stem (an unordered_map has no stable order). Skips
+  `mutex_`.
+- Page: (a) a ref map expands into `["stem"] = →` rows, each an edge to its
+  endpoint box. (b) `box_of_id`: an object printed NESTED in a box (found by
+  walking each box's `_members_` values for objects with an id) is drawn by
+  that box -- a ref to it gets an edge to the containing box; only refs to
+  objects drawn nowhere read "→ (not drawn)". So a session router's
+  `url_router_` -> the server box. A ref into its own box draws nothing.
+  ELK: ownership edges (link, owns) get `elk.layered.priority.direction` 10,
+  others 0 -- the first url_router_ edge (session -> server) otherwise put
+  session 1 ABOVE the server.
+- Tests: server-json -- `url_router_` has an id; each printed endpoint is in
+  its map by stem, ref == its id; no extra entries. Live -- a session
+  router's `url_router_` ref == the server's `url_router_` id. Headless chrome
+  (`urlrouter_expand.mjs`, scratch): server -> url_router_ -> two maps {2}
+  each -> stream_map_ rows `["/demo/"] = →`, `["/introspect"] = →`, edges to
+  those endpoint boxes; session 1 -> router_ -> url_router_ "= →", an edge to
+  the server box; the server stays above its sessions. `router_expand`
+  updated to the new expectation; the other browser tests pass. Screenshots
+  reviewed. ctest 49/49; sweep 73/73 build, 47 utest ok + 26 without.
