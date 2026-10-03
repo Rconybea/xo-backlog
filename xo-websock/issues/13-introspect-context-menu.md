@@ -736,3 +736,26 @@ a tooltip / context menu on the member name, so expanded boxes get narrower
   types on -> `listen_port_: atomic<int> [atomic] = ..`, wider; off ->
   back. The 11 earlier browser tests tick "types" at load (they find rows by
   `name:` text) and pass unchanged.
+
+## Rows align on " = " per sibling group, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`).
+RC: align each `member = value` row on its `=`.
+
+- Offered (a) one `=` column per box (any depth) or (b) one per sibling
+  group (rows under the same parent). RC: (b), likely to look better.
+- Each row records its `parent` path. After a box's rows are drawn, the x
+  where each row's ` = ` starts is measured (`eq_x()`:
+  `getStartPositionOfChar` at the count of the name tspans' own characters
+  -- not their `<title>` text); a group's column is its largest; the ` = `
+  tspan (class `meq`) gets that x. A box is now sized by each row's bbox
+  (the moved ` = ` is not in `getComputedTextLength`).
+- The "types" view aligns the same way, on the longer `name: Type
+  [metatype]`; there one long type stretches its whole group (e.g.
+  session_map_'s `unordered_map<long unsigned int,
+  unique_ptr<WebsocketSessionRecd>>` pushes next_id_'s `= 3` far right).
+- Checked in headless chrome: `rows.mjs` -- with server, url_router_,
+  stream_map_, session_table_ open, every sibling group's ` = ` at one x,
+  the columns differ between groups, the group's longest name runs straight
+  into its ` = ` (gap < 1px). All 12 browser tests pass; screenshots of both
+  views reviewed.
