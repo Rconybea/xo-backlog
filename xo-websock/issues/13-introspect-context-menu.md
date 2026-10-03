@@ -496,3 +496,30 @@ stays (`/demo` keeps ticking).
   + ticker) and NOT red; the nine other browser tests pass (`expand.mjs` now
   checks there is no ticker box). ctest 49/49; sweep 73/73 build, 47 utest ok
   + 26 without.
+
+## Step 2, 2026-10-03 -- show / hide children
+
+Uncommitted, awaiting RC's review. The introspect page only.
+
+- A box's CHILDREN are the boxes it owns ("link" / "owns" edges). A ▸n / ▾
+  left of a box with children shows / hides them -- also ArrowRight /
+  ArrowLeft on a focused box, and the menu's "Show children (n)" / "Hide
+  children". `children_open` (box ids) is kept across refreshes; default
+  empty: ONLY the Webserver box, which is always shown. A box is drawn iff
+  every owner above it shows its children; edges with a hidden end are
+  DROPPED (RC). "Show all" / "Hide all" buttons beside Refresh.
+- Refs: joined against EVERY box, shown or not: to a hidden box "→
+  (hidden)" and no edge; drawn nowhere "→ (not drawn)".
+- Members stay on left-click; the label's ▸/▾ (members) became a trailing
+  " ⋯" while members are closed -- the triangle now means children.
+- Checked in headless chrome (`children.mjs`, scratch, real clicks and key
+  events): default only the server, toggle `▸6` (4 endpoints, 2 sessions),
+  no edges; clicking it shows the 6, toggle `▾`, members not opened;
+  ArrowRight on a session shows its sender and subscription (and the uses
+  edge), ArrowLeft hides them; a session-map ref to a hidden session reads
+  "→ (hidden)" with no edge, shown "→" with 2 member edges; the menu item;
+  Hide all -> only the server, Show all -> all 11 boxes, no overlaps. The
+  ten earlier browser tests now click "Show all" first (they waited for
+  edges, of which the default view has none); the menu test's expectations
+  follow the new "Hide children" item. Screenshot reviewed. ctest 49/49;
+  sweep 73/73 build, 47 utest ok + 26 without.
