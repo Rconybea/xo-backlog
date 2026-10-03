@@ -1010,7 +1010,7 @@ fall to SVG's default black fill. RC: give WsSessionRouter::Subscription
 
 ## Unquoted values for non-string types, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`).
+Umbrella `23a9817f`. The introspect page only (`introspect.js`).
 RC: atomic values whose type is not a string should drop the quotes, e.g.
 DynamicEndpoint::kind_.
 
