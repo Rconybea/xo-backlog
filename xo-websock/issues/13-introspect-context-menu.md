@@ -1113,3 +1113,36 @@ insufficiently interesting detail.
 - Checked: clean build, no warnings; ctest 49/49; `noticker.mjs` now checks
   no badges, no `app_holds` in the snapshot, `server.refcount` still in the
   json. All 14 browser tests pass.
+
+## The graph gets its own viewport and camera, 2026-10-03
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: after anchoring, parts of the page -- the controls at
+the top, the "last frame" json -- end up left of the viewport; "the graph
+should be drawn in its own canvas, so that it can have a coord transform
+applied to it separately from outside-the-graph display elements".
+
+- Cause -- a modelling error in "The box you click in stays put" above:
+  when the anchor had to move left / up, it scrolled the WHOLE PAGE
+  (`window.scrollTo`) and grew the svg so the page could scroll that far.
+  The page scroll stood in for a camera the graph didn't have; everything
+  else on the page moved with it.
+- Now: the svg is a fixed viewport -- full width, height filling the browser
+  window below the controls (RC), resized with the window. One group,
+  `g.camera`, holds edges and boxes and carries a d3.zoom transform: drag
+  the background to pan (a drag starting on a box is the box's), the wheel
+  to zoom (0.2..3), a new "Fit" button for the whole drawing (scale <= 1)
+  (RC: option (a), pan + zoom).
+- Anchoring moves the camera: `camera_target()` -- translate by (old - new
+  position) * k -- as a transition in step with the boxes' own move, same
+  duration and easing, so the anchor stays put on screen throughout. No
+  anchor: the camera stays (Refresh); Show all / Hide all / first draw reset
+  it to the origin. Gone: `shift`, `svg_min`, the page scroll, and the
+  clamping (negative coordinates are fine behind a camera).
+- Checked in headless chrome: `anchor.mjs` -- all its anchoring checks hold
+  through the camera; the page never scrolls and the controls never move;
+  a background drag of (-100, -50) pans the graph by exactly that, not the
+  page; a drag from a box does not pan; the wheel zooms (k 1 -> 1.5); Fit
+  puts the drawing inside the viewport; Show all resets the camera; the
+  viewport's bottom is within 30 px of the window's. All 14 browser tests
+  pass.
