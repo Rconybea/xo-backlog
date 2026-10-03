@@ -1,6 +1,6 @@
 # 03 — `TypeDescr::short_name()` for template types; `rp<T>`
 
-Status: done 2026-10-03 -- umbrella `9e251d5a`
+Status: done 2026-10-03 -- umbrella `9e251d5a`; CI test fix not yet committed
 Type: feature
 
 `TypeDescr` carries two names: `canonical_name()` (full, unique) and
@@ -86,3 +86,26 @@ which case a clash is cosmetic (IR readability) rather than wrong. Worth
 confirming before choosing a fix; if it matters, the obvious fix is to name
 LLVM structs from `canonical_name()` (unique), keeping `short_name()` for
 display.
+
+## CI: the test spelled gcc's anonymous namespace, 2026-10-03
+
+GitHub `cmake-docker`, clang job, red from `9e251d5a` on (gcc job green):
+
+```bash
+gh run view 37129032964 --log-failed | grep -A4 'ShortName.test.cpp:79'
+#   REQUIRE( Reflect::require<ShortNameProbe>()->canonical_name() == "xo::ut::{anonymous}::ShortNameProbe" )
+# with expansion:
+#   "xo::ut::(anonymous namespace)::ShortNameProbe" == "xo::ut::{anonymous}::ShortNameProbe"
+```
+
+A test bug, not a `make_short_name()` one: the other 19 assertions passed
+under clang, `(anonymous namespace)::` case included. Fix: build the
+expected canonical name from `type_name<ShortNameProbe>()` rather than
+spell it, as the other xo tests do. gcc: utest.reflect 259 assertions pass.
+Not run under clang locally (the local clang++, used for the source map,
+cannot link: cmake's compiler check fails) -- the CI clang job is the check.
+
+The same clang job had been failing earlier on an unrelated link error in
+xo-object2 (`RAllocator<..>::barrier_assign` undefined, e.g. run
+37098295886); CI builds xo-reflect first, so this test's failure has been
+masking it since `9e251d5a`. Expect it next. Not diagnosed yet.
