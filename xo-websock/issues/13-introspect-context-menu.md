@@ -1351,3 +1351,47 @@ not ref::Displayable (which derives from Refcount: wrong for a value type).
   ws_config_ opens to `port_: <port>`, `tls_flag_: false`, ...,
   `mount_origin_: "..."`. All 16 browser tests pass. `xo-build --sweep
   -j 8`: 73 attempted, 73 ok (build); 47 ok + 26 with no tests; `--sweep ok`.
+
+## Experiment: nested boxes, 2026-10-04
+
+Umbrella: not yet committed. The introspect page only (`introspect.js`,
+`index.html`). RC: try giving nested content (struct-valued members) its
+own box -- an edge from outside can then arrive at the nested object itself
+-- with holder and nested boxes inside an outline-only ELK box, so they
+stay close. RC: nested boxes shown like refs (2a); a group only when a box
+shows at least one nested box (3). Behind a "nested boxes" checkbox, off by
+default, so both layouts can be compared on the same data.
+
+- Spike first (elkjs 0.12, in the page): a compound node's children come
+  back relative to it; each edge carries `container` -- the frame of its
+  coordinates (`root`, or the group for an edge inside one). So absolute =
+  container offset + reported.
+- Model: `layout()` adds a `nested` box per struct-valued member
+  (`is_nested_struct`: members of its own; not a ref, array or ref map),
+  recursively, all in the top box's group; id = the holder's row key for
+  the member, so expanded / wanted keys carry over. A `nests` edge makes it
+  the holder's child (`is_ownership()` now covers link / owns / nests: the
+  triangle and menu treat nested boxes as children). `all_refs()` stops at
+  a nested struct and emits an edge to its box -- refs inside belong to it.
+  `member_rows()` draws such a member as a ref row, ▸ / ▾ (→).
+- ELK: `elk.hierarchyHandling: INCLUDE_CHILDREN`; `elk_children()` wraps a
+  box with drawn nested boxes as `grp:<box>` (padding 12); positions made
+  absolute; group outlines drawn under everything (`draw_groups()`,
+  moving / fading like boxes). Legend entry "nested struct".
+- Found on the first try: grey ownership edges back (server -> /hello,
+  /types ...) -- the endpoints' member edges now leave the nested UrlRouter
+  box, so the server had "no ref" to its children and the fallback ownership
+  edge stood in. Fixed: an owner reaches a child through its nested boxes
+  too (`within()`), and showing a child (triangle, menu, `show_box`) wants
+  that edge AND the chain down to the nested box it leaves (`child_edges()`).
+- Not (yet): array elements of structs still open in place; nested boxes all
+  share one colour (white / grey); anchoring, transitions and keep-in-view
+  with nested boxes on are untested beyond `nested.mjs`.
+- Checked in headless chrome (`nested.mjs`, new): off -- 14 boxes, no
+  groups; on + Show all -- url_router_, session_table_, ws_config_ and both
+  routers get boxes, every earlier box still drawn; each group outline
+  encloses its holder and nested boxes; UrlRouter's box receives edges from
+  the server and both session routers; no ownership fallback edges; the
+  server's url_router_ row ▾ (→), its ▾ / ▸ hide / show the box; nested
+  boxes are children; off again -- exactly the earlier boxes, no groups.
+  The 16 earlier browser tests pass unchanged (checkbox off).
