@@ -1479,6 +1479,9 @@ top-left corner.
 
 ## Edge decoration: direction, crossings, how a holder relates, 2026-10-04
 
+Committed in e2b095cc (arrowheads, rounded bends, casing) and 9c7b5ec2
+(exit markers, with the 25% shrink).
+
 RC wanted to show direction and make crossings readable, and chose
 options 1-3: arrowheads, rounded bends and casing. RC also asked for a mark
 where an edge leaves its box, to tell inclusion, ownership and reference
