@@ -1328,3 +1328,25 @@ RC: with WebsocketSink self-describing, draw sink boxes.
   Fit before real clicks (session 2 now below the viewport's bottom -- the
   click missed and the checks read a stale menu) and checks the button's
   drawn size (Fit zooms out). ctest 49/49; all 16 browser tests pass.
+
+## WebserverConfig opens on the page, 2026-10-04
+
+Umbrella: not yet committed (with the sink section above). RC: make
+WebserverConfig "displayable" -- clarified: openable on the page (1(a)),
+not ref::Displayable (which derives from Refcount: wrong for a value type).
+
+- WebserverConfig, a value class fully reflected, was printed by the
+  generic struct printer: its fields as plain json keys, no `_members_` --
+  so the Webserver's `ws_config_` row read `WebserverConfig` and could not
+  open. Considered (1b): the generic struct printer writing `_members_`
+  for every reflected struct -- deferred: it changes every reflected
+  struct's json everywhere (python, tests).
+- `JsonPrinter_WebserverConfig` (xo-websock, websock_json.cpp; befriended
+  by WebserverConfig): `_name_`, type keys, `_members_` port_, tls_flag_,
+  host_check_flag_, use_retry_flag_, mount_origin_. No `id`: a value,
+  printed inside its Webserver, no box of its own.
+- Checked: utest.websock (server members test) -- ws_config_'s value has
+  those five members, a default config's port 0, tls false, mount origin
+  "./mount-origin", no id; ctest 49/49. Headless chrome (`rows.mjs`):
+  ws_config_ opens to `port_: <port>`, `tls_flag_: false`, ...,
+  `mount_origin_: "..."`. All 16 browser tests pass.
