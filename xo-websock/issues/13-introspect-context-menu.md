@@ -1349,4 +1349,5 @@ not ref::Displayable (which derives from Refcount: wrong for a value type).
   those five members, a default config's port 0, tls false, mount origin
   "./mount-origin", no id; ctest 49/49. Headless chrome (`rows.mjs`):
   ws_config_ opens to `port_: <port>`, `tls_flag_: false`, ...,
-  `mount_origin_: "..."`. All 16 browser tests pass.
+  `mount_origin_: "..."`. All 16 browser tests pass. `xo-build --sweep
+  -j 8`: 73 attempted, 73 ok (build); 47 ok + 26 with no tests; `--sweep ok`.
