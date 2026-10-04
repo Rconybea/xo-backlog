@@ -1279,3 +1279,16 @@ centring the graph in the viewport.
 - Checked in headless chrome (`anchor.mjs`): after a Shift+wheel zoom and a
   pan, Center puts the drawing's centre within 1 px of the viewport's, zoom
   unchanged (k 2.27). `cdp_menu.mjs` passes.
+
+## First draw centred, 2026-10-03
+
+Umbrella: not yet committed (with the two sections above). RC: centre the
+diagram automatically when it is first drawn.
+
+- `camera_target()` (now returning `{t, instant}`): on the first draw, the
+  drawing's laid-out bounds centred in the viewport at scale 1, applied at
+  once (no transition: nothing on screen yet to move from). Show all / Hide
+  all still reset to top-left -- not asked; easy to centre too.
+- Checked in headless chrome (`anchor.mjs`): first draw, the drawing's
+  centre within 1 px of the viewport's, k = 1; a fresh-load screenshot
+  shows the Webserver box mid-viewport. All 14 browser tests pass.
