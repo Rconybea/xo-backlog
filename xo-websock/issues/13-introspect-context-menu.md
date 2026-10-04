@@ -1536,3 +1536,28 @@ apart. RC: keep "shares" separate, with an open circle for it.
   25%. They are now drawn at `start_scale` = 0.75 of their 12x10 viewBox,
   9x7.5 drawing units. Their outline is scaled up to match, so it stays as
   wide as the edge (1.4). edge_kinds.mjs still passes.
+
+## Edge colour by ref kind, 2026-10-04
+
+RC: try colouring edges by ownership, from black to light grey, with
+includes black and refers light grey.
+
+- Member edges are no longer all purple. A grey ramp, darker the closer the
+  holder holds its target, lives once as CSS variables on `:root` in
+  index.html:
+  - `--edge-includes` `#1a1a1a`;
+  - `--edge-owns` `#555555`;
+  - `--edge-shares` `#8c8c8c`;
+  - `--edge-refers` `#c4c4c4`.
+
+  Each `from-<kind>` class sets the stroke, `marker-end: arrow-<kind>` and
+  (for all but refers) `marker-start: start-<kind>`.
+- `define_arrowheads()` fills the per-kind arrowheads and exit markers with
+  `var(--edge-<kind>)`, so a colour has one source. The `-hot` exit
+  markers and `arrow-hot` stay orange, so hovering still works as before.
+  The green "uses" edges and the grey fallback edges are unchanged.
+- The legend's edge-kind samples take the same rules: colour, exit marker
+  and arrowhead.
+- Tests: edge_kinds.mjs now checks each kind's computed stroke, its
+  arrowhead (id and fill), the filled exit markers' fill and the open
+  circle's outline. All 18 browser tests pass.
