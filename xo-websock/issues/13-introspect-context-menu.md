@@ -1295,7 +1295,7 @@ diagram automatically when it is first drawn.
 
 ## Sink boxes; cycle breaking by model order, 2026-10-04
 
-Umbrella: not yet committed (together with RC's WebsocketSink
+Umbrella `a14dbcab` (together with RC's WebsocketSink
 SelfTaggingDisplayable change -- see .xo-backlog/xo-webutil/issues/01).
 RC: with WebsocketSink self-describing, draw sink boxes.
 
@@ -1331,7 +1331,7 @@ RC: with WebsocketSink self-describing, draw sink boxes.
 
 ## WebserverConfig opens on the page, 2026-10-04
 
-Umbrella: not yet committed (with the sink section above). RC: make
+Umbrella `a14dbcab` (with the sink section above). RC: make
 WebserverConfig "displayable" -- clarified: openable on the page (1(a)),
 not ref::Displayable (which derives from Refcount: wrong for a value type).
 
