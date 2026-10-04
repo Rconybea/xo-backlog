@@ -1,6 +1,6 @@
 # 01 — StreamReceiver is SelfTagging; the introspect page draws receivers
 
-Status: implemented 2026-10-03, umbrella not yet committed
+Status: done 2026-10-03 -- umbrella `d9ebe052`
 Type: feature
 
 RC: add StreamReceiver to the introspect diagram (it was not drawn: the
@@ -60,16 +60,28 @@ and a path to subclass members.
 
 ## Open
 
-- nix: `nix-build ci-nxfs.nix -A xo-webutil` fails -- not here, in
-  xo-callback: its CMake has required refcnt since `172ecfd3` (2026-09-27,
-  `xo_headeronly_dependency(${SELF_LIB} refcnt)`) but `pkgs/xo-callback.nix`
-  still has `xo-refcnt` commented out:
-  `nix-build ci-nxfs.nix -A xo-callback --no-out-link` -> "Could not find a
-  package configuration file provided by refcnt". Pre-existing; blocks
-  checking xo-webutil's nix build.
+- nix (resolved): `nix-build ci-nxfs.nix -A xo-webutil` failed -- not
+  here, in xo-callback: its CMake has required refcnt since `172ecfd3`
+  (2026-09-27, `xo_headeronly_dependency(${SELF_LIB} refcnt)`) but
+  `pkgs/xo-callback.nix` had `xo-refcnt` commented out ("Could not find a
+  package configuration file provided by refcnt"). RC uncommented it, in
+  `d9ebe052`; `nix-build ci-nxfs.nix -A xo-webutil --no-out-link` now
+  succeeds (2026-10-04).
 - `xo-cmake/etc/xo/subsystem-edges`: the configure's graph
   (`.build/subsystem-edges`) has three edges the committed list lacks:
   `xo-reflect xo-webutil` (this change), `xo-refcnt xo-callback` (the
   above), `xo-pyreflect xo-pywebsock` (earlier). subsystem-list already
   orders each pair correctly. Publish: `./reconfigure
   --capture-subsystem-edges`.
+
+## Follow-on (RC, 2026-10-04, uncommitted when recorded)
+
+RC made `WebsocketSink` a `reflect::SelfTaggingDisplayable` (was
+`ref::Displayable`) and reflected `WebsocketSinkImpl` in full (ancestor
+WebsocketSink; members sender, pjson, stream_name, sub_id, n_in_ev), with
+`self_tp()`; a test sink in xo-reactor2websock gained `self_tp()`; and two
+pessimizing `std::move`s around prvalues dropped in
+`xo-reflect/.../StructMember.hpp`. Checked: clean build (no warnings),
+ctest 49/49; a live snapshot's sink json unchanged in shape (its own
+`print_json` still prints it -- the new reflection does not take over); all
+15 browser tests pass.
