@@ -1292,3 +1292,39 @@ diagram automatically when it is first drawn.
 - Checked in headless chrome (`anchor.mjs`): first draw, the drawing's
   centre within 1 px of the viewport's, k = 1; a fresh-load screenshot
   shows the Webserver box mid-viewport. All 14 browser tests pass.
+
+## Sink boxes; cycle breaking by model order, 2026-10-04
+
+Umbrella: not yet committed (together with RC's WebsocketSink
+SelfTaggingDisplayable change -- see .xo-backlog/xo-webutil/issues/01).
+RC: with WebsocketSink self-describing, draw sink boxes.
+
+- `WebsocketSinkImpl::print_json` now writes `_members_` (JsonMembers):
+  `sender_` (a ref -- the sender is printed in full under its session),
+  `pjson_`, `stream_name_`, `sub_id_`, `n_in_ev_`. Its existing keys are
+  unchanged.
+- Page: each subscription with a sink owns a `sink` box (labelled "sink",
+  small, pale slate, legend entry `WebsocketSinkImpl`), hidden by default;
+  the subscription's `sink_` row is a drawn ref (▾ (→), an edge); the sink
+  box opens to its rows, `sender_` drawing an edge to the session's sender.
+  12px text for the small receiver and sink boxes, as sender / subscription.
+- Layering broke: with Show all and a sender box open, session 1 laid out
+  ABOVE the Webserver (y 43 vs 443) -- sink -> sender and sender -> server
+  back-edges outweighed the ownership edges' priority. Tried in the tab
+  (ELK options overridden, no file changed): ownership priority 1000 -- no
+  effect; cycleBreaking DEPTH_FIRST -- server on top, but the sender below
+  the sink; MODEL_ORDER -- server, sessions, sender just below its session,
+  sink below its subscription. Chose `elk.layered.cycleBreaking.strategy:
+  MODEL_ORDER`: ELK reverses edges pointing from a later box to an earlier
+  one in input order, and `layout()` lists parents before children -- so
+  ownership decides layering by construction.
+- Tests: `sink.mjs` (new): the sink's members listed; hidden by default,
+  shown by its subscription's triangle; sink_ ▾ (→) with an edge; the box
+  opens, sender_ ▾ (→) with an edge to the sender, stream_name_ "/demo/1";
+  pale slate, in the legend. Expectations moved: legend seven types; Show
+  all 14 boxes; sub_expand's sink_ a drawn ref (two edge ends, compared as
+  a set -- their order changed with the layout); router_expand picks the
+  session's edge into the sender (the sink's is a second); cdp_menu presses
+  Fit before real clicks (session 2 now below the viewport's bottom -- the
+  click missed and the checks read a stale menu) and checks the button's
+  drawn size (Fit zooms out). ctest 49/49; all 16 browser tests pass.
