@@ -1398,7 +1398,7 @@ default, so both layouts can be compared on the same data.
 
 ## Nested boxes permanent, 2026-10-04
 
-RC: "Let's make the experiment permanent". The "nested boxes" checkbox and
+Committed in 3d0813ff. RC: "Let's make the experiment permanent". The "nested boxes" checkbox and
 its flag are gone; every draw lays out nested boxes.
 
 - Latent in the experiment, found once always on: array elements that are
