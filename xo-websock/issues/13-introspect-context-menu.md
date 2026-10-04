@@ -1436,3 +1436,43 @@ its flag are gone; every draw lays out nested boxes.
   scrolls; I did not dig into why the missed click caused the scrolling.
 - Checked in headless chrome: all 17 browser tests pass (rows and receiver
   with --src-tree, the rest without).
+
+## Nested boxes get a colour per type; legend on the canvas, 2026-10-04
+
+RC: nested children have their own boxes, so each needs a colour, as the
+parents have. Also: move the legend onto the canvas and list it
+vertically. RC chose an automatic palette and a legend fixed in the
+top-left corner.
+
+- Colour: `nested_colour(type)` gives each canonical type a {fill, stroke}
+  from `nested_palette` (8 pale fills no other kind uses: green, peach,
+  cyan, olive, periwinkle, mauve, sage, sand). A type gets its colour the
+  first time it appears, and the page keeps it, so a refresh never repaints
+  and a new nested type needs no CSS. The colour is an inline style on the
+  box's rect. Boxes keep kind `nested`; the CSS `.nested` rule (white/grey)
+  is only the fallback.
+- Legend: `g.legend` in the svg, outside `g.camera`, so pan and zoom leave
+  it alone. It sits over the drawing, 8px in from the viewport's top-left,
+  on a white panel at 85% opacity. One entry per row: swatch, short type,
+  and the canonical type as tooltip. The 7 kinds come first, then one entry
+  per nested type in the order they first appear; the old "nested struct"
+  entry is gone, and so is the `#legend` div above the graph.
+- Camera: `legend_w` (the panel's width plus margins) is a column the
+  drawing leaves free when the camera is placed. Fit, Center, the
+  first-draw centring and the reset (Show all) all keep the drawing right
+  of it. Panning can still slide boxes under the legend.
+- Seen in a screenshot, not changed: some nested colours sit close to
+  existing kinds. WsSessionTable's cyan is near IntrospectReceiver's teal,
+  and WsSessionRouter's olive is near the sender's beige.
+- Checked in headless chrome (noticker extended):
+  - the legend lists the 7 types, then WebserverConfig, UrlRouter,
+    WsSessionTable<…> and WsSessionRouter;
+  - entries form one column;
+  - the 4 nested colours are distinct and match no parent kind's colour;
+  - every nested box matches its swatch, and both routers share one
+    colour;
+  - the panel stays at the corner, same size, under a pan + zoom;
+  - after Fit the drawing starts right of the legend.
+
+  anchor's first-draw, Center and reset checks now measure from the
+  legend's column. All 17 browser tests pass.
