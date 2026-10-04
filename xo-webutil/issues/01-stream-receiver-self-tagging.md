@@ -74,7 +74,7 @@ and a path to subclass members.
   orders each pair correctly. Publish: `./reconfigure
   --capture-subsystem-edges`.
 
-## Follow-on (RC, 2026-10-04, uncommitted when recorded)
+## Follow-on (RC, 2026-10-04) -- umbrella `a14dbcab`
 
 RC made `WebsocketSink` a `reflect::SelfTaggingDisplayable` (was
 `ref::Displayable`) and reflected `WebsocketSinkImpl` in full (ancestor
