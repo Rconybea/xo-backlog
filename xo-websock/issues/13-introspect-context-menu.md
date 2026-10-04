@@ -1561,3 +1561,27 @@ includes black and refers light grey.
 - Tests: edge_kinds.mjs now checks each kind's computed stroke, its
   arrowhead (id and fill), the filled exit markers' fill and the open
   circle's outline. All 18 browser tests pass.
+
+## Shared entry port: the strongest kind on top, 2026-10-04
+
+Problem: every edge into a box enters at its one port, so the edges overlap
+on their last stretch. The edge drawn last won: its line, casing and
+arrowhead covered the rest. That order was ELK's output order, so the
+trunk's colour was arbitrary. RC asked whether the colour could be
+chosen, and chose option 1, "strongest on top", over one entry port per
+kind.
+
+- `order_edges()` sorts the edge groups by `edge_rank`:
+  - non-member edges (uses, fallback ownership) at the bottom;
+  - then refers < shares < owns < includes;
+  - the sort is stable, so equal ranks keep their order.
+
+  It runs after each edge join, and in `highlight_ref` when the hover
+  ends: hovering still raises the edge, and leaving restores rank order.
+- Example: three edges enter the UrlRouter box. The server's includes edge
+  (black) now lies over both routers' refers edges (light grey), so the
+  trunk and arrowhead read black.
+- Tests: edge_kinds.mjs checks that the DOM order is non-decreasing in rank,
+  that the UrlRouter's three incoming edges stack as refers, refers,
+  includes, and that hover raises an edge and leaving restores the order.
+  All 18 browser tests pass.
