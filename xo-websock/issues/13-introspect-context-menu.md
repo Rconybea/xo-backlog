@@ -1395,3 +1395,44 @@ default, so both layouts can be compared on the same data.
   server's url_router_ row ▾ (→), its ▾ / ▸ hide / show the box; nested
   boxes are children; off again -- exactly the earlier boxes, no groups.
   The 16 earlier browser tests pass unchanged (checkbox off).
+
+## Nested boxes permanent, 2026-10-04
+
+RC: "Let's make the experiment permanent". The "nested boxes" checkbox and
+its flag are gone; every draw lays out nested boxes.
+
+- Latent in the experiment, found once always on: array elements that are
+  structs were treated as nested too. `nests(m)` now requires a declared
+  member (`_canonical_type_` present) whose value has members and is not a
+  ref, array or ref map. Array elements still open in place.
+- Ownership follows the boxes (RC chose re-parenting): `reparent_via_nested()`
+  makes a child that its owner reaches only through a nested box's ref the
+  child of that nested box. A child the owner refs directly stays (a
+  session keeps its sender). Result:
+  - server -> ws_config_, url_router_, session_table_ (▸3, was ▸6);
+  - url_router_ -> the endpoints;
+  - session_table_ -> the sessions;
+  - a session's router_ -> its subscription.
+
+  This fixed a bug the experiment had: the UrlRouter box's menu offered
+  no children at all, and the server double-counted (▸9: 3 nested boxes plus
+  6 reached through them). Showing a deep box still pulls in the whole path.
+  ELK's layering still uses the server's own link/owns edges.
+- Tests rewritten for the always-on layout (scratchpad .mjs):
+  - router_expand: router_ is its own box; the sender has three incoming
+    edges (session, router, sink), not merged.
+  - visibility: the counts and menus above.
+  - rows: on the UrlRouter and WebserverConfig boxes. Live rows now nest at
+    most 2 deep (depth 0-1), so the separator-step check needs 2 depths,
+    not 3.
+  - expand: the injected `nested_` struct is a box.
+  - cdp_menu: the "Hide children" count comes from the box's `n_children`.
+  - nested: no off/on comparison.
+- anchor: the wider layout put session 1's menu button past the viewport's
+  right edge (x 1444 of 1437). The test's real click missed, landing outside
+  the svg, and every later Shift-drag near the window bottom then scrolled
+  the page by 35px. That broke "dragging back" and "viewport fills the
+  window". The test now presses Fit first. After the fix the page no longer
+  scrolls; I did not dig into why the missed click caused the scrolling.
+- Checked in headless chrome: all 17 browser tests pass (rows and receiver
+  with --src-tree, the rest without).
