@@ -1266,3 +1266,16 @@ redundant; revisit if colours prove not enough).
   (Twice now a test printed nothing in a batch run and passed alone, twice
   over -- transitions.mjs here, visibility.mjs before: the harness, not the
   page, not investigated.)
+
+## "Center" button, 2026-10-03
+
+Umbrella: not yet committed (with the previous section). RC: a button
+centring the graph in the viewport.
+
+- `#center`, after Fit: at the current zoom, the camera moves (animated,
+  as Fit) so the drawing's centre -- its laid-out bounds' -- is at the
+  viewport's centre. A page camera move, so not held to "keep a box in
+  view": zoomed far in, the centre can be empty space, no box in sight.
+- Checked in headless chrome (`anchor.mjs`): after a Shift+wheel zoom and a
+  pan, Center puts the drawing's centre within 1 px of the viewport's, zoom
+  unchanged (k 2.27). `cdp_menu.mjs` passes.
