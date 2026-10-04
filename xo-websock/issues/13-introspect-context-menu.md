@@ -1476,3 +1476,56 @@ top-left corner.
 
   anchor's first-draw, Center and reset checks now measure from the
   legend's column. All 17 browser tests pass.
+
+## Edge decoration: direction, crossings, how a holder relates, 2026-10-04
+
+RC wanted to show direction and make crossings readable, and chose
+options 1-3: arrowheads, rounded bends and casing. RC also asked for a mark
+where an edge leaves its box, to tell inclusion, ownership and reference
+apart. RC: keep "shares" separate, with an open circle for it.
+
+- Arrowheads: `define_arrowheads()` adds svg markers, one per edge colour
+  (member purple, hot orange, uses green, fallback grey). index.html sets
+  them per class with `marker-end`. Their size is in drawing units, so the
+  3px hot stroke doesn't grow them.
+- Rounded bends: `rounded_path(pts, 6)` draws each bend as a quadratic
+  curve, of radius at most 6 and less on short segments. The last segment
+  stays straight, for the arrowhead.
+- Casing: each edge is now a `g.edge-g` holding a `path.casing` (5px, the
+  graph's background colour) and then the edge. Where a later edge crosses
+  an earlier one, the earlier shows a gap. The fades run on the group,
+  and `highlight_ref` raises the group. Inside a group's grey panel the
+  casing shows as a faint lighter halo.
+- Exit markers (`marker-start`): `ref_kind()` reads the declared canonical
+  type; an element uses its container's type, and the outermost smart
+  pointer wins:
+
+  | type | kind | mark |
+  |---|---|---|
+  | nested struct (by value) | includes | ■ |
+  | `std::unique_ptr` | owns | ◆ |
+  | `intrusive_ptr` (rp), `std::shared_ptr` | shares | ○ |
+  | anything else (T*, T&) | refers | none |
+
+  Merged parallel edges take the strongest kind. Each edge's path gets a
+  `from-<kind>` class, and its tooltip ends with "(kind)". The legend
+  lists the four kinds under the colours, as sample lines (`path.sample`,
+  deliberately not `.edge`: the edge lookups would otherwise find them).
+- What the live snapshot gives, checked via `layout(last_event)`:
+  - includes: ws_config_, url_router_, session_table_, router_;
+  - owns: session_map_ elements, subscription_v_ elements;
+  - shares: http_map_/stream_map_ elements, receiver_, every sender_,
+    endpoint_, sink_;
+  - refers: the routers' url_router_ (const UrlRouter&) and the sender's
+    target_ (WebserverImpl*; never drawn, since it points into the
+    Webserver).
+- Tests: `edge_kinds.mjs` (new) checks:
+  - each drawn edge's kind against the table above;
+  - the computed marker-start per kind, and that refers has none;
+  - the arrowhead;
+  - that both markers turn orange on hover;
+  - the legend block's order and placement;
+  - the tooltip.
+
+  transitions now reads the group's opacity, and visibility's tooltip
+  check expects the kind suffix. All 18 browser tests pass.
