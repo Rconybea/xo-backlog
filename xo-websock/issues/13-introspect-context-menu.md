@@ -1236,7 +1236,7 @@ until the transition catches up.
 
 ## Legend: one colour per C++ type, 2026-10-03
 
-Umbrella: not yet committed. The introspect page only (`introspect.js`,
+Umbrella `e870e482`. The introspect page only (`introspect.js`,
 `index.html`). RC first proposed showing each box's short type inside it
 (a small grey line above the label, the menu button beside it); then,
 before any code: a legend pairing each colour with its short type instead.
@@ -1269,7 +1269,7 @@ redundant; revisit if colours prove not enough).
 
 ## "Center" button, 2026-10-03
 
-Umbrella: not yet committed (with the previous section). RC: a button
+Umbrella `e870e482`. RC: a button
 centring the graph in the viewport.
 
 - `#center`, after Fit: at the current zoom, the camera moves (animated,
@@ -1282,7 +1282,7 @@ centring the graph in the viewport.
 
 ## First draw centred, 2026-10-03
 
-Umbrella: not yet committed (with the two sections above). RC: centre the
+Umbrella `e870e482`. RC: centre the
 diagram automatically when it is first drawn.
 
 - `camera_target()` (now returning `{t, instant}`): on the first draw, the
