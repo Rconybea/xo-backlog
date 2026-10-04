@@ -1529,3 +1529,7 @@ apart. RC: keep "shares" separate, with an open circle for it.
 
   transitions now reads the group's opacity, and visibility's tooltip
   check expects the kind suffix. All 18 browser tests pass.
+- Follow-up, RC: the exit markers were a little large, so shrink them by
+  25%. They are now drawn at `start_scale` = 0.75 of their 12x10 viewBox,
+  9x7.5 drawing units. Their outline is scaled up to match, so it stays as
+  wide as the edge (1.4). edge_kinds.mjs still passes.
