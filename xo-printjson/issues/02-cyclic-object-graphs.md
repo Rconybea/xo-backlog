@@ -1,6 +1,6 @@
 # 02 — printjson does not terminate on a cyclic object graph
 
-Status: open (design decided; steps -1, 0, 1 done -- umbrella `c14e166e`, `a6daeff6`)
+Status: open (design decided; steps -1, 0, 1, 2 done -- umbrella `c14e166e`, `a6daeff6`, `19863049`)
 Type: bug
 
 `PrintJson::print_aux` recurses into children with no record of what it has
@@ -279,6 +279,57 @@ As planned, with these specifics:
   - the 19 introspect browser tests, which pin the websock json in detail;
   - `xo-build --sweep`: 73 subsystems build, and every subsystem's tests
     pass.
+
+### Step 2 done, 2026-10-04 -- umbrella `19863049`
+
+- `JsonPrintState::print` counts how deeply calls nest. An RAII
+  `DepthScope` decrements the count on the way out, including when a
+  printer throws. A call that would go past `max_depth()` reaches
+  `abort_too_deep`: it prints a diagnosis (the limit and the type being
+  printed), then `xo::print_backtrace`, then the diagnosis again below
+  the backtrace, and aborts.
+
+  The message says "cyclic object graph, or graph nested deeper than this
+  limit". Until step 3, every cycle reaches the limit; sharpen the message
+  then. RC rewrote it with `xo::pp::tostr`, not `std::string` `operator+`:
+  a standing preference.
+- The limit:
+  - `PrintJson::c_default_max_depth = 1000`, with
+    `max_depth()` / `assign_max_depth()` on `PrintJson`;
+  - `PrintJsonConfig::max_depth_` and `with_max_depth()`, which
+    `PrintJsonAppcx` applies to the singleton.
+
+  Depth counts `JsonPrintState::print` calls in progress, so a struct
+  holding a pointer to a struct nests two deep.
+- Why 1000: a temporary probe, deleted afterwards, measured about 208
+  bytes of stack per level in the debug build (416 per linked node, which
+  is 2 levels). So 1000 levels is about 210 KB: 2.4x headroom under
+  macOS's 512 KB secondary-thread stack (websock serves on one), and 40x
+  under Linux's 8 MB.
+- `PrintJson`'s class comment states the contract so far: the depth abort,
+  and that a printer recurses only through its state.
+- **The plan's ctest `WILL_FAIL` does not work.** Measured in a throwaway
+  project (cmake 3.31): ctest reports an aborting test as "Subprocess
+  aborted", a failure, under both `WILL_FAIL` and
+  `PASS_REGULAR_EXPRESSION`. So the death tests fork, inside Catch2
+  (`utest/PrintJsonCycle.test.cpp`, `[cycle]`):
+  - the child restores the default `SIGABRT` handler (otherwise Catch2's
+    own handler reports a failed test from the child) and sends its
+    stderr into a pipe;
+  - the parent reads the pipe dry before `waitpid`, since a backtrace
+    can outgrow the pipe buffer;
+  - the parent then checks for `SIGABRT` and the diagnosis.
+- Tests:
+  - a two-node chain within a limit of 4, exact output;
+  - the same chain under a limit of 3, which aborts;
+  - a two-node cycle at the default limit, which aborts;
+  - a self-loop, which aborts.
+
+  The cycle tests' expectations change in step 3, when cycles print as
+  `_ref_`. Each death test takes about 1.5 s, nearly all of it the
+  backtrace of about 2000 frames.
+- Checked: ctest 49 / 49; `xo-build --sweep`: 73 subsystems build, and
+  every subsystem's tests pass.
 
 **Done when** (unchanged, made concrete): a cyclic graph prints finite
 output, with each object once; `PrintJson.hpp` states the contract; tests
