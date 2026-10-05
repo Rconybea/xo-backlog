@@ -242,6 +242,63 @@ Steps -1 and 0 landed together in umbrella `c14e166e`.
    - Add tests for a two-node `rp<>` cycle, a self-loop and a diamond, plus
      the existing expected outputs updated for `_id_`.
 
+### Identity map, decided 2026-10-04 (for step 3)
+
+`JsonPrintState` must answer two questions:
+1. Has this object been printed already in this print? If so, emit
+   `{"_ref_": id}`.
+2. What is its id? Both a full print (`"_id_"`) and an explicit
+   `member_ref` need it, and the ref can come first.
+
+Two facts constrain the design:
+- **Distinct objects can share an address.** A struct and its first
+  by-value member do, and both print as json objects.
+- **A `member_ref` can know only an address.** The websock printers name a
+  target by `dynamic_cast<void const *>(p)`, its most-derived address,
+  through a base-class pointer (5 sites), so they cannot say what type it
+  will print as.
+
+```cpp
+struct ObjectEntry {
+    std::uint32_t id_;   // "_id_" / "_ref_": 1, 2, 3 .. in order of first mention
+    TypeId type_;        // the type it printed as; invalid while only referred to
+    bool printed_;       // printed in full yet?
+};
+std::unordered_map<void const *, ObjectEntry> objects_;   // key: address
+std::uint32_t next_id_ = 1;
+```
+
+- **Printing an object** looks up its address:
+  - absent: add an entry (new id, its type, printed), and print in full
+    with `_id_`;
+  - present, printed, same type: a revisit, so emit `{"_ref_": id}`;
+  - present but only referred to: claim the entry (record the type, mark
+    it printed) and print in full, under the id the ref already used;
+  - present, printed, a different type: an inner subobject at its
+    parent's address. Print it in full with no `_id_` and no dedupe. A
+    ref names a whole object, so nothing refers to it; a cycle through it
+    still meets the depth limit.
+- **`member_ref(p)`** adds an entry (new id, not printed) if there is
+  none, and emits `{"_ref_": id}`.
+
+RC's decisions:
+- **(a) Ids are per-print sequence numbers, not addresses.** Output becomes
+  deterministic, so tests can pin exact strings and prints of an unchanged
+  graph diff cleanly, and addresses stop leaking into the json. introspect
+  joins ids only within one snapshot (it rebuilds `box_of_id` on every
+  draw). Ids become json numbers, so introspect's id keys change type;
+  `json_id()` goes.
+- **(b) The key is the address alone.** The type is recorded, and the
+  first object printed at an address owns the entry. Keying on (address,
+  type) would break `member_ref` for a target not yet printed, since the
+  ref site knows only a base-class view of it.
+- **(c) The container is `std::unordered_map` for now, behind the
+  `JsonPrintState` interface.** The intended container is xo-arena's
+  `DArenaHashMap`, freed whole when the print ends, once a pool of
+  temporary arenas amortizes the cost of mapping an arena per print
+  (introspect prints on every tick). That is a follow-up, not part of
+  step 3.
+
 ### Step 1 done, 2026-10-04 -- umbrella `a6daeff6`
 
 As planned, with these specifics:
