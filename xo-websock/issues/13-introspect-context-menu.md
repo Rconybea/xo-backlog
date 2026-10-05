@@ -1694,3 +1694,29 @@ viewport area right of the legend. RC then asked:
   - anchor's Center check now measures against the whole viewport.
 
   All 19 browser tests pass.
+
+## Show all, Hide all, first draw: centred, 2026-10-04
+
+RC asked how the starting location is picked. Answered from
+`camera_target()`:
+- first draw: centred right of the legend, at 100%, at once;
+- Show all / Hide all (`camera_reset`): top-left, just right of the
+  legend, at 100%;
+- a click: the anchor box stays put;
+- otherwise: the camera stays.
+
+RC: "For now let's have show all, hide all, first draw all center."
+
+- `centred(size, k)` gives the camera that centres a drawing of `size` at
+  zoom `k` in the viewport (`view_size()`), with the legend not counted.
+  Center uses it at the current zoom. The first draw uses it at k = 1,
+  instantly; a reset uses it at k = 1, animated. Only Fit still reserves
+  the legend's column (`legend_w`).
+- A drawing wider than the viewport, centred at 100%, has both sides off
+  screen. Two more tests made real clicks there after Show all
+  (session_expand opening session 1, expand opening the server) and now
+  press Fit first. expand's "box grew" check compared on-screen heights,
+  so it now divides by the zoom.
+- anchor's first-draw check now measures from the viewport's inner centre.
+  Show all is checked as centred at 100%, and so is Hide all, starting from
+  a pan to (-200, 90) at 60%. All 19 browser tests pass.
