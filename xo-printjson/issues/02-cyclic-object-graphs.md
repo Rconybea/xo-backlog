@@ -1,6 +1,6 @@
 # 02 — printjson does not terminate on a cyclic object graph
 
-Status: open (design decided, not implemented)
+Status: open (design decided; steps -1, 0 done -- umbrella `c14e166e`)
 Type: bug
 
 `PrintJson::print_aux` recurses into children with no record of what it has
@@ -171,6 +171,8 @@ path, and any printer that recurses on a pointer, has no such guard.
 ### Path
 
 Each step is one umbrella commit, building and passing its tests on its own.
+
+Steps -1 and 0 landed together in umbrella `c14e166e`.
 
 -1. **Re-entry guard.** `print_tp` and `validate_tp` hold an `EntryGuard`
     for as long as they run. Every public entry point funnels into one of
