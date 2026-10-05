@@ -1,6 +1,6 @@
 # 02 — printjson does not terminate on a cyclic object graph
 
-Status: open (design decided; steps -1, 0 done -- umbrella `c14e166e`)
+Status: open (design decided; steps -1, 0, 1 done -- umbrella `c14e166e`, `a6daeff6`)
 Type: bug
 
 `PrintJson::print_aux` recurses into children with no record of what it has
@@ -241,6 +241,44 @@ Steps -1 and 0 landed together in umbrella `c14e166e`.
      printers, and in xo-websock's introspect.js and its browser tests.
    - Add tests for a two-node `rp<>` cycle, a self-loop and a diamond, plus
      the existing expected outputs updated for `_id_`.
+
+### Step 1 done, 2026-10-04 -- umbrella `a6daeff6`
+
+As planned, with these specifics:
+
+- `JsonPrintState` (`JsonPrintState.hpp` / `.cpp`) holds the output and
+  the printer table. It offers:
+  - `p_os()`, the output;
+  - `has_printer(td)`;
+  - `print(tp)`. This now holds `print_aux`'s dispatch, and the generic
+    pointer / vector / struct printers moved with it.
+
+  `PrintJson::print_aux` is gone. `print_tp` makes the state, inside the
+  re-entry guard. Printer lookup is a private `PrintJson::lookup_printer`,
+  reached by `JsonPrintState` as a friend.
+- `JsonPrinter::print_json(TaggedPtr, JsonPrintState &)`. The constructor
+  argument, `pjson()`, `pjson_` and the uncalled `assign_pjson` are gone.
+  `check_recover_native` and `report_internal_type_consistency_error` take
+  the state. `JsonMembers(JsonPrintState &)` replaces `(pjson, p_os)`.
+- The 26 overrides were rewritten by a script that scopes each change to
+  one `print_json` body, then reviewed by hand. Each body changes only in:
+  - `std::ostream * p_os = state.p_os();` at its top;
+  - `state.print(..)` for recursion;
+  - `&state` captured by its lambdas.
+- `WebsocketSink::print_json(json::JsonPrintState &)`. It prints `this`,
+  so it takes no `TaggedPtr`.
+- Left as is, for now:
+  - **The `JsonPrintState` constructor is public.** `JsonMembers.test.cpp`
+    makes states directly. Nothing stops a printer making one; its doc
+    says not to, and the re-entry guard does not catch it.
+  - **`validate_tp` is unchanged.** It walks the graph with reflect's own
+    traversal, not through printers. It joins the state in step 3, with
+    identity.
+- Output unchanged, checked three ways:
+  - ctest: 49 / 49;
+  - the 19 introspect browser tests, which pin the websock json in detail;
+  - `xo-build --sweep`: 73 subsystems build, and every subsystem's tests
+    pass.
 
 **Done when** (unchanged, made concrete): a cyclic graph prints finite
 output, with each object once; `PrintJson.hpp` states the contract; tests
