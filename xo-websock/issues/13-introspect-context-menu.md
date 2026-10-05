@@ -1720,3 +1720,39 @@ RC: "For now let's have show all, hide all, first draw all center."
 - anchor's first-draw check now measures from the viewport's inner centre.
   Show all is checked as centred at 100%, and so is Hide all, starting from
   a pan to (-200, 90) at 60%. All 19 browser tests pass.
+
+## Fit: as large as fits, centred, clear of the legend, 2026-10-04
+
+RC: Fit should make the drawing as large as possible without drawing
+outside the viewport. The only time it should differ from Center is when
+the drawing would then overlap the legend.
+
+- Fit used to place the drawing top-left, right of the legend, at a zoom
+  of at most 1. `fit_camera(size)` now does this:
+  - it takes the largest k that fits the whole viewport, capped at the
+    zoom's maximum (3), and centres the drawing;
+  - if the legend is hidden, or the centred drawing already lies right of
+    or below the legend, that is the answer, the same as Center at that
+    zoom;
+  - otherwise it slides the drawing clear, to `x = legend_w` or
+    `y = legend_h`, if the slack on that axis allows;
+  - otherwise it shrinks: it fits into the area right of the legend or the
+    area below it, whichever gives the larger k, centred there.
+
+  `legend_h` (panel plus margins, 0 while hidden) joins `legend_w`.
+- Checked in headless chrome:
+  - anchor: after Fit, the sheet lies inside the viewport, fills it in one
+    dimension (or the area beside the legend, or k = 3), and is clear of
+    the legend;
+  - noticker: the sheet is clear of the legend panel, and with the legend
+    hidden Fit lands exactly where `centred()` would;
+  - noticker also calls `fit_camera()` on made-up sizes in a 1435x835
+    viewport (legend 316x300):
+    - wide: fills the width, centred;
+    - tall: fills the height, centred;
+    - 0.7W x H: stays at k 1 and slides to x = 316;
+    - W x H: shrinks to k 0.78 right of the legend (below would give
+      0.64);
+    - 20x10: k = 3.
+
+  All 19 browser tests pass.
