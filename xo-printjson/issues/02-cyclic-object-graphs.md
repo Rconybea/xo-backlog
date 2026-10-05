@@ -174,12 +174,25 @@ Three umbrella commits, each building and passing its tests on its own.
 
 1. **Signature.**
    - Add `JsonPrintState`.
-   - Change `print_json` to take it, in all 23 overrides:
-     - xo-printjson: 11, plus 2 in `JsonPrinter.hpp`;
-     - xo-websock: 9;
+   - Change `print_json` to take it, in all 26 `JsonPrinter` overrides:
+     - xo-printjson: 11 in `PrintJson.cpp`, plus `AsStringJsonPrinter` in
+       `JsonPrinter.hpp`;
+     - xo-websock: 10 (`Webserver.cpp` 4, `websock_json.cpp` 3,
+       `WsSessionRouter.cpp` 2, `UrlRouter.cpp` 1);
      - xo-kalmanfilter: 2;
      - xo-object2: 1;
      - xo-stringtable2: 1.
+
+     Also xo-websock's own virtual
+     `WebsocketSink::print_json(PrintJson const &, std::ostream *)`, which
+     a `websock_json.cpp` printer calls: it takes the state too.
+
+     Count with:
+
+     ```bash
+     grep -rn --include=*.hpp --include=*.cpp -E 'print_json\s*\(\s*(xo::)?(reflect::)?TaggedPtr' . \
+         | grep -v '^./.build'   # 27 lines: 26 overrides + the pure virtual
+     ```
    - Retire `print_aux` from the public API. `JsonMembers` takes the state.
 
    The output does not change, so the existing tests pin the change.
