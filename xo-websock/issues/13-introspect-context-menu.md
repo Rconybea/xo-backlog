@@ -1588,6 +1588,8 @@ kind.
 
 ## "uses" edges dropped, 2026-10-04
 
+Committed in 5345640f.
+
 RC: drop the "uses" feature, the green dashed subscription -> endpoint
 edge. It repeated the subscription's endpoint_ member edge, which already
 shows the same link (a shares edge, ○).
