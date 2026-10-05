@@ -170,10 +170,42 @@ path, and any printer that recurses on a pointer, has no such guard.
 
 ### Path
 
-Three umbrella commits, each building and passing its tests on its own.
+Each step is one umbrella commit, building and passing its tests on its own.
+
+-1. **Re-entry guard.** `print_tp` and `validate_tp` hold an `EntryGuard`
+    for as long as they run. Every public entry point funnels into one of
+    them: `print<T>` and both `print_obj` overloads into `print_tp`,
+    `validate_obj` into `validate_tp`. If another entry point is already
+    active on the thread, the guard calls `xo::print_backtrace` and then
+    `std::abort()`. That means a json printer started a print within a
+    print, instead of recursing via `print_aux`.
+    - The counter is `thread_local`. RC chose this over a plain flag (a
+      legitimate print on another thread would look like re-entry, and it
+      would be a data race on a `const` entry point) and over an atomic
+      owner-thread id (overlapping prints on two threads would go
+      unchecked). It is an assertion only: no printing reads it.
+    - It compiles only under `XO_PRINTJSON_REENTRY_CHECK`, defined
+      PRIVATE on the printjson library (`src/printjson/CMakeLists.txt`).
+      RC: on for now, to be turned off later. The guard lives in
+      `PrintJson.cpp` and the header has no `#if`, so translation units
+      cannot disagree about it.
+0. **Every printer recurses via `print_aux`.** With -1 alone, three test
+   binaries abort: utest.printjson, utest.stringtable2, utest.object2.
+   The guard reports these five call sites, the same five that
+   `grep -rn 'pjson()->print\(\|pjson()->print_tp('` finds:
+   - `PrintJson.cpp`, `JsonPrinter_TaggedPtr`: `print_tp(*x, ..)`;
+   - `EigenUtil.cpp`, the vector and matrix element loops: `print(..)`;
+   - `SetupObject2.cpp`, `DFloatJsonPrinter`: `print(x->value(), ..)`;
+   - `SetupStringtable2.cpp`, `DStringJsonPrinter`: `print(string_view(..), ..)`.
+
+   Each becomes `print_aux(Reflect::make_tp(&v), ..)`. A temporary (a
+   double, a string_view) is bound to a local first. -1 and 0 land
+   together, or 0 first, so no commit has a red test.
 
 1. **Signature.**
    - Add `JsonPrintState`.
+   - Drop `JsonPrinter(PrintJson const *)`, `pjson()` and the uncalled
+     `assign_pjson`: the state carries the printer table.
    - Change `print_json` to take it, in all 26 `JsonPrinter` overrides:
      - xo-printjson: 11 in `PrintJson.cpp`, plus `AsStringJsonPrinter` in
        `JsonPrinter.hpp`;
