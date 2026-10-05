@@ -1585,3 +1585,18 @@ kind.
   that the UrlRouter's three incoming edges stack as refers, refers,
   includes, and that hover raises an edge and leaving restores the order.
   All 18 browser tests pass.
+
+## "uses" edges dropped, 2026-10-04
+
+RC: drop the "uses" feature, the green dashed subscription -> endpoint
+edge. It repeated the subscription's endpoint_ member edge, which already
+shows the same link (a shares edge, ○).
+
+- `layout()` no longer adds `edge(sid, ep, "uses")`. Removed with it: the
+  `endpoint_node` map (it existed only for that edge), the
+  `path.edge.uses` CSS, and the `arrow-uses` marker. Without the uses
+  edges ELK lays the graph out a little differently.
+- cdp_menu.mjs runs in headless chrome's default 780x493 window, and after
+  Show all the server box now landed past the viewport's right edge (x 1073
+  of 741), so the right-click missed. The test now presses Fit after Show
+  all. All 18 browser tests pass.
