@@ -1,4 +1,4 @@
-# 04 -- reflect std::atomic, std::unique_ptr, enums, std::deque
+# 04 -- reflect std::atomic, std::unique_ptr, std::deque
 
 Status: open
 Type: feature
@@ -21,7 +21,8 @@ Proposed:
 Each changes how existing generic output renders these types: check the
 consumers per type.
 
-Out of scope: maps (`issues/05`); `std::function` and `std::regex`, which
+Out of scope: enums, split out to `issues/06` (RC, 2026-10-05); maps
+(`issues/05`); `std::function` and `std::regex`, which
 have nothing structural to show (keep a summary printer, or reflect them
 as presence / capture count, to decide).
 
