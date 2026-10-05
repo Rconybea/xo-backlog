@@ -1,6 +1,6 @@
 # 02 — printjson does not terminate on a cyclic object graph
 
-Status: open (design decided; steps -1, 0, 1, 2 done -- umbrella `c14e166e`, `a6daeff6`, `19863049`)
+Status: done 2026-10-05 -- umbrella `c14e166e`, `a6daeff6`, `19863049`, `e7c6a9b6` (follow-ups below)
 Type: bug
 
 `PrintJson::print_aux` recurses into children with no record of what it has
@@ -387,6 +387,127 @@ As planned, with these specifics:
   backtrace of about 2000 frames.
 - Checked: ctest 49 / 49; `xo-build --sweep`: 73 subsystems build, and
   every subsystem's tests pass.
+
+### Step 3 done, 2026-10-05 -- umbrella `e7c6a9b6`
+
+Each object prints once. As decided above, with these specifics:
+
+- **`JsonPrintState`** owns the identity map:
+  - `print` (identity on) and `print_value` (identity off), both through
+    `print_node`;
+  - `print_ref` (`{"_ref_": n}`, the id made on first mention);
+  - `open_object(name, td)` and `open_object(tp)`;
+  - for an object a printer writes inline itself: `is_printed(p)` and
+    `open_object_at(p, name, td)`. Only the endpoint's receiver needs
+    this.
+
+  `print_node` checks identity before it dispatches. A value's printer
+  marks it an object with `JsonPrinter::prints_object()`, default true.
+  The scalar, string and array printers, and `JsonPrinter_TaggedPtr`
+  (which delegates), say false. With no printer, a struct is an object.
+  `open_object` used twice, or outside `print_json`, aborts with a
+  diagnosis.
+- **`JsonObject`** (new `JsonObject.hpp` / `.cpp`) is the writer:
+  - `child(k, tp)`: part of the object, identity on;
+  - `key(k, v)`: a computed value, identity off;
+  - `key_ref(k, p)`;
+  - `key_open(k)`: the stream, for a value the printer writes itself;
+  - `members()` and `close()`.
+
+  `print_generic_struct` uses it. Its destructor, like `JsonMembers`',
+  asserts it closed only when no exception is unwinding: a `validate_*`
+  test throws mid-object.
+- **`JsonMembers`**: `member` has identity on, `member_as` off, and
+  `member_ref` / `member_refs` / `member_ref_map` go through
+  `print_ref`. `json_id()` is gone, from printjson and websock.
+- **`validate_tp`** runs the print's own traversal into a stream with no
+  buffer. It was reflect's `visit_tree_preorder`, which recursed forever
+  on a cycle. Now it reaches what `print_tp` reaches, each object once.
+- **All object printers use the writer**: xo-printjson's ObjectSlot,
+  RootSet and Flywheel, and websock's 10. Every hand-written `"id"` and
+  `{"ref": ..}` is gone.
+- **`visit_pools` hands over a `MemorySizeInfo` built on its own stack,
+  so Flywheel prints each through `print_value`.** Otherwise the next
+  pool, at the same stack address, would print as a ref to the first. Any
+  visitor that hands over temporaries needs the same.
+
+#### Refs name the address the target prints at
+
+Correcting the design note above, which had `static_cast` in place of
+`dynamic_cast` at all 5 sites. The rule is: a ref uses the address of the
+`TaggedPtr` its target prints through. So it depends on the site:
+- the **sender** prints as `WsSessionSenderImpl`, its most-derived type, so
+  refs through `rp<WsSender>` keep `dynamic_cast<void const *>`. The
+  sink's top-level `"sender"` used the plain base pointer and now uses the
+  same cast;
+- the **sink** prints through its `WebsocketSink` view, so the
+  subscription's `sink_` ref is now the plain `WebsocketSink const *`. It
+  had been a `dynamic_cast`: the one real mismatch;
+- the **receiver**, written inline by the endpoint, uses one most-derived
+  address for both the object and the `receiver_` ref.
+
+A scratch browser check over a live introspect snapshot found 31 refs,
+each resolving to one of 23 ids, and no id printed twice.
+WsSessionRouter.test.cpp now prints a subscription and its endpoint
+through one `JsonPrintState`, and requires the endpoint's `_id_` to
+equal the subscription's `_ref_`.
+
+#### Shared objects: placement made explicit
+
+`pjson_` (an `rp<PrintJson>`) is held by the server, every session router
+and every sink. Under first-encounter placement it printed in full
+inside the first sink, because the server writes its endpoints and
+sessions before its own `_members_`, and the router then drew an edge
+into the sink box.
+
+RC chose explicit placement: the routers and sinks write
+`member_ref<rp<PrintJson>>`, and the server, its owner, prints it in full.
+Each router and sink now has a "shares" edge into the server box. The
+rejected options were reordering the server's keys, which is implicit,
+and printing PrintJson as a scalar, which is a special case.
+
+#### Consumers and tests
+
+- **introspect.js:** `_ref_` and `_id_`; ids are numbers. "Copy id" copies
+  the number.
+- **printjson tests:** `_id_` in pinned output. `PrintJsonCycle.test.cpp`
+  covers:
+  - a cycle and a self-loop, as exact `_ref_` output;
+  - a diamond;
+  - a chain of 40 diamonds: 41 ids and 40 refs, where printing every path
+    would take 2^40;
+  - a ref before its print, claimed by the later print;
+  - a first member sharing its parent's address: in full, no `_id_`;
+  - `validate_tp` terminating on a cycle;
+  - the depth-limit death test.
+- **Other tests:** websock and object2 tests moved to `_id_` / `_ref_`, and
+  the flywheel frame pins `_id_` 1 (the frame) and 2 (its root set), with
+  none on the pools.
+- **Browser tests:** rows and expand changed for numeric ids and the
+  `_ref_` key. router_expand and urlrouter_expand now expect the
+  `pjson_` edge into the server.
+- **Checked:**
+  - ctest: 49 / 49;
+  - the 19 introspect browser tests;
+  - `xo-build --sweep`: 73 subsystems build, and every subsystem's tests
+    pass.
+
+### Follow-ups (not done here)
+
+- **DArenaHashMap for the identity map,** drawn from a pool of temporary
+  arenas: RC's intent, see "Identity map".
+- **`JsonPrintState`'s public constructor.** A printer could make a fresh
+  state and escape both identity and the depth limit. Neither the
+  re-entry guard nor the depth limit catches that. Tests use the
+  constructor.
+- **`XO_PRINTJSON_REENTRY_CHECK`** is defined for now, to be turned off
+  later (RC).
+- **The collapse toward a reflection-driven printer.** The websock
+  printers still repeat members as hand-picked top-level keys (the sink's
+  `refcount` / `stream` / `sender`, ..). Retire them when the bespoke
+  printers go.
+- **The ref-resolution check** (`refs_resolve.mjs`) and the other browser
+  tests live in a session scratchpad, not the repo.
 
 **Done when** (unchanged, made concrete): a cyclic graph prints finite
 output, with each object once; `PrintJson.hpp` states the contract; tests
