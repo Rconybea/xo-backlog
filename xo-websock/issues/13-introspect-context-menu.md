@@ -1602,3 +1602,46 @@ shows the same link (a shares edge, ○).
   Show all the server box now landed past the viewport's right edge (x 1073
   of 741), so the right-click missed. The test now presses Fit after Show
   all. All 18 browser tests pass.
+
+## Box header: the short type, then the box's title, 2026-10-04
+
+RC: label boxes consistently. Every box's first line names its short type;
+a box with a title of its own (/hello/${name}, sub 0 · /introspect) puts
+that on the second line. RC took the proposal for which boxes get a
+second line, and asked for it smaller but not grey.
+
+- Line 1 (`text.label`) is `box_type_label(d)`, the object's
+  `_short_type_`. Line 2 (`text.sub`) is `box_subtitle(d)`:
+  - server: ":<port> (<state>)" ("Webserver" would repeat WebserverImpl);
+  - endpoint: its pattern; session: "session N"; subscription:
+    "sub N · <stream>";
+  - sender, sink, receiver, nested struct: none. "sender" and "sink" only
+    restated the type; a receiver's and a nested box's label *is* their
+    type.
+- Line 2 is one size down (12px; 11px in small boxes), in the type's
+  colour. The menu button and the children triangle stay level with
+  line 1. A box with a title is taller by `sub_h` (16; 14 when small), and
+  its rows start below the title. Width is the wider of the two lines.
+  `d.label` is unchanged, so menus and tooltips still name a box by its
+  title ("Hide session 1", "Show ▸ /introspect").
+- The taller boxes widened the drawing. Three tests clicked past the
+  viewport's right edge with the real mouse:
+  - rows: the UrlRouter's triangle, at x 1461 of 1461. The test now pans
+    at 100% first, since it measures pixels.
+  - anchor: session 2's triangle, at x 1673. That check had been passing
+    only because the click missed, and the missed press then made the
+    later Shift-drags scroll the page. Fit now runs before that step, plus
+    a check that session 2 lies inside the viewport.
+  - session_expand, router_expand: they found session 1 by its title,
+    which now sits in `text.sub`.
+  - sink: it expected the title "sink"; the box now shows only its type.
+- header.mjs (new) checks:
+  - every box's line 1 is its short type;
+  - each kind's line 2, and the sender, sink, receiver and nested boxes
+    having none;
+  - font sizes 14/12 and 12/11, with line 2 in line 1's colour;
+  - the menu button and triangle level with line 1, line 2 below it;
+  - an open box's rows below line 2;
+  - the "Hide session 1" menu item.
+
+  All 19 browser tests pass.
