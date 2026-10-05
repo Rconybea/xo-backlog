@@ -1768,3 +1768,46 @@ the drawing would then overlap the legend.
     - 20x10: k = 3.
 
   All 19 browser tests pass.
+
+## Types per box; a typed row keeps its colon, 2026-10-04
+
+Committed in 4ab4402c.
+
+RC: make "types" a per-box setting, on the box menu under the children
+items, and retire the global checkbox. Then: with types shown, keep the
+`:` rather than switching to `=`, drop the value, and show the type right
+of the colon, so the code that draws member names stays the same.
+
+- `typed_boxes`, a set of box ids, replaces `show_types` and the
+  `#show-types` checkbox (gone from index.html). The new `types_item(d)`
+  in `menu_items` reads "Show types" or "Hide types". It is disabled with
+  "no member rows shown" while the box draws no rows (collapsed, say),
+  where the change would not show. Each box keeps its own setting,
+  nested boxes included, across refreshes and collapse/expand; Show all
+  and Hide all leave it alone.
+- Every row draws `name` then `row_sep` (`": "`), whatever the setting.
+  In a typed box the type and `[metatype]` replace the value:
+
+  ```
+  ws_config_: ▾ WebserverConfig [struct] (→)
+  listen_port_: atomic<int> [atomic]
+  ```
+
+  The ▸ / ▾ triangles stay just after the colon, so they do not move when
+  types toggle. A ref row keeps its `(→)` after the type. An array element
+  row has no declared type, so keeps its value. Rows still align on the
+  colon.
+- With types shown, `row_tooltip(r, as_type)` starts with `= <value>`,
+  except for a ref row (it keeps its arrow) or a struct that opens.
+- Checked in headless chrome:
+  - cdp_menu: the item sits under the children items, disabled on a
+    collapsed box; Show types turns only the server's rows typed; the
+    label flips to Hide types, which turns them back.
+  - rows: types on and off through the box menu; typed rows drop the
+    value, and the value shows on the name's tooltip (`= 7892`).
+  - 10 tests used to turn types on everywhere just to read values. They
+    now read plain `name: value` rows (`"target_: (→)"`,
+    `"session_id_: 1"`); sesstable_expand reads session_map_'s type from
+    its tooltip.
+
+  All 19 browser tests pass.
