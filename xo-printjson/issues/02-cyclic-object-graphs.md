@@ -1,6 +1,6 @@
 # 02 — printjson does not terminate on a cyclic object graph
 
-Status: open
+Status: open (design decided, not implemented)
 Type: bug
 
 `PrintJson::print_aux` recurses into children with no record of what it has
@@ -41,7 +41,7 @@ grep -n '_assign_rest\|assign_head' xo-object2/include/xo/object2/DList.hpp
 # "Caller responsible for preserving acyclic property!"
 ```
 
-## Remedy — deliberately not chosen
+## Remedy — candidates, as first written
 
 Left open until picked up, so the cost of each is judged against the code as it
 is then. Candidates:
@@ -65,3 +65,136 @@ visited set is the real answer.
 - whichever remedy is chosen, printjson STATES its precondition, which it does
   not today
 - the chosen behaviour is pinned by a test that builds an actual cycle
+
+## Design decided, 2026-10-04
+
+RC picked the remedy. In short: every object prints once, the per-print
+state passes explicitly through every printer, and a depth limit aborts as
+a backstop.
+
+Checked against the code on 2026-10-04 (umbrella `4ab4402c`), the bug
+stands as diagnosed:
+
+```bash
+grep -n 'visited\|seen\|depth\|cycle' xo-printjson/src/printjson/PrintJson.cpp
+# only a comment hit (line 545)
+sed -n 75,98p xo-printjson/src/printjson/PrintJson.cpp
+# print_generic_pointer follows an rp<T> straight into its target
+```
+
+Since this ticket was written, xo-websock avoids cycles by convention:
+each object prints in full once, where it is owned, and elsewhere as
+`{"ref": json_id(p)}` via `JsonMembers::member_ref`
+(`xo-websock/src/websock/websock_json.cpp:8`). That holds only because
+every printer there was written by hand to keep it. The generic pointer
+path, and any printer that recurses on a pointer, has no such guard.
+
+### Choices and why
+
+- **Every object prints once, not just a back-reference on a true cycle.**
+  RC: marking only true cycles leaves a DAG free to need O(2^n) output (a
+  chain of diamonds). That exhausts bounded resources as surely as
+  non-termination does.
+- **The per-print state threads through the bespoke printers, explicitly.**
+  I proposed a thread_local "print in progress" record, so that the
+  `JsonPrinter` signature need not change. RC rejected it: it obscures the
+  actual data dependence in the completed solution, which makes it harder
+  to reason about. Design the end state first, then choose the path.
+- **Depth limit: abort with a stack trace.** A printer that recurses other
+  than through the framework's entry point is a bug, so reaching the limit
+  is a bug too, not a condition to report in the output.
+- **Every object prints its id, as `_id_`; a reference is `{"_ref_": id}`.**
+  This pairs with `_name_` and the type keys. It also stays clear of member
+  names: a generic struct prints its members as top-level keys, so a member
+  called `ref` would look like a reference.
+- **Identity covers only values printed as json objects.** Scalars and
+  arrays have no braces to carry an `_id_`, and only objects can make
+  printing fail to terminate. (A cycle running only through arrays would
+  still hit the depth limit.)
+- **One atomic change of the printer signature** across all its overrides,
+  with no temporary shim for the old signature.
+
+### End state
+
+1. **`JsonPrintState`** (name open) holds what belongs to one top-level
+   print:
+   - the output `std::ostream *`;
+   - the `PrintJson const *` whose printer table it dispatches through;
+   - the identity map, (address, `TypeId`) -> `_id_`;
+   - the current depth, and the limit.
+
+   `JsonPrinter::print_json(TaggedPtr, JsonPrintState &)` replaces
+   `(TaggedPtr, std::ostream *)`. A printer gets output and recursion only
+   through the state it is given. `state.print(tp)` is the one way to
+   recurse; it replaces `print_aux`, which stops being public.
+2. **The public entry points** (`print`, `print_tp`, `print_obj`,
+   `validate_tp`, `validate_obj`) each make one fresh state per top-level
+   value, so an `_id_` is unique within one output. `validate_*` runs the
+   same traversal with the same state and discards the output.
+3. **Print once.**
+   - `state.print` checks before it dispatches to a printer, so no printer
+     can skip the check.
+   - A printer declares whether it prints a json object. The default comes
+     from the metatype (`mt_struct` yes); `AsStringJsonPrinter` and the
+     scalar and vector printers say no.
+   - The first time an object is reached, it prints in full. Every later
+     time, it prints `{"_ref_": id}`.
+   - The key is address plus type, since a struct and its first member
+     share an address.
+4. **Object writer.** An object printer opens its object through the
+   state, which writes `{"_name_": .., type keys, "_id_": ..`.
+   `JsonMembers` hangs off that writer, rather than taking
+   `(pjson, p_os)`. The websock printers' hand-written `"id"` keys
+   (11 sites) go.
+5. **Placement stays explicit.** The generic printers place an object where
+   the traversal first reaches it. `member_ref` keeps its role of saying
+   "owned elsewhere, do not print it here". It is no longer needed for
+   termination.
+6. **Values with no lasting address.** `member` (an lvalue inside the
+   object) takes part in identity. `member_as` (a computed value, e.g.
+   `x->port_.load()`) prints with identity off: a temporary's stack
+   address can be reused by another temporary within one print. What a
+   temporary points to is still tracked.
+7. **Depth limit.** Past the limit, `state.print` calls
+   `xo::print_backtrace` (`xo-arena/include/xo/arena/backtrace.hpp`;
+   printjson already depends on xo_arena) and then `std::abort()`. The
+   limit lives in `PrintJsonConfig` (`xo-printjson/include/xo/printjson/cx/`).
+8. **Contract.** `PrintJson.hpp` states it:
+   - any graph prints in finite output;
+   - each object prints once, first encounter wins, unless a printer writes
+     a ref explicitly;
+   - nesting deeper than the limit aborts.
+
+   The `validate_tp` comment stops saying "a CYCLIC graph defeats both
+   passes".
+
+### Path
+
+Three umbrella commits, each building and passing its tests on its own.
+
+1. **Signature.**
+   - Add `JsonPrintState`.
+   - Change `print_json` to take it, in all 23 overrides:
+     - xo-printjson: 11, plus 2 in `JsonPrinter.hpp`;
+     - xo-websock: 9;
+     - xo-kalmanfilter: 2;
+     - xo-object2: 1;
+     - xo-stringtable2: 1.
+   - Retire `print_aux` from the public API. `JsonMembers` takes the state.
+
+   The output does not change, so the existing tests pin the change.
+2. **Depth limit**, with the contract's abort clause. Catch2 has no death
+   tests, so the abort test would be a small driver run by ctest and
+   expected to fail. Whether `WILL_FAIL` counts an abort (a signal, not an
+   exit code) as the expected failure needs checking when this is built.
+3. **Print once.**
+   - Add the identity map, the object writer, `_id_` on every object, and
+     `{"_ref_": id}`.
+   - Rename `ref`/`id` to `_ref_`/`_id_` in `JsonMembers` and the websock
+     printers, and in xo-websock's introspect.js and its browser tests.
+   - Add tests for a two-node `rp<>` cycle, a self-loop and a diamond, plus
+     the existing expected outputs updated for `_id_`.
+
+**Done when** (unchanged, made concrete): a cyclic graph prints finite
+output, with each object once; `PrintJson.hpp` states the contract; tests
+build real cycles and a diamond, and pin the output.
