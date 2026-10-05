@@ -1645,3 +1645,52 @@ second line, and asked for it smaller but not grey.
   - the "Hide session 1" menu item.
 
   All 19 browser tests pass.
+
+## Drawing extent shown; Center ignores the legend; legend checkbox, 2026-10-04
+
+RC asked how Center is defined, since it didn't behave as expected.
+Answered from the code: Center keeps the zoom and puts the centre of
+`drawing_size` (ELK's laid-out size plus `pad`) at the centre of the
+viewport area right of the legend. RC then asked:
+1. to show the ELK drawing's extent, set apart from the viewport the way
+   the legend's panel is;
+2. for Center to use the whole viewport's centre, ignoring the legend;
+3. for a checkbox that controls whether the legend is drawn.
+
+- Extent: `draw_extent()` puts a rect of `drawing_size` as the first child
+  of `g.camera`, under the groups, edges and boxes. It is white with a 1px
+  `#dcdcdc` border (`vector-effect: non-scaling-stroke`) on the viewport's
+  `#fafafa`, and resizes with the boxes' `size` transition. The edge
+  casing and the open-circle exit marker's fill changed from `#fafafa` to
+  white, to match the sheet behind them.
+- Found via the sheet: Fit, Center and the first-draw centring took the
+  viewport's size from `getBoundingClientRect()`, which includes the
+  svg's 1px border. Fit therefore scaled the drawing about 2px past the
+  inside edge; the sheet's border made that visible. `view_size()` now
+  uses `clientWidth`/`clientHeight`.
+- Found while testing: a bug that had been showing up as "the page scrolls
+  35px during a drag" (the anchor test's missed-click knock-on, twice
+  before). If any text in the graph is selected, Shift + press counts to
+  the browser as extending the selection. d3.zoom stops a new selection
+  starting, but not an existing one being extended, so a Shift-drag pan
+  toward the window's bottom scrolled the page. Fix: a capture-phase
+  mousedown listener on the document. On Shift + press over the graph,
+  outside a box, it calls preventDefault and clears the selection. It
+  has to be capture: d3.zoom's own handler stops propagation on the svg.
+  anchor.mjs now selects graph text first and checks that the Shift-drag
+  neither scrolls the page nor leaves a selection.
+- Center: `translate(width/2 - k*w/2, height/2 - k*h/2)`, with no legend
+  term.
+- Legend checkbox: "legend" (`#show-legend`), on by default, beside
+  "types". Unchecked, the legend gets `display="none"` and `legend_w` = 0,
+  so Fit, the first draw and the reset use the whole viewport.
+- Tests:
+  - noticker checks that the sheet is `drawing_size`, sits first in the
+    camera, is white on the viewport's grey, matches the casing's colour,
+    and pans and zooms with the camera;
+  - noticker also checks the checkbox: on by default; off hides the
+    legend, gives `legend_w` 0, and puts Fit at x 0; on again brings the
+    legend back;
+  - anchor's Center check now measures against the whole viewport.
+
+  All 19 browser tests pass.
