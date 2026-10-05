@@ -45,11 +45,14 @@ printers share.
   `JsonMembers` writes now. A struct may then have members literally named
   `_id_` or `_ref_` without ambiguity.
 
-  The flat format (members as top-level keys: generic structs today, and
-  the flywheel frame, a declared wire contract in
-  `xo-object2/utest/flywheel_frame.test.cpp`) is likely an atavism that
+  The flat format (members as top-level keys) is likely an atavism that
   needs upgrading. Json conversion is a kind of pretty-printing, so in the
   long run a choice like this may be configurable at runtime.
+
+  Update 2026-10-05: the generic printer is members-style
+  (`xo-printjson/issues/07`, umbrella `97730b40`), with no flat exception.
+  The flywheel frame, once described as a wire contract, has no consumer
+  that relies on its format (RC), so MemorySizeInfo moved too.
 - **Placement: first encounter, for now.** The generic printer prints an
   object in full where the traversal first reaches it, and as a ref
   afterwards. Explicit ownership (an attribute on a reflected member) was
@@ -72,7 +75,6 @@ printers share.
   printer left, or each one that remains is recorded as an exception;
 - introspect reads only `_members_`, and the view-model top-level keys are
   gone;
-- the flywheel frame is upgraded to members-style, or recorded as the one
-  flat exception along with its consumer;
+- the flywheel frame is upgraded to members-style (done, `97730b40`);
 - `JsonMembers::member_as` / `member_ref` survive only at recorded
   exceptions.
