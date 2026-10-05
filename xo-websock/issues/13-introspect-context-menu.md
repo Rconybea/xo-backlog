@@ -1539,6 +1539,8 @@ apart. RC: keep "shares" separate, with an open circle for it.
 
 ## Edge colour by ref kind, 2026-10-04
 
+Committed in b1ab1d5e.
+
 RC: try colouring edges by ownership, from black to light grey, with
 includes black and refers light grey.
 
@@ -1563,6 +1565,8 @@ includes black and refers light grey.
   circle's outline. All 18 browser tests pass.
 
 ## Shared entry port: the strongest kind on top, 2026-10-04
+
+Committed in b1ab1d5e.
 
 Problem: every edge into a box enters at its one port, so the edges overlap
 on their last stretch. The edge drawn last won: its line, casing and
@@ -1604,6 +1608,8 @@ shows the same link (a shares edge, ○).
   all. All 18 browser tests pass.
 
 ## Box header: the short type, then the box's title, 2026-10-04
+
+Committed in a423919a.
 
 RC: label boxes consistently. Every box's first line names its short type;
 a box with a title of its own (/hello/${name}, sub 0 · /introspect) puts
@@ -1647,6 +1653,8 @@ second line, and asked for it smaller but not grey.
   All 19 browser tests pass.
 
 ## Drawing extent shown; Center ignores the legend; legend checkbox, 2026-10-04
+
+Committed in a423919a.
 
 RC asked how Center is defined, since it didn't behave as expected.
 Answered from the code: Center keeps the zoom and puts the centre of
@@ -1697,6 +1705,8 @@ viewport area right of the legend. RC then asked:
 
 ## Show all, Hide all, first draw: centred, 2026-10-04
 
+Committed in a423919a.
+
 RC asked how the starting location is picked. Answered from
 `camera_target()`:
 - first draw: centred right of the legend, at 100%, at once;
@@ -1722,6 +1732,8 @@ RC: "For now let's have show all, hide all, first draw all center."
   a pan to (-200, 90) at 60%. All 19 browser tests pass.
 
 ## Fit: as large as fits, centred, clear of the legend, 2026-10-04
+
+Committed in a423919a.
 
 RC: Fit should make the drawing as large as possible without drawing
 outside the viewport. The only time it should differ from Center is when
