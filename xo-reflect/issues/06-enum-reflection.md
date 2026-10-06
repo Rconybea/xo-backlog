@@ -1,6 +1,6 @@
 # 06 -- reflect enums: EnumReflector, REFLECT_ENUM, EnumTdx
 
-Status: open
+Status: done 2026-10-06 -- umbrella `0225c7a2`, `3e36ff4e`, `f5e0226e`
 Type: feature
 Milestone: reflection-driven-json
 
@@ -66,3 +66,57 @@ Split out of `issues/04` (RC, 2026-10-05).
 
 **Done when:** `kind_` and `state_` print through reflection, with no
 `member_as`, and xo-reflect has tests for the cases in step 1.
+
+## Done, 2026-10-06 -- umbrella `0225c7a2`, `3e36ff4e`, `f5e0226e`
+
+**1. xo-reflect (`0225c7a2`).**
+- `EnumTdx` (`enum/EnumTdx.hpp`, `src/reflect/enum/EnumTdx.cpp`):
+  `mt_atomic` with no children. Enumerators are held in declaration order,
+  with:
+  - `name_of(obj)`: the first enumerator with that value, or `nullptr`;
+  - `value_of(obj)`, as `int64_t`;
+  - `assign_from_name(name, obj)`: false, leaving `obj` unchanged, for an
+    unknown name.
+
+  Objects are read and written through `LoadFn` / `StoreFn`, supplied by
+  the reflector.
+- `EnumReflector<E>` (`EnumReflector.hpp`) mirrors `StructReflector`
+  (completes once per type, through `assign_tdextra`). `static_assert`s
+  check that `E` is an enum and fits in `int64_t`. Macros: `REFLECT_ENUM`
+  and `REFLECT_EXPLICIT_ENUM`.
+- `TypeDescrExtra::enum_info()` (`nullptr` by default) and `is_enum()`,
+  forwarded by `TypeDescr`.
+- `utest/EnumReflector.test.cpp`, 6 cases:
+  - scoped, with an explicit underlying type, out-of-order and shared
+    values;
+  - value-to-name and name-to-value round trips;
+  - a value with no enumerator;
+  - unscoped, and explicit names;
+  - reflecting twice adds nothing;
+  - an unreflected enum stays a plain atomic.
+
+**2. printjson (`3e36ff4e`).** With no printer, a reflected enum prints
+its enumerator's name as a json string, or a value with no enumerator as
+its integer, a json number. `JsonMembers::printable` accepts reflected
+enums. Tests: a reflected enum member, with a named and an unnamed value;
+an unreflected enum member gets an `_error_` entry.
+
+**3. websock (`f5e0226e`).**
+- `reflect_endpoint_kind()` (free, beside `endpoint_kind_descr`) and
+  `RunstateUtil::reflect_self()`. `websock_reflect_types` calls both,
+  ahead of the structs that hold them.
+- `DynamicEndpoint::kind_` and `WebserverImpl::state_` are reflected
+  members; their `member_as` are gone. The top-level `"kind"` key keeps
+  using `endpoint_kind_descr`.
+- Golden diff, checked by script, is a reorder only: names through
+  reflection equal the old descr strings ("http", "stream", "running"),
+  and declared types, metatypes and ids are unchanged.
+- Tests whose member order is pinned were updated (`Webserver.test.cpp`);
+  `expand.mjs` now finds rows by name, and checks `state_: running`.
+
+Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
+
+**Still `member_as` in websock** (`xo-reflect/issues/04`,
+`xo-websock/issues/15`): atomics (`open_`, `listen_port_`); lock-guarded
+copies (`output_buf_`, `next_id_`); the deque; `unique_ptr`; regex; the
+`std::function`s; `CallbackId`.
