@@ -73,3 +73,45 @@ Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
 **Left in this ticket:** `std::atomic<T>` (`open_`, `listen_port_`) and
 `std::deque<T>` (`outbound_q_`, which is also lock-guarded:
 `xo-websock/issues/15`).
+
+## Related: receivers reflected, 2026-10-06 -- umbrella `660410a3`, `db4b7a1f`, `118998b0`
+
+Prompted by RC's questions about `IntrospectReceiver` and
+`member_ref<rp<StreamReceiver>>`. Both had been left out for reasons that
+predate print-once (`xo-printjson/issues/02`).
+
+- **`660410a3`, `db4b7a1f`:**
+  - The endpoint printer's inline receiver object now writes `_members_`
+    from `reflected_members(self, "_")`, through `self_tp()`, so an
+    application's receiver shows its own members.
+  - `IntrospectReceiver` reflects `websrv_`. It prints as
+    `{"_ref_": <server's _id_>}`: a snapshot prints the server first. It
+    had been left out because, before print-once, printing it in full
+    nested the whole server inside its own endpoint.
+  - `receiver.mjs` pins the ref and the row `websrv_: (→)`.
+- **`118998b0`:**
+  - **xo-webutil:** `StreamReceiver::reflect_self` reflects the interface
+    with no members. An `rp<Base>` reaches its most-derived type only if
+    `Base` is reflected as a self-tagging struct. xo-webutil has no setup
+    hook of its own, so `websock_reflect_types` calls it.
+  - **websock:** `DynamicEndpoint::receiver_` is reflected, and its
+    `member_ref` is gone. It still prints as a ref to the inline receiver
+    object. Golden: a reorder only.
+  - **printjson: "a ref is always printable".** The test's `BoxReceiver`
+    is unreflected (an atomic), but the endpoint writes it as an object
+    through `open_object_at`. Two places did not account for that:
+    - `print_node` checked for a printed entry only for types it treats as
+      objects, so it wrote `<error-json-printer-not-found>` (invalid json).
+      Now a value whose address and type match a printed entry is a ref,
+      whatever its own type. That is sound because entries come only from
+      `open_object` / `open_object_at`.
+    - `JsonMembers` judged printability by the declared target type. Now it
+      uses the new `JsonPrintState::is_printed(TaggedPtr)`, and `member()` /
+      `member_as()` decide by value, as `reflected_members` already did.
+      Side effect: a null pointer or an empty vector of an unprintable
+      type prints as `null` / `[]`, not as an error entry.
+
+    Pinned by `PrintJsonCycle.test.cpp`, through both `state.print` and
+    `JsonMembers`.
+
+Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.

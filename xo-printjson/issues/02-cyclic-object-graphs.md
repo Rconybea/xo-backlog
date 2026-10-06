@@ -512,3 +512,12 @@ and printing PrintJson as a scalar, which is a special case.
 **Done when** (unchanged, made concrete): a cyclic graph prints finite
 output, with each object once; `PrintJson.hpp` states the contract; tests
 build real cycles and a diamond, and pin the output.
+
+### Later refinement, 2026-10-06 -- umbrella `118998b0`
+
+A ref is always printable, whatever its target's type: `print_node`
+writes a ref for any value whose address and type match a printed entry,
+not only for types it treats as objects. `JsonMembers` checks
+printability by value, through `JsonPrintState::is_printed(TaggedPtr)`.
+Details in `.xo-backlog/xo-reflect/issues/04` ("Related: receivers
+reflected").
