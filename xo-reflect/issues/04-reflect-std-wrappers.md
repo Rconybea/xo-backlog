@@ -1,6 +1,6 @@
 # 04 -- reflect std::atomic, std::unique_ptr, std::deque
 
-Status: open (unique_ptr done 2026-10-06 -- umbrella `1812a593`, `f98dfd12`; atomic, deque to come)
+Status: open (unique_ptr, atomic done -- umbrella `1812a593`, `f98dfd12`, `db432d09`, `02181655`, `d78751f4`; deque to come, with `xo-websock/issues/15`)
 Type: feature
 Milestone: reflection-driven-json
 
@@ -115,3 +115,45 @@ predate print-once (`xo-printjson/issues/02`).
     `JsonMembers`.
 
 Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
+
+## std::atomic done, 2026-10-06 -- umbrella `db432d09`, `02181655`, `d78751f4`
+
+RC chose design (A), a reflection capability rather than per-`T`
+printjson printers, and named it `std_atomic_info()`.
+
+**xo-reflect (`db432d09`).**
+- `StdAtomicTdx` (`atomic/StdAtomicTdx.hpp/.cpp`): `mt_atomic`, with no
+  children. A `std::atomic<T>` cannot be traversed in place: only `load()`
+  reads it. It provides:
+  - `value_td()`, the description of T;
+  - `value_size()`, `value_align()`;
+  - `load(atomic, dst)`, which copies the current value into a buffer.
+    std::atomic requires T to be trivially copyable, so the copy is
+    sound.
+- `EstablishTdx<std::atomic<T>>` installs it, with a `static_assert` that
+  T is trivially copyable.
+- `TypeDescrExtra::std_atomic_info()` (`nullptr` by default) and
+  `is_std_atomic()`, forwarded by `TypeDescr`.
+- Tests (`StdAtomic.test.cpp`): bool, int64, double, a later store, an
+  atomic of a reflected enum; a plain int is not a std::atomic.
+
+**printjson (`02181655`).** With no printer, a `std::atomic<T>` is
+loaded into a buffer (64 bytes on the stack, else an aligned allocation)
+and printed by `print_value` as its T, with no identity: it is a copy.
+`JsonMembers::printable` accepts an atomic of a printable T. An atomic
+pointer is deliberately not printable: its type cannot say whether its
+target prints. Test: atomic int, bool and enum members print `7`, `true`
+and `"calm"`. Not covered: the heap path (T over 64 bytes), which needs
+libatomic.
+
+**websock (`d78751f4`).** `WsSessionSender::open_` and
+`WebserverImpl::listen_port_` are reflected, and their `member_as` are
+gone. The server printer's `_members_` is now just
+`reflected_members(tp, "_")`. Golden diff, checked by script: identical up
+to member order; in each sender, `open_` moves ahead of `target_`. Tests:
+the sender checks in `WebserverLive.test.cpp`, and `sender_expand.mjs`.
+
+Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
+
+**Left in this ticket:** `std::deque<T>` (`outbound_q_`), which is also
+guarded by the session's mutex, so it goes with `xo-websock/issues/15`.
