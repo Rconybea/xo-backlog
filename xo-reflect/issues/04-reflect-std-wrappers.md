@@ -157,3 +157,37 @@ Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
 
 **Left in this ticket:** `std::deque<T>` (`outbound_q_`), which is also
 guarded by the session's mutex, so it goes with `xo-websock/issues/15`.
+
+## Related: transparent wrappers; CallbackId, 2026-10-06 -- umbrella `3b41edd7`, `21cc1825`
+
+`Subscription::callback_id_` (`fn::CallbackId`) was the last
+`member_as` that was not lock-guarded and not a regex or std::function.
+- **Where the reflection lives.** xo-callback is header-only and does not
+  depend on xo-reflect. RC pointed out that xo-webutil depends on both, so
+  it hosts `reflect_callback_id()`; `websock_reflect_types` calls it. The
+  private `id_` is reached through a new public member-pointer accessor,
+  `CallbackIdImpl::id_address()`, which keeps xo-callback
+  reflection-agnostic.
+- **A struct was too busy.** First reflected as a struct with one member,
+  `id`, each subscription grew a nested CallbackId box on the introspect
+  page. RC judged it too busy, so it is reflected as an atomic instead.
+- **New in xo-reflect: transparent wrappers.**
+  - `WrapperTdx` (`wrapper/WrapperTdx.hpp/.cpp`): `mt_atomic`, with no
+    children. `wrapped_td()`, and `wrapped_tp(obj)` reaches the wrapped
+    member in place, through a `GeneralStructMemberAccessor`.
+  - `WrapperReflector<T>` with `reflect_wrapped(memptr)` installs it,
+    once.
+  - `TypeDescrExtra::wrapper_info()` (`nullptr` by default) and
+    `is_wrapper()`, forwarded by `TypeDescr`.
+  - Tests (`WrapperReflector.test.cpp`): mt_atomic and `is_wrapper`; the
+    wrapped type; the value reached in place; reflected once; a plain
+    struct is not a wrapper.
+- **printjson.** A wrapper with no printer prints as its wrapped value,
+  `print(wrapped_tp(..))`; `printable` accepts a wrapper of a printable
+  value. Test: a struct holding a wrapper prints the number.
+- **websock.** `callback_id_` is reflected, and its `member_as` is gone.
+  Golden diff against `d78751f4`: a reorder only. `callback_id_` is still
+  `1`, metatype atomic, now ahead of `endpoint_`. The page shows the row
+  `callback_id_: 1`, with no box.
+
+Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
