@@ -63,9 +63,22 @@ printers share.
 
   Known consequence: the server's `pjson_` will print inside the first sink
   again, once the server's, router's and sink's printers are generic.
+
+  **Revised 2026-10-08 (RC): placement by ownership edges** --
+  `xo-reflect/issues/07`, `xo-printjson/issues/08`.  Owning edges place,
+  `rp<T>` places at first appearance, `T*` is ref-only and never read.  The
+  unreliability above is answered by an `_unplaced_` trailer listing ref
+  targets never placed; a golden test asserts it empty.  The motive is
+  locking: a traversal that takes locks may descend only through edges it
+  owns.
 - **Locking: printjson does not lock.** Threading is handled by locking above
   the scope of a printjson call: the caller holds what it needs for the
   whole print.
+
+  **Revised 2026-10-08 (RC): printjson takes only reflection-declared
+  guards** -- `xo-reflect/issues/08` (`.guarded_by`), `xo-printjson/issues/09`.
+  The caller holds *no* guard of what it prints.  `xo-websock/issues/15`
+  rewritten accordingly.
 - **Maps: a new xo-reflect metatype,** on its own ticket. Custom printers in
   the meantime.
 

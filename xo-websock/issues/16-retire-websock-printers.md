@@ -30,8 +30,9 @@ What blocks some of them:
   `WebsocketSink::print_json`: decide whether the generic printer covers
   them, through self-tagging, or whether they stay recorded exceptions.
 
-Placement becomes first encounter (milestone decision). `pjson_` will land
-inside the first sink again; accept that.
+Placement follows ownership edges (`xo-printjson/issues/08`, revising the
+milestone's first-encounter decision on 2026-10-08); where `pjson_` lands
+is settled in `issues/15`.
 
 **Done when:** no websock `JsonPrinter_*` remains except recorded
 exceptions.
