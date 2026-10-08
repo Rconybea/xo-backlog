@@ -1,6 +1,6 @@
 # 08 -- guard declarations: which mutex guards which members
 
-Status: open
+Status: done 2026-10-08 -- umbrella `ea6eacf4`
 Type: feature
 Milestone: reflection-driven-json
 Blocked by: `.xo-backlog/xo-reflect/issues/07`
@@ -63,3 +63,28 @@ recursive mutexes.
 each member's guard, the helper visits them grouped with each guard held
 for exactly its group, and try mode reports a group whose guard another
 thread holds.
+
+## As built (umbrella `ea6eacf4`)
+
+- `LockableTdx` (`include/xo/reflect/lockable/LockableTdx.hpp`), installed
+  for `std::mutex` (exclusive) and `std::shared_mutex` (shared) in
+  `Reflect.hpp`; `lockable_info()` / `is_lockable()` on `TypeDescr` and
+  `TypeDescrExtra`.
+- `StructTdx` holds the guard table (accessors) plus member indices grouped
+  by guard, computed once at construction; `n_guard()` / `guard_tp(g, obj)`
+  on `TypeDescr` and `TypeDescrExtra`.  `StructMember::guard_ix()` is
+  `std::optional<uint32_t>`.
+- Interning: `AbstractStructMemberAccessor::same_member()` -- member-pointer
+  equality, no `offsetof`.
+- `StructMemberDecl` now holds the reflector and the member's index (no
+  longer a raw `StructMember *`), so it stays valid while the reflector does.
+  `.guarded_by()` static_asserts the guard belongs to `StructT` or a base,
+  and asserts a reflected lockable and at most one guard per member.
+- `adopt_ancestors` appends the ancestor's guards and shifts adopted
+  indices.  Known limit: a mutex both the derived class and an ancestor
+  name becomes two guards (taken in turn, never nested).
+- Helper: `visit_members_guarded(td, obj, GuardMode, fn(ix, readable))` in
+  `include/xo/reflect/struct/GuardedVisit.hpp` -- unguarded first, then
+  each guard's group with it held; RAII release; `try_lock` mode reports a
+  busy group unreadable.
+- Tests: `xo-reflect/utest/Guard.test.cpp` (cross-thread probes).
