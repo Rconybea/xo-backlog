@@ -1,6 +1,6 @@
 # 07 -- ownership edges
 
-Status: open
+Status: done 2026-10-08 -- umbrella `20e69853`
 Type: feature
 Milestone: reflection-driven-json
 
@@ -63,3 +63,22 @@ grep -n "void reflect_member\|#define REFLECT" xo-reflect/include/xo/reflect/Str
 **Done when:** each pointer type reports its default ownership, a member's
 resolved ownership honours an override, and every existing `REFLECT_*`
 use builds unchanged (`xo-build --sweep -q`).
+
+## As built (umbrella `20e69853`)
+
+- The type default lives on `TypeDescrExtra::child_edge_ownership()` (virtual,
+  `owning`), forwarded by `TypeDescr`, not on `PointerTdx` as planned above:
+  a walker asks any type the same question.  RC named it (2026-10-08) after
+  rejecting both `child_ownership()` (misleading for a struct) and an indexed
+  `child_edge_ownership(i)`.  `RawPointerTdx` returns `borrowed`;
+  `RefPointerTdx::make(Ownership)` stores what `rp` (shared) and
+  `unique_ptr` (owning) pass.
+- `StructMember` stores a non-optional `Ownership`, computed at construction
+  from the member type (RC), carried through moves and `for_descendant`.
+  `StructMember::ownership()` is the edge from the struct to what the member
+  leads to: the member itself if by value, its pointee if a pointer.
+- `reflect_member` returns `StructMemberDecl<StructT>` (`.owning()`,
+  `.shared()`, `.borrowed()`); overriding a non-pointer member asserts.
+  `Reflect::require<MemberT>()` now precedes the accessor, so the default is
+  readable.
+- Tests: `xo-reflect/utest/Ownership.test.cpp`.
