@@ -1,11 +1,52 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open
+Status: open (15a done -- umbrella `b83bc579`; 15b next; rest blocked)
 Type: task
 Milestone: reflection-driven-json
-Blocked by: `.xo-backlog/xo-printjson/issues/09`
+Blocked by: `.xo-backlog/xo-reflect/issues/05`, `.xo-backlog/xo-reflect/issues/04`, `.xo-backlog/xo-websock/issues/17`
 
 (Filename kept from the superseded plan below, so references still resolve.)
+
+## Slices (2026-10-10)
+
+Not doable in one pass: most of it waits on other tickets.
+
+| locking printer | lock | what reflection needs | blocked by |
+|---|---|---|---|
+| WsSessionTable | table `mutex_` | `session_map_`: `unordered_map<id, unique_ptr<Recd>>` | `xo-reflect/issues/05` (maps) |
+| UrlRouter | router `mutex_` | `http_map_`, `stream_map_`: maps | `xo-reflect/issues/05` |
+| WsSession | session `mutex_` | `outbound_q_`: `std::deque` | `xo-reflect/issues/04` (deque) |
+| WsSessionRouter | router `mutex_` | `subscription_v_`: `vector<unique_ptr<Subscription>>` (reflectable now) | `xo-websock/issues/17` |
+
+**The view-model lists place first.**  The server's `endpoints[]` /
+`sessions[]`, a session's `subscriptions[]` and a subscription's `"sink"`
+print objects in full, each under its own lock-holding visitor, BEFORE the
+reflected members.  Once `subscription_v_` / `session_map_` are owning
+reflected edges, they reach objects placed already -- the two-owners
+assert (`xo-printjson/issues/08`).  The lists can become refs or go only
+once introspect reads `_members_` alone (`issues/17`): so 17 precedes the
+rest of 15, not follows it.
+
+**Caller rule checked (2026-10-10):** introspect prints inside
+`IntrospectReceiver::receive()`, which runs with no websock lock held --
+`perform_ws_cmd` uses `find_owner_thread` (table lock released before it
+returns, `Webserver.cpp:1620`), and the router dispatches `receive` without
+its lock (`WsSessionRouter.cpp:266`).
+
+- **15a -- done, umbrella `b83bc579`.**  `WebserverImpl::state_`
+  `.guarded_by(mutex_)`: fixed a race -- `reflected_members` read `state_`
+  unlocked while start/stop write it under `mutex_`.  `state_` now prints
+  last among the server's members (golden: reorder only, checked by
+  script).  Still racy: the view-model `"state"` key reads it via the
+  unlocked `state()` accessor; it goes with `issues/17`.
+- **15b -- next.**  Session record: reflect `output_buf_` (`.owning()`,
+  `.guarded_by(&mutex_)`) and `last_msg_seq_` (guarded); drop the printer's
+  `member_as<OutputBuffer *>` and its locked copy; `outbound_q_` stays a
+  locked size summary until the deque is reflected.  Golden `_unplaced_`
+  goes empty; the golden test then asserts the trailer absent.
+- **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05` and
+  the deque in `xo-reflect/issues/04` (independent), then `issues/17`, then
+  the remaining types here, then `issues/16`.
 
 Today these printers take their own mutex while reading:
 - WsSessionRouter: `subscription_v_` (`WsSessionRouter.cpp:470`);
