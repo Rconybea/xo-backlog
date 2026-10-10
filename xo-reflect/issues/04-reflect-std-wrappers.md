@@ -1,6 +1,6 @@
 # 04 -- reflect std::atomic, std::unique_ptr, std::deque
 
-Status: open (unique_ptr, atomic done -- umbrella `1812a593`, `f98dfd12`, `db432d09`, `02181655`, `d78751f4`; deque to come, with `xo-websock/issues/15`)
+Status: done 2026-10-10 -- umbrella `1812a593`, `f98dfd12`, `db432d09`, `02181655`, `d78751f4`, `e4683ed8`
 Type: feature
 Milestone: reflection-driven-json
 
@@ -191,3 +191,21 @@ guarded by the session's mutex, so it goes with `xo-websock/issues/15`.
   `callback_id_: 1`, with no box.
 
 Checked: ctest 49 / 49; the 20 browser tests; `xo-build --sweep`.
+
+## std::deque done, 2026-10-10 -- umbrella `e4683ed8`
+
+- `EstablishTdx<std::deque<T, A>>` requires `T` and returns
+  `StdDequeTdx<std::deque<T, A>>` (`vector/VectorTdx.hpp`): an
+  `StlVectorTdx` (elements by index, `mt_vector`) whose
+  `has_contiguous_storage()` is `false` -- a deque is chunked.  Nothing
+  reads that flag yet.  Tests: `utest/VectorTdx.test.cpp`
+  (`[deque]`).
+- **Websock `outbound_q_` prints its contents (RC, option 1 of 3).**
+  Reflected `.guarded_by(&mutex_)` on the session record; the session
+  printer's locked size copy and `member_as` summary are gone, so that
+  printer takes no lock.  Considered: keep the `"N queued"` summary (a
+  bespoke exception, still locking), or a per-member presentation hint in
+  xo-reflect (`.summarize_as_size()`).  Chosen for now because the queue is
+  almost always empty (a message queues only while a write is in flight);
+  the risk is a snapshot taken under load embedding queued snapshots as
+  strings -- if that shows up, the presentation hint is the principled fix.

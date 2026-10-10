@@ -1,9 +1,9 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a, 15b done -- umbrella `b83bc579`, `617b5f68`; rest blocked)
+Status: open (15a, 15b, 15c done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`; rest blocked)
 Type: task
 Milestone: reflection-driven-json
-Blocked by: `.xo-backlog/xo-reflect/issues/05`, `.xo-backlog/xo-reflect/issues/04`, `.xo-backlog/xo-websock/issues/17`
+Blocked by: `.xo-backlog/xo-reflect/issues/05`, `.xo-backlog/xo-websock/issues/17`
 
 (Filename kept from the superseded plan below, so references still resolve.)
 
@@ -15,7 +15,7 @@ Not doable in one pass: most of it waits on other tickets.
 |---|---|---|---|
 | WsSessionTable | table `mutex_` | `session_map_`: `unordered_map<id, unique_ptr<Recd>>` | `xo-reflect/issues/05` (maps) |
 | UrlRouter | router `mutex_` | `http_map_`, `stream_map_`: maps | `xo-reflect/issues/05` |
-| WsSession | session `mutex_` | `outbound_q_`: `std::deque` | `xo-reflect/issues/04` (deque) |
+| ~~WsSession~~ | session `mutex_` | `outbound_q_`: `std::deque` | done: 15c (`e4683ed8`) |
 | WsSessionRouter | router `mutex_` | `subscription_v_`: `vector<unique_ptr<Subscription>>` (reflectable now) | `xo-websock/issues/17` |
 
 **The view-model lists place first.**  The server's `endpoints[]` /
@@ -47,9 +47,12 @@ its lock (`WsSessionRouter.cpp:266`).
   nested), until the deque is reflected.  Golden `_unplaced_` empty, and
   the golden test asserts it absent; `session_expand.mjs` shows
   `output_buf_: OutputBuffer` again, plus `last_msg_seq_`.
-- **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05` and
-  the deque in `xo-reflect/issues/04` (independent), then `issues/17`, then
-  the remaining types here, then `issues/16`.
+- **15c -- done, umbrella `e4683ed8`.**  `outbound_q_` reflected
+  `.guarded_by(&mutex_)` (deque reflection, `xo-reflect/issues/04`): prints
+  its queued messages.  The session printer takes no lock.
+- **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05`,
+  then `issues/17`, then the remaining types here (WsSessionTable,
+  UrlRouter, WsSessionRouter), then `issues/16`.
 
 Today these printers take their own mutex while reading:
 - WsSessionRouter: `subscription_v_` (`WsSessionRouter.cpp:470`);
