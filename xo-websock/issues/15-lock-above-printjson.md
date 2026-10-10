@@ -33,6 +33,13 @@ Annotate the websock types with ownership (`xo-reflect/issues/07`) and guards
   publish path and check);
 - the golden test (`issues/14`) asserts `_unplaced_` is empty.
 
+- `output_buf_`: a raw `OutputBuffer *`, borrowed by default, so since
+  `xo-printjson/issues/08` (umbrella `59d483b5`) it prints a ref and its two
+  `OutputBuffer`s appear in the golden snapshot's `_unplaced_`;
+  introspect's `session_expand.mjs` expects the ref.  Decide its home (an
+  `.owning()` override once it is reflected, guarded by the session mutex)
+  so the trailer goes empty.
+
 Then the printers above need not lock, which unblocks retiring them
 (`issues/16`).  The deque (`outbound_q_`, `xo-reflect/issues/04`) can then
 print through reflection under its guard.
