@@ -1,6 +1,6 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a done -- umbrella `b83bc579`; 15b next; rest blocked)
+Status: open (15a, 15b done -- umbrella `b83bc579`, `617b5f68`; rest blocked)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: `.xo-backlog/xo-reflect/issues/05`, `.xo-backlog/xo-reflect/issues/04`, `.xo-backlog/xo-websock/issues/17`
@@ -39,11 +39,14 @@ its lock (`WsSessionRouter.cpp:266`).
   last among the server's members (golden: reorder only, checked by
   script).  Still racy: the view-model `"state"` key reads it via the
   unlocked `state()` accessor; it goes with `issues/17`.
-- **15b -- next.**  Session record: reflect `output_buf_` (`.owning()`,
-  `.guarded_by(&mutex_)`) and `last_msg_seq_` (guarded); drop the printer's
-  `member_as<OutputBuffer *>` and its locked copy; `outbound_q_` stays a
-  locked size summary until the deque is reflected.  Golden `_unplaced_`
-  goes empty; the golden test then asserts the trailer absent.
+- **15b -- done, umbrella `617b5f68`.**  Session record: `output_buf_`
+  reflected `.owning().guarded_by(&mutex_)`, `last_msg_seq_`
+  `.guarded_by(&mutex_)`; the printer's `member_as<OutputBuffer *>` and its
+  locked copy dropped.  `outbound_q_` stays a size summary, copied under the
+  same mutex, released before `reflected_members` takes it (sequential, not
+  nested), until the deque is reflected.  Golden `_unplaced_` empty, and
+  the golden test asserts it absent; `session_expand.mjs` shows
+  `output_buf_: OutputBuffer` again, plus `last_msg_seq_`.
 - **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05` and
   the deque in `xo-reflect/issues/04` (independent), then `issues/17`, then
   the remaining types here, then `issues/16`.
