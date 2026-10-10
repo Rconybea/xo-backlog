@@ -1,6 +1,6 @@
 # 09 -- the generic printer takes reflection-declared guards
 
-Status: open
+Status: done 2026-10-10 -- umbrella `3bbda0b6`
 Type: feature
 Milestone: reflection-driven-json
 Blocked by: `.xo-backlog/xo-printjson/issues/08`, `.xo-backlog/xo-reflect/issues/08`
@@ -38,3 +38,28 @@ one exists (unverified).
 mutates it (no race under TSan, if the build supports it -- unverified),
 try mode prints `_locked_` for a held guard, and the caller rule is
 documented.
+
+## As built (umbrella `3bbda0b6`)
+
+- `JsonMembers::reflected_members` walks members through
+  `reflect::visit_members_guarded` (unguarded first, then each guard's
+  group, held); each entry by `write_reflected()`.  So every caller gets
+  guards -- `print_generic_struct` and the bespoke printers that call
+  `reflected_members` alike.
+- Mode: `PrintJson::guard_mode()` / `assign_guard_mode()`, default
+  `blocking`, copied into `JsonPrintState` like `max_depth`.
+- Try mode: a busy guard's members are entries without a value,
+  `{"_name_", type keys, "_metatype_", "_locked_": true}` -- an entry-level
+  key beside `_error_`, not `{"_locked_": true}` as the value (RC
+  2026-10-10), so `_value_` always means a value.
+- Caller rule (hold no guard): documented on `PrintJson`, `JsonPrintState`,
+  `reflected_members`; not checked -- no cheap check exists (try_lock by the
+  owner is undefined; the print cannot see the caller's locks).
+  `std::recursive_mutex` considered (RC asked) and not adopted: websock's
+  `mutex_` pairs with a `std::condition_variable`, recursion hides
+  re-entrancy bugs, and it makes reading mid-critical-section legal, not
+  safe.  An owner-tracking debug mutex is the route if a check is wanted.
+- TSan is not set up in this tree; instead
+  `print-json-guard-consistent-under-writes` (writer keeps `a_ == b_`),
+  falsified: with `guarded_by` removed it fails with torn reads.
+- Tests: `xo-printjson/utest/PrintJsonGuard.test.cpp`.

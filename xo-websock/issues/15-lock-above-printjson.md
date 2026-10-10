@@ -40,6 +40,12 @@ Annotate the websock types with ownership (`xo-reflect/issues/07`) and guards
   `.owning()` override once it is reflected, guarded by the session mutex)
   so the trailer goes empty.
 
+**In one change per type:** since `xo-printjson/issues/09` (umbrella
+`3bbda0b6`), `reflected_members` takes a struct's declared guards -- so a
+bespoke printer that locks its own mutex and then calls
+`reflected_members` would deadlock once that type declares `.guarded_by`.
+Add the declaration and remove the printer's lock together.
+
 Then the printers above need not lock, which unblocks retiring them
 (`issues/16`).  The deque (`outbound_q_`, `xo-reflect/issues/04`) can then
 print through reflection under its guard.
