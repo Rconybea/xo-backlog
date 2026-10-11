@@ -1,6 +1,6 @@
 # 19 -- golden snapshot compares gcc's type spellings: clang CI red since it landed (2026-10-07)
 
-Status: diagnosed
+Status: done 2026-10-11 -- umbrella `f122f850`; CI clang task 618 success
 Type: bug / ci
 Blocked by: none (`ci/issues/03` done 2026-10-11, umbrella `80e7f8f8`)
 Raised: 2026-10-11 (RC noticed CI red on umbrella `357fc94c`)
@@ -107,3 +107,42 @@ quirks: default template args, inline namespaces, `{anonymous}` vs
 **Done when:** `cmake-build (clang, clang++)` passes, all 72 steps.  Expect
 the 12 subsystems it has skipped since 2026-10-07 to surface their own
 clang failures, if any -- they get their own tickets.
+
+## Resolution (2026-10-11, umbrella `f122f850`)
+
+As planned.  `WebserverLive.test.cpp` picks the golden by compiler
+(`c_golden_name`: `__clang__` before `__GNUC__`; any other compiler
+fails, naming the gap); a missing golden fails with "bless it with
+XO_UPDATE_GOLDEN=1, built with this compiler" rather than an empty-string
+mismatch.  `golden/server-snapshot.json` -> `server-snapshot.gcc.json`
+(unchanged), new `server-snapshot.clang.json`.
+
+- **The clang golden** was blessed locally: `.build-clang`, configured
+  inside `xo-builder-shell` with `CC=clang CXX=clang++` (CI's
+  `6nhbii41...-clang-wrapper-18.1.8`), building only `utest.websock.live`.
+- **It reproduces CI's own clang output.**  Against the snapshot in task
+  612's log (same server code: no C++ changes `357fc94c..HEAD` then), the
+  only differences were 6 missing spaces in type names -- each exactly at a
+  Catch2 line wrap (33 wraps re-joined; the wrap drops the space).
+  Identical otherwise.  This settles the one thing `ci/issues/03` left
+  unverified: per-package include paths change no spelling.
+- **The 12 skipped subsystems, pre-checked under clang** before pushing,
+  in the same tree: all build; xo-reactor2websock, xo-pyreactor2websock,
+  xo-distribution, xo-process, xo-kalmanfilter pass; the other 7 have no
+  tests (as under gcc).  xo-pyreactor2websock first failed only because a
+  partial tree lacked its python imports (`xo.reactor`, `xo.reflect`);
+  after a full-tree build it passed.
+- **Found on the way, fixed separately** (umbrella `70d96392`):
+  xo-tokenizer's headers guarded the gcc-only `-Wchanges-meaning` pragma
+  with `#ifndef __APPLE__`, so clang on linux, with `-Werror`, rejected the
+  unknown warning group -- breaking the UMBRELLA tree under clang
+  (xo-reader).  CI never saw it: per-subsystem builds take xo-tokenizer's
+  INSTALLED headers via `-isystem`, where clang stays quiet (checked in
+  `xo-reader/.build/compile_commands.json`); CI's log shows them only as
+  warnings, in xo-tokenizer's own example and utest.  Now
+  `#if defined(__GNUC__) && !defined(__clang__)`.
+- **CI:** `cmake-build (clang, clang++)` task 618 on `f122f850`: success --
+  the first since 2026-10-05 (task 600).  A failed step ends the job, so
+  success means all 72 steps passed.  (Its log had not reached
+  `actions_log/` when checked; the status is from the tasks API.)
+
