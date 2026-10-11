@@ -1,6 +1,6 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a-15f done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`, `e95add91`, `15593041`; one indirect lock left: endpoints[], see 15f)
+Status: done 2026-10-11 -- 15a-15g, umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`, `e95add91`, `15593041`, `23118f87`
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`; `xo-websock/issues/17` done 2026-10-11, umbrella `f4965945`)
@@ -99,6 +99,16 @@ its lock (`WsSessionRouter.cpp:266`).
     first encounter in `url_router_`'s maps, under the guard 15d declared.
     Readers of `endpoints` to move: `Webserver.test.cpp`,
     `WebserverLive.test.cpp`.  Decide: a 15g here, or with 16.
+  - **15g -- done, umbrella `23118f87` (RC: here, not with 16).**  The server
+    printer's `endpoints[]` list dropped (and its `p_os`); endpoints print
+    in full at first encounter in `url_router_`'s maps, under 15d's guard.
+    Golden (gcc, clang): both endpoints -- the stream one with its receiver
+    -- in `http_map_` / `stream_map_`; census unchanged, no dangling ref.
+    Tests: `endpoints_of(srv)` in `Webserver.test.cpp` and
+    `WebserverLive.test.cpp` (map order = `visit_endpoints`' order: http then
+    stream, by stem); the url-router check now asserts each map entry is
+    that endpoint in full, keyed by its own stem.  `visit_endpoints` stays:
+    public API, test callers.
     Plan was:
     WsSessionTable: `next_id_`, `session_map_` (owning)
     `.guarded_by`, AND the server's `sessions[]` list dropped, for the same
@@ -182,3 +192,24 @@ caller know every mutex in the traversed structure.
 **Done when:** websock's guarded members carry `.guarded_by`, no websock
 printer takes a lock, `_unplaced_` is empty in the golden snapshot, and the
 browser tests stay green.
+
+## Resolution (2026-10-11)
+
+Done-when checked after 15g (`23118f87`):
+- guarded members carry `.guarded_by`: UrlRouter's maps (15d),
+  WsSessionRouter's `subscription_v_` (15e), WsSessionTable's `next_id_`,
+  `session_map_` (15f), with 15a-c's server `state_` and session members;
+- **no websock printer takes a lock, directly or through a visitor** -- a
+  scan of every `JsonPrinter_*` body in `xo-websock/src/websock/*.cpp` for
+  `lock_guard|unique_lock|scoped_lock|.lock()|visit_*` finds none.  (15f
+  first claimed this from the direct scan alone; the indirect lock through
+  `visit_endpoints` survived it -- hence 15g);
+- `_unplaced_` empty (asserted by the golden test);
+- browser tests 21/21; websock utests green under gcc and clang.
+
+What remains of the server's view model: `refcount`, `listen_port`,
+`state` (the last read through the unlocked `state()` -- see 15a), and the
+per-type keys of the other printers.  They and the ten `JsonPrinter_*` go
+in `issues/16`; `JsonPrinter_Webserver` is now the simplest of them (RC,
+2026-10-11: retire it first).
+

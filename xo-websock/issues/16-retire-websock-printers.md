@@ -3,7 +3,7 @@
 Status: open
 Type: task
 Milestone: reflection-driven-json
-Blocked by: `.xo-backlog/xo-printjson/issues/07`, `.xo-backlog/xo-websock/issues/15`
+Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
 
 Move each websock type onto the generic printer and delete its
 `JsonPrinter_*`, simplest first:
