@@ -1,6 +1,6 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a-15d done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`; 15e, 15f to go)
+Status: open (15a-15e done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`, `e95add91`; 15f to go)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`; `xo-websock/issues/17` done 2026-10-11, umbrella `f4965945`)
@@ -63,7 +63,16 @@ its lock (`WsSessionRouter.cpp:266`).
   `std::mutex` inside the router); checked red with the declarations
   removed.
 - **Plan for the rest (RC, 2026-10-11), one type per step:**
-  - **15e** WsSessionRouter: `subscription_v_` (owning) `.guarded_by`,
+  - **15e -- done, umbrella `e95add91`.**  As planned: `subscription_v_`
+    reflected owning, `.guarded_by(&WsSessionRouter::mutex_)`; router
+    printer lock-free; the session's `subscriptions[]` list dropped.  Golden
+    (gcc, clang: same 277 lines): each Subscription, with its sink, now in
+    full in `router_.subscription_v_`; object census unchanged.  No new
+    lock nesting -- `visit_members_guarded` prints unguarded members (the
+    session's `router_`) before taking any guard.  `visit_subscriptions` now
+    used only by `WsSessionRouter.test.cpp`: a candidate for 16.
+    Plan was:
+    WsSessionRouter: `subscription_v_` (owning) `.guarded_by`,
     printer lock gone, AND the session's `subscriptions[]` list dropped in
     the same change -- it places subscriptions first, so an owning
     `subscription_v_` would trip the two-owners assert.  Subscriptions move
