@@ -1,6 +1,6 @@
 # 08 -- xo-type-src-map files `namespace a::b` types under `a::nested`
 
-Status: diagnosed
+Status: done 2026-10-11 -- umbrella `b0fd1b93`
 Type: bug
 Raised: 2026-10-11, checking whether gcc/clang spelling breaks source links (`.xo-backlog/xo-websock/issues/12`)
 Progress: grep -ho '"[A-Za-z_:]*::\(nested\|inline\)::[A-Za-z_]*"' .build/*/types.json | sort -u | wc -l
@@ -62,3 +62,29 @@ from clang rather than guessing.
 
 **Done when:** the Progress command prints 0 after a rebuild, and
 `xo::fn::CallbackIdImpl` has a source link in introspect.
+
+## Resolution (2026-10-11, umbrella `b0fd1b93`)
+
+As proposed: the `NamespaceDecl` branch drops trailing ` inline` /
+` nested` before reading the name.  Four `TestParseDump` cases, dump lines
+captured from clang -- `xo::fn::A`, `xo::v1::C`, `xo::a::b::D`, and an
+anonymous inline namespace skipped -- each failed first with the bug's key
+(`xo::nested::A`, `xo::inline::C`, `xo::nested::nested::D`,
+`xo::inline::E`: so the anonymous one was mis-keyed too, not skipped).
+
+**Two existing fixtures were the bug's own output.**  The regression tests
+for "file advances on a non-decl line" and "a path inside a type string"
+used a namespace literally named `nested` (`xo::nested::begin`), written
+from the generator's mis-keyed map.  No xo namespace has that name
+(`grep -rn 'namespace .*nested' --include=*.hpp`: none); the real type is
+`xo::pp::begin` (`xo-ppsink/include/xo/ppsink/pretty.hpp`, `namespace
+xo::pp {`).  Rewritten in the real dump shape (`xo`, then `pp nested`),
+same intent; a comment in each keeps the old reading.
+
+Done-when checked after rebuilding `.build` (every `types.json`
+regenerates -- the script is a dependency): Progress command 0; key count
+unchanged (renamed, not lost); `xo::fn::CallbackIdImpl` maps to
+`xo-callback/include/xo/callback/CallbackId.hpp:22`, the key the page
+derives from `xo::fn::CallbackIdImpl<xo::fn::CallbackId_tag>`.  Not
+clicked through in a browser.
+
