@@ -1,6 +1,6 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a, 15b, 15c done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`; rest unblocked 2026-10-11)
+Status: open (15a-15d done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`; 15e, 15f to go)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`; `xo-websock/issues/17` done 2026-10-11, umbrella `f4965945`)
@@ -54,6 +54,26 @@ its lock (`WsSessionRouter.cpp:266`).
 - **15c -- done, umbrella `e4683ed8`.**  `outbound_q_` reflected
   `.guarded_by(&mutex_)` (deque reflection, `xo-reflect/issues/04`): prints
   its queued messages.  The session printer takes no lock.
+- **15d -- done, umbrella `cd52f10a`.**  UrlRouter: `http_map_`, `stream_map_`
+  reflected `.guarded_by(&UrlRouter::mutex_)`; its printer takes no lock
+  (`reflected_members` only).  Values are `rp<DynamicEndpoint>`, shared
+  edges: the server's `endpoints[]` still places each endpoint first, so
+  the maps print the same sorted refs -- golden unchanged, gcc and clang.
+  New test `url-router-maps-are-reflected-under-its-mutex` (n_guard 1, a
+  `std::mutex` inside the router); checked red with the declarations
+  removed.
+- **Plan for the rest (RC, 2026-10-11), one type per step:**
+  - **15e** WsSessionRouter: `subscription_v_` (owning) `.guarded_by`,
+    printer lock gone, AND the session's `subscriptions[]` list dropped in
+    the same change -- it places subscriptions first, so an owning
+    `subscription_v_` would trip the two-owners assert.  Subscriptions move
+    into `router_.subscription_v_` (golden diff).
+  - **15f** WsSessionTable: `next_id_`, `session_map_` (owning)
+    `.guarded_by`, AND the server's `sessions[]` list dropped, for the same
+    reason.  Fixes the consistency hazard below.  The C++ live test's
+    `["sessions"]` reads move onto members.
+  - Not here (16): `endpoints[]` (shared edges: no collision), `sender`,
+    `sink`, scalar view-model keys.
 - **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05`
   (done 2026-10-11, umbrella `339edf66`; the maps print through
   reflection, but `member_ref_map` stays until 17),
