@@ -1,6 +1,6 @@
 # 18 -- introspect: no source link for a `const T&` or `T*` member
 
-Status: diagnosed
+Status: done 2026-10-11 -- umbrella `590ffea0`
 Type: bug
 Raised: 2026-10-11, checking whether gcc/clang spelling breaks source links (`issues/12`)
 
@@ -60,3 +60,22 @@ as `source_of("xo::web::UrlRouter")` / `("xo::web::WebserverImpl")`.
 
 **Done when:** those two members link to their source, and the browser
 tests pass.
+
+## Resolution (2026-10-11, umbrella `590ffea0`)
+
+As proposed: `source_of()` strips leading `const` / `volatile` and
+trailing `*`, `&`, `&&`, cv before the template arguments.
+
+- **Test** (`rows.mjs`): first, that the live snapshot does carry such
+  declared types -- it has `const xo::web::UrlRouter&`,
+  `xo::web::WebserverImpl*`, `xo::web::Webserver*`; then five spellings
+  (`const T&`, `T&&`, `T*`, `T* const`, `volatile T*`) each resolve to their
+  bare type's file and line.  All five red before the fix (no link), green
+  after.  21/21 browser tests pass.
+- **Re-measured** (the command above, with the page's new stripping, against
+  `server-snapshot.gcc.json` -- renamed by `issues/19`): 23 -> 20 misses of
+  42.  Fixed: `const xo::web::UrlRouter&`, `xo::web::WebserverImpl*` (this
+  ticket) and `xo::fn::CallbackIdImpl` (`xo-cmake/issues/08`).  The 20 left
+  are out of scope by design: builtins, `std::`, `Json::CharReader`
+  (external), anonymous namespaces.
+
