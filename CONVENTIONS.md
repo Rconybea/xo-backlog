@@ -162,13 +162,21 @@ That is the whole recipe, as of 2026-08-10. It runs two stages — configure /
 build / install with `--with-utests --with-examples`, then `--utest` — both
 with `-q -k` over `--all`.
 
-**Expect, as of 2026-09-13:**
+**Expect, as of 2026-10-11:**
 
 ```
-stage 1 (configure, build, install):  71 attempted: 71 ok, 0 with no tests, 0 failed, 0 skipped
-stage 2 (utest):                      71 attempted: 43 ok, 28 with no tests, 0 failed, 0 skipped
+stage 1 (configure, build, install):  73 attempted: 73 ok, 0 with no tests, 0 failed, 0 skipped
+stage 2 (utest):                      73 attempted: 47 ok, 26 with no tests, 0 failed, 0 skipped
 xo-build: --sweep ok (build and utest)
 ```
+
+The 71/43/28 -> 73/47/26 step (2026-09-13 -> 2026-10-11) is two subsystems
+APPEARING, both with tests -- `xo-reactor2websock` (`a5097a5b`) and
+`xo-pyreactor2websock` (`a5b06a66`), 2026-09-26 -- plus two existing ones
+GAINING tests: `xo-pystringtable2` (`1742a7e1`, 2026-09-13, minutes after the
+71/43/28 baseline was written) and `xo-reflectutil` (`9abbe793`, 2026-09-21).
+The 2026-10-11 sweep that measured it read `46 ok, 1 failed`: the failure was
+a stale websock golden (`357fc94c`), passing after.
 
 `0 failed` in both stages, plus that closing line, are the invariant. Read the
 closing line, not just the last summary: stage 2 runs even when stage 1 fails,
@@ -206,7 +214,7 @@ comm -13 <(git show 7f6a815b:xo-cmake/etc/xo/subsystem-list | grep '^xo-' | sort
 # xo-callback2 xo-pyarena xo-pyfacet xo-pyindentlog2 xo-pyobject2 xo-pyreactor2 xo-reactor2
 ```
 
-**71 swept, 72 listed, and that one gap is deliberate:** `--all` excludes the
+**73 swept, 74 listed (2026-10-11), and that one gap is deliberate:** `--all` excludes the
 `xo-cmake` bootstrap by design. The 70 -> 71 step on 2026-09-13 is
 `xo-pystringtable2`, and it is the fourth kind of movement again: a subsystem
 APPEARING, which moves the attempted total -- the three earlier steps that day

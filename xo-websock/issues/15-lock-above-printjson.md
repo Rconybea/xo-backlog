@@ -3,7 +3,7 @@
 Status: open (15a, 15b, 15c done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`; rest blocked)
 Type: task
 Milestone: reflection-driven-json
-Blocked by: `.xo-backlog/xo-reflect/issues/05`, `.xo-backlog/xo-websock/issues/17`
+Blocked by: `.xo-backlog/xo-websock/issues/17` (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`)
 
 (Filename kept from the superseded plan below, so references still resolve.)
 
@@ -13,8 +13,8 @@ Not doable in one pass: most of it waits on other tickets.
 
 | locking printer | lock | what reflection needs | blocked by |
 |---|---|---|---|
-| WsSessionTable | table `mutex_` | `session_map_`: `unordered_map<id, unique_ptr<Recd>>` | `xo-reflect/issues/05` (maps) |
-| UrlRouter | router `mutex_` | `http_map_`, `stream_map_`: maps | `xo-reflect/issues/05` |
+| WsSessionTable | table `mutex_` | `session_map_`: `unordered_map<id, unique_ptr<Recd>>` (reflectable now: `xo-reflect/issues/05`) | `xo-websock/issues/17` (two owners, as for `subscription_v_`) |
+| UrlRouter | router `mutex_` | `http_map_`, `stream_map_`: maps (reflectable now: `xo-reflect/issues/05`) | `xo-websock/issues/17` |
 | ~~WsSession~~ | session `mutex_` | `outbound_q_`: `std::deque` | done: 15c (`e4683ed8`) |
 | WsSessionRouter | router `mutex_` | `subscription_v_`: `vector<unique_ptr<Subscription>>` (reflectable now) | `xo-websock/issues/17` |
 
@@ -50,7 +50,9 @@ its lock (`WsSessionRouter.cpp:266`).
 - **15c -- done, umbrella `e4683ed8`.**  `outbound_q_` reflected
   `.guarded_by(&mutex_)` (deque reflection, `xo-reflect/issues/04`): prints
   its queued messages.  The session printer takes no lock.
-- **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05`,
+- **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05`
+  (done 2026-10-11, umbrella `339edf66`; the maps print through
+  reflection, but `member_ref_map` stays until 17),
   then `issues/17`, then the remaining types here (WsSessionTable,
   UrlRouter, WsSessionRouter), then `issues/16`.
 
