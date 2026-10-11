@@ -2,7 +2,7 @@
 
 Status: diagnosed
 Type: bug / ci
-Blocked by: `.xo-backlog/ci/issues/03`
+Blocked by: none (`ci/issues/03` done 2026-10-11, umbrella `80e7f8f8`)
 Raised: 2026-10-11 (RC noticed CI red on umbrella `357fc94c`)
 
 `live-server-snapshot-matches-golden` (`xo-websock/utest/WebserverLive.test.cpp`)
@@ -91,7 +91,8 @@ worth pinning: keep a golden for each.
   the shell reproduces CI's spellings, which `ci/issues/03` leaves
   unverified.
 
-Blocked by: `.xo-backlog/ci/issues/03` (for blessing locally).
+Was blocked by `.xo-backlog/ci/issues/03` (for blessing locally) -- done
+2026-10-11, umbrella `80e7f8f8`.
 
 **Superseded plan** (2026-10-11, same day; kept per CONVENTIONS rule 6):
 one golden, blessed under gcc; under clang, blank `_canonical_type_` /

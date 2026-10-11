@@ -1,6 +1,6 @@
 # 03 -- the CI builder's toolchain as a nix-shell: `xo-builder-shell`
 
-Status: open
+Status: done 2026-10-11 -- umbrella `80e7f8f8`
 Type: feature / tooling
 Raised: 2026-10-11 (RC), for `.xo-backlog/xo-websock/issues/19`
 
@@ -61,3 +61,32 @@ compared with CI's own output, is the check.
 and the image still builds (`nix-build -A xo.docker-xo-builder`, per the
 file's header; `default.nix` -> `shells.nix`) with an unchanged contents
 list.
+
+## Resolution (2026-10-11, umbrella `80e7f8f8`)
+
+Simpler than planned (RC): everything stays in `pkgs/docker-xo-builder.nix`.
+The `contents` list moves verbatim into its `let`; the image takes
+`inherit contents;` and carries the shell as `passthru.shell = mkShell {
+packages = contents; }`.  `ci.nix` adds `xo-builder-shell =
+xoPkgs.docker-xo-builder.shell;`.  Also reachable as `nix-shell -A
+xo.docker-xo-builder.shell`.
+
+- **One list, not split** into nativeBuildInputs / buildInputs: a
+  throwaway prototype built and ran a cmake project
+  (`find_package(Libwebsockets)`, `find_package(jsoncpp)`) under clang
+  with the libraries in either place.  openssl's headers reach xo-websock
+  through libwebsockets' cmake target, not through nix
+  (`xo-websock/src/websock/CMakeLists.txt`).
+- **Image unchanged:** `nix-instantiate -A xo.docker-xo-builder` is
+  `2s69n7gs0x8lqylkz02dp2b1mkclrs1r-docker-xo-builder.tar.gz.drv` before
+  and after (passthru is not part of the derivation), so no rebuild or push.
+- **Done-when checked:** inside the shell, `clang++` / `g++` resolve to the
+  paths CI task 612 prints; `CC=clang CXX=clang++ cmake` identifies Clang
+  18.1.8.  (CI's log doesn't print cmake's path; it comes from the same
+  list, so the same derivation.)
+- Still unverified, as planned: that per-package include paths vs the
+  image's merged `/include` change nothing observable -- `xo-websock/issues/19`
+  checks it.
+- First entry on a host copies the list's `-dev` outputs (from the NAS
+  cache here): slow once.
+
