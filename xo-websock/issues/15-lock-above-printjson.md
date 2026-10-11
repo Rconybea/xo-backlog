@@ -1,9 +1,9 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a, 15b, 15c done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`; rest blocked)
+Status: open (15a, 15b, 15c done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`; rest unblocked 2026-10-11)
 Type: task
 Milestone: reflection-driven-json
-Blocked by: `.xo-backlog/xo-websock/issues/17` (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`)
+Blocked by: none (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`; `xo-websock/issues/17` done 2026-10-11, umbrella `f4965945`)
 
 (Filename kept from the superseded plan below, so references still resolve.)
 
@@ -13,10 +13,10 @@ Not doable in one pass: most of it waits on other tickets.
 
 | locking printer | lock | what reflection needs | blocked by |
 |---|---|---|---|
-| WsSessionTable | table `mutex_` | `session_map_`: `unordered_map<id, unique_ptr<Recd>>` (reflectable now: `xo-reflect/issues/05`) | `xo-websock/issues/17` (two owners, as for `subscription_v_`) |
-| UrlRouter | router `mutex_` | `http_map_`, `stream_map_`: maps (reflectable now: `xo-reflect/issues/05`) | `xo-websock/issues/17` |
+| WsSessionTable | table `mutex_` | `session_map_`: `unordered_map<id, unique_ptr<Recd>>` (reflectable now: `xo-reflect/issues/05`) | unblocked (17 done) |
+| UrlRouter | router `mutex_` | `http_map_`, `stream_map_`: maps (reflectable now: `xo-reflect/issues/05`) | unblocked (17 done) |
 | ~~WsSession~~ | session `mutex_` | `outbound_q_`: `std::deque` | done: 15c (`e4683ed8`) |
-| WsSessionRouter | router `mutex_` | `subscription_v_`: `vector<unique_ptr<Subscription>>` (reflectable now) | `xo-websock/issues/17` |
+| WsSessionRouter | router `mutex_` | `subscription_v_`: `vector<unique_ptr<Subscription>>` (reflectable now) | unblocked (17 done) |
 
 **The view-model lists place first.**  The server's `endpoints[]` /
 `sessions[]`, a session's `subscriptions[]` and a subscription's `"sink"`
@@ -25,7 +25,9 @@ reflected members.  Once `subscription_v_` / `session_map_` are owning
 reflected edges, they reach objects placed already -- the two-owners
 assert (`xo-printjson/issues/08`).  The lists can become refs or go only
 once introspect reads `_members_` alone (`issues/17`): so 17 precedes the
-rest of 15, not follows it.
+rest of 15, not follows it.  **17 done (2026-10-11, `f4965945`):** the
+page no longer reads the lists, and finds each object by id wherever it
+lands -- so the lists may become refs, or go, as the owning edges arrive.
 
 **Caller rule checked (2026-10-10):** introspect prints inside
 `IntrospectReceiver::receive()`, which runs with no websock lock held --
@@ -38,7 +40,9 @@ its lock (`WsSessionRouter.cpp:266`).
   unlocked while start/stop write it under `mutex_`.  `state_` now prints
   last among the server's members (golden: reorder only, checked by
   script).  Still racy: the view-model `"state"` key reads it via the
-  unlocked `state()` accessor; it goes with `issues/17`.
+  unlocked `state()` accessor.  Since 17 the page reads the guarded
+  `state_` member instead; the key itself (still written, still racy)
+  goes when 16 drops the view-model keys.
 - **15b -- done, umbrella `617b5f68`.**  Session record: `output_buf_`
   reflected `.owning().guarded_by(&mutex_)`, `last_msg_seq_`
   `.guarded_by(&mutex_)`; the printer's `member_as<OutputBuffer *>` and its
@@ -53,7 +57,8 @@ its lock (`WsSessionRouter.cpp:266`).
 - **Rest** (blocked as tabled above), in order: `xo-reflect/issues/05`
   (done 2026-10-11, umbrella `339edf66`; the maps print through
   reflection, but `member_ref_map` stays until 17),
-  then `issues/17`, then the remaining types here (WsSessionTable,
+  then `issues/17` (done 2026-10-11, umbrella `f4965945`), then the
+  remaining types here (WsSessionTable,
   UrlRouter, WsSessionRouter), then `issues/16`.
 
 Today these printers take their own mutex while reading:

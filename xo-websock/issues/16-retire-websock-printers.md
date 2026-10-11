@@ -25,7 +25,11 @@ What blocks some of them:
   custom printer meanwhile;
 - atomics, enums, deque, `unique_ptr`: `xo-reflect/issues/04`;
 - view-model top-level keys: the printer can drop them only after
-  introspect stops reading them (`issues/17`);
+  introspect stops reading them (`issues/17` -- done 2026-10-11, umbrella
+  `f4965945`; nothing in the page or its tests reads them now, and
+  `members_only.mjs` checks the page without them).  The server's
+  `"state"` key is the racy unlocked read noted in 15a: dropping it fixes
+  that;
 - the inline receiver (DynamicEndpoint) and the virtual
   `WebsocketSink::print_json`: decide whether the generic printer covers
   them, through self-tagging, or whether they stay recorded exceptions.
