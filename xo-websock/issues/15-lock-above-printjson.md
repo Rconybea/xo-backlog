@@ -1,6 +1,6 @@
 # 15 -- declare websock ownership and guards; printers stop locking
 
-Status: open (15a-15e done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`, `e95add91`; 15f to go)
+Status: open (15a-15f done -- umbrella `b83bc579`, `617b5f68`, `e4683ed8`, `cd52f10a`, `e95add91`, `15593041`; one indirect lock left: endpoints[], see 15f)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-reflect/issues/05` done 2026-10-11, umbrella `339edf66`; `xo-websock/issues/17` done 2026-10-11, umbrella `f4965945`)
@@ -77,7 +77,30 @@ its lock (`WsSessionRouter.cpp:266`).
     the same change -- it places subscriptions first, so an owning
     `subscription_v_` would trip the two-owners assert.  Subscriptions move
     into `router_.subscription_v_` (golden diff).
-  - **15f** WsSessionTable: `next_id_`, `session_map_` (owning)
+  - **15f -- done, umbrella `15593041`.**  As planned: `WsSessionTable<Recd>::
+    reflect_self` (declared in the header, `TypeDescrTable` forward-declared;
+    the one definition an explicit specialization in `Webserver.cpp`)
+    reflects `next_id_`, `session_map_` (owning) `.guarded_by(mutex_)`;
+    table printer lock-free; the server's `sessions[]` list dropped.  Golden
+    (gcc, clang): sessions -- with senders, subscription, sink -- now in
+    `session_table_.session_map_`; census unchanged (18), no dangling ref.
+    Fixes the consistency hazard below (one acquisition).  Lock nestings
+    while printing unchanged: table->router, table->session, as
+    `visit_sessions` gave.  Tests: `WebserverLive.test.cpp`'s `sessions`
+    reads via `sessions_of(root)` (numeric key order -- jsoncpp sorts keys
+    as strings); `Webserver.test.cpp:459` also read `sessions` -- missed by
+    a grep scoped to the live test, caught by its failure.
+  - **Left: one INDIRECT lock** (found checking done-when, 2026-10-11).  No
+    `JsonPrinter_*` body locks (scan of `src/websock/*.cpp`), but the server
+    printer's `endpoints[]` list calls `visit_endpoints`, which holds the
+    url router's mutex while each endpoint prints
+    (`UrlRouter.cpp:151`, via `WebserverImpl::visit_endpoints`).  Endpoints
+    are shared edges (`rp`), so dropping `endpoints[]` lets them print at
+    first encounter in `url_router_`'s maps, under the guard 15d declared.
+    Readers of `endpoints` to move: `Webserver.test.cpp`,
+    `WebserverLive.test.cpp`.  Decide: a 15g here, or with 16.
+    Plan was:
+    WsSessionTable: `next_id_`, `session_map_` (owning)
     `.guarded_by`, AND the server's `sessions[]` list dropped, for the same
     reason.  Fixes the consistency hazard below.  The C++ live test's
     `["sessions"]` reads move onto members.
