@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a, 16b done -- umbrella `860776d8`, `81b650de`; 6 printers left)
+Status: open (16a-16c done -- umbrella `860776d8`, `81b650de`, `80b20c45`; 4 printers left)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -77,4 +77,18 @@ property) before 16 ends.
   `_name_` -> its short name `WsSessionTable<WebsocketSessionRecd>` (checked
   by script).  The live test's redaction list renamed with them -- `port`,
   `mount_origin` still `<redacted>` (else a run's port and a local path).
+- **16c -- done, umbrella `80b20c45`.**  `JsonPrinter_WsSessionSender` and
+  `JsonPrinter_WsSession` retired.  Reflection adds the sender's `target`
+  (raw `WebserverImpl *`: borrowed, a ref -- its "not reflected" comment
+  predated `xo-printjson/issues/08`) and the session's `sender` (`rp`,
+  shared; the only placing edge -- the router's and sinks' `sender_` are
+  hand-written refs -- so the sender stays under its session).
+  `provide_webserver_json_printers` gone (empty); the session record's
+  `session_id()` / `sender()` accessors too (only the printer used them --
+  the build is the proof, the class is local to `Webserver.cpp`).  Golden:
+  with ids relabelled (the sender now placed after the router), exactly the
+  renames, `_name_`s, dropped keys (`session_id`, `sender`; `refcount`,
+  `session_id`, `open`) and the sender's move into the session's `sender`
+  member (checked by script).  `output_buf` stays redacted (renamed in the
+  list).  A session's id now comes from its sender's `session_id`.
 
