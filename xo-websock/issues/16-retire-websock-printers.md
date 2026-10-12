@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open
+Status: open (16a done -- umbrella `860776d8`: JsonPrinter_Webserver)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -40,3 +40,31 @@ is settled in `issues/15`.
 
 **Done when:** no websock `JsonPrinter_*` remains except recorded
 exceptions.
+
+## Progress
+
+**Member names (RC, 2026-10-11): rename as we go.**  `REFLECT_MEMBER(sr, x)`
+registers `"x"` for member `x_` (`StructReflector.hpp:295`); the bespoke
+printers re-add the underscore (`reflected_members(tp, "_")`), the generic
+printer does not (`JsonPrintState.cpp:181`).  So retiring a printer drops
+its type's trailing underscores on the wire.  Rejected: changing
+`REFLECT_MEMBER` to register the declared name -- reflection is used
+elsewhere, blast radius too high (29 files, 9 subsystems).  Mixed spellings
+are accepted while 16 is in progress.
+
+**refcount:** not a C++ member, so the generic printer cannot print it --
+each retirement drops its type's `refcount` from Show JSON.  If refcounts
+should stay visible, that needs deciding (e.g. a reflected computed
+property) before 16 ends.
+
+- **16a -- done, umbrella `860776d8`.**  `JsonPrinter_Webserver` retired: the
+  server prints from reflection.  `_name_` `Webserver` -> `WebserverImpl`;
+  view-model keys `refcount`, `listen_port`, `state` gone (and with `state`,
+  the unguarded `state()` read of 15a); members `ws_config`, `pjson`,
+  `url_router`, `session_table`, `listen_port`, `state`.  Golden: exactly
+  those changes (checked by script).  Found: `box_subtitle()`
+  (`introspect.js`) still read `d.obj.listen_port` / `.state` -- missed by
+  `issues/17`, whose `members_only.mjs` compared rows but not box
+  sub-titles; it now compares them too.  `noticker.mjs`'s "refcount fields
+  remain" check moved to an endpoint (still bespoke).
+
