@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a done -- umbrella `860776d8`: JsonPrinter_Webserver)
+Status: open (16a, 16b done -- umbrella `860776d8`, `81b650de`; 6 printers left)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -67,4 +67,14 @@ property) before 16 ends.
   `issues/17`, whose `members_only.mjs` compared rows but not box
   sub-titles; it now compares them too.  `noticker.mjs`'s "refcount fields
   remain" check moved to an endpoint (still bespoke).
+- **16b -- done, umbrella `81b650de`.**  The three printers left as pure wrappers
+  (`open_object` + `reflected_members(tp, "_")`, no keys) retired together:
+  `JsonPrinter_UrlRouter`, `JsonPrinter_WsSessionTable`,
+  `JsonPrinter_WebserverConfig`; `provide_url_router_json_printers` went
+  with the first (nothing left to register).  Golden: exactly the renames
+  (`http_map`, `stream_map`; `next_id`, `session_map`; `port`, `tls_flag`,
+  `host_check_flag`, `use_retry_flag`, `mount_origin`) and WsSessionTable's
+  `_name_` -> its short name `WsSessionTable<WebsocketSessionRecd>` (checked
+  by script).  The live test's redaction list renamed with them -- `port`,
+  `mount_origin` still `<redacted>` (else a run's port and a local path).
 
