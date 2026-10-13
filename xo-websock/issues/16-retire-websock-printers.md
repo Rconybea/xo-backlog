@@ -154,4 +154,11 @@ property) before 16 ends.
   from `self_tp()`.  Golden: exactly the dropped keys and the receiver's
   move into `receiver_`, less its `refcount` (ids unchanged; checked by
   script).  No object carries `refcount` now (`noticker.mjs` asserts it).
+- **`uri_regex_` (RC, 2026-10-12): left out of the output.**  A compiled
+  cache of `uri_pattern_` (`compile_pattern`, `DynamicEndpoint.cpp`); its one
+  observable, the capture count, follows from the pattern, and a
+  `std::regex` keeps no source text.  The printer's `member_as<std::regex>`
+  line removed (uncommitted at the time of writing); DynamicEndpoint's
+  printer now exists only for its three `std::function`s
+  (`.xo-backlog/xo-reflect/issues/09`).  Found reading it: `issues/20`.
 
