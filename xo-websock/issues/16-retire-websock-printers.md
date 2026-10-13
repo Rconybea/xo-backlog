@@ -1,9 +1,9 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a-16g done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`, `1033f293`; DynamicEndpoint's four summaries left)
+Status: open (16a-16g done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`, `1033f293`, `3c3a38f4`; blocked on `xo-reflect/issues/09` for DynamicEndpoint's three std::functions)
 Type: task
 Milestone: reflection-driven-json
-Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
+Blocked by: `.xo-backlog/xo-reflect/issues/09` (`xo-printjson/issues/07`, `xo-websock/issues/15` done)
 
 Move each websock type onto the generic printer and delete its
 `JsonPrinter_*`, simplest first:
@@ -158,7 +158,8 @@ property) before 16 ends.
   cache of `uri_pattern_` (`compile_pattern`, `DynamicEndpoint.cpp`); its one
   observable, the capture count, follows from the pattern, and a
   `std::regex` keeps no source text.  The printer's `member_as<std::regex>`
-  line removed (uncommitted at the time of writing); DynamicEndpoint's
+  line removed -- umbrella `3c3a38f4` (golden: exactly each endpoint minus its
+  `uri_regex_`, checked by script); DynamicEndpoint's
   printer now exists only for its three `std::function`s
   (`.xo-backlog/xo-reflect/issues/09`).  Found reading it: `issues/20`.
 
