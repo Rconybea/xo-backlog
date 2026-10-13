@@ -1,6 +1,6 @@
 # 20 -- a repeated ${var} in a uri pattern binds later variables to the wrong capture
 
-Status: diagnosed
+Status: done 2026-10-12 -- umbrella `c38de50e`
 Type: bug
 Raised: 2026-10-12, found reading `compile_pattern` while deciding how to print `uri_regex_` (`issues/16`)
 
@@ -57,3 +57,20 @@ variable REQUIRE equal values -- `/x/${a}/${a}` matching `/x/1/1` but not
 
 **Done when:** the probe passes as a test in `UrlRouter.test.cpp`, and the
 existing url-router tests stay green.
+
+## Resolution (2026-10-12, umbrella `c38de50e`)
+
+As proposed.  `DynamicEndpoint::var_group_v_` (`std::vector<std::size_t>`,
+private, not reflected) holds each variable's capture group -- its first
+occurrence's; `compile_pattern` counts the groups it emits and records the
+count when it first sees a name; `http_response` reads
+`match[var_group_v_[i]]`.  "A repeated variable takes its first
+occurrence's value" is unchanged -- the policy question above (require
+equal repeats) left open.
+
+Test `endpoint-repeated-var-takes-first-and-later-vars-keep-theirs`
+(`UrlRouter.test.cpp`): `/x/${a}/${a}/${b}` on `/x/1/2/3` -> `1,3` (red
+first: `"1,2" == "1,3"`); `/y/${a}/${b}/${a}` -> `1,2`; `/z/${a}/${b}` -> `1,2`.
+websock utests green under gcc and clang; golden unchanged; browser tests
+21/21.
+
