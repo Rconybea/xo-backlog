@@ -1,6 +1,7 @@
 # 09 -- reflect std::function: its signature, and what a value can show
 
-Status: open (design first)
+Status: open (spec written 2026-10-13, under review)
+Spec: `.xo-backlog/std-function-reflection/spec.md`
 Type: feature
 Milestone: reflection-driven-json
 Raised: 2026-10-12 (RC), from `.xo-backlog/xo-websock/issues/16` (DynamicEndpoint)
@@ -74,3 +75,13 @@ reflection instead of a bespoke printer summarising it.
 **Done when:** a `std::function` member reflects with its signature, prints
 through printjson's generic path with no per-struct printer, and
 DynamicEndpoint's three function members do (`xo-websock/issues/16`).
+
+## Comments
+
+- 2026-10-13: design settled with RC in brainstorming -> the spec.  The
+  four questions above, answered: (1) `mt_function` itself, with a
+  `FunctionRepr { pointer, std_function }` in the interning key and an
+  `fn_repr()` accessor -- no new metatype; (2) a value prints `"set"` /
+  `"empty"`; (3) `std::function` only; (4) the signature through the
+  declared type and the existing `fn_*` accessors.
+
