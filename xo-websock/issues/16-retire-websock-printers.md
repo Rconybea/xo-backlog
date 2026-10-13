@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a-16d done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`; 3 printers left)
+Status: open (16a-16e done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`; DynamicEndpoint, WebsocketSink left)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -106,4 +106,20 @@ property) before 16 ends.
   ALONE now places its endpoint in full (shared, first encounter) where
   the hand-written ref did not; `WsSessionRouter.test.cpp` checks the new
   shape.
+- **16e -- done, umbrella `4752e002`.**  `JsonPrinter_WsSessionRouter` retired
+  (RC: option A).  `url_router_` changed from `UrlRouter const &` to
+  `UrlRouter const *` -- a reference member has no member pointer, so
+  `REFLECT_MEMBER` cannot name it; the ctor still takes a reference.
+  Reflection adds `url_router` (raw pointer: borrowed), `sender`,
+  `pjson` (`.borrowed()` -- the router prints before the session's sender,
+  so shared would have placed the sender inside the router).
+  `provide_router_json_printers` gone (empty).  **Found:** the borrowed
+  `rp<WsSender>` refs landed in `_unplaced_` -- the sender, placed as
+  `WsSessionSenderImpl` at the same address, was not known to derive from
+  `WsSender`; fixed by reflecting `WsSender` (no members) and
+  `adopt_parent<WsSender>()` in the sender's reflection.  Golden: with ids
+  relabelled, exactly the renames, reorder (unguarded first:
+  `readjson`, `url_router`, `sender`, `pjson`, then `subscription_v`) and
+  `url_router`'s type `const UrlRouter&` -> `const UrlRouter*`.
+  `rows.mjs` (`issues/18`) now checks the const-pointer member.
 
