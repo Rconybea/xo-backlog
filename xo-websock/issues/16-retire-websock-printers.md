@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a-16f done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`; DynamicEndpoint left)
+Status: open (16a-16g done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`, `1033f293`; DynamicEndpoint's four summaries left)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -143,4 +143,15 @@ property) before 16 ends.
   decision -- leaf printer, reflection, or drop.  Meanwhile 16g: drop its
   view-model keys and the inline receiver; the printer stays only for those
   four summaries.
+- **16g -- done, umbrella `1033f293`.**  `JsonPrinter_DynamicEndpoint` writes no
+  view-model keys (`refcount`, `kind`, `stem`, `pattern`, `has_receive`)
+  and no inline receiver: the receiver prints in full in the reflected
+  `receiver_` (shared), as its most-derived type.  The printer stays only
+  for the four summarised members.  **Found:** the inline block had printed
+  UNREFLECTED receivers (an open set, as sinks); through the generic path
+  they printed `"_error_": "type not reflected"`.  RC: option 1 -- receivers
+  must be reflected; the five test receivers reflect themselves (no members)
+  from `self_tp()`.  Golden: exactly the dropped keys and the receiver's
+  move into `receiver_`, less its `refcount` (ids unchanged; checked by
+  script).  No object carries `refcount` now (`noticker.mjs` asserts it).
 
