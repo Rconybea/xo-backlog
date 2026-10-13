@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a-16e done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`; DynamicEndpoint, WebsocketSink left)
+Status: open (16a-16f done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`; DynamicEndpoint left)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -122,4 +122,17 @@ property) before 16 ends.
   `readjson`, `url_router`, `sender`, `pjson`, then `subscription_v`) and
   `url_router`'s type `const UrlRouter&` -> `const UrlRouter*`.
   `rows.mjs` (`issues/18`) now checks the const-pointer member.
+- **16f -- done, umbrella `836900de` (RC: option A, remove the virtual).**
+  WebsocketSink retired with no exception: `WebsocketSinkImpl` reflects
+  `sender`, `pjson` (`.borrowed()`); deleted the public virtual
+  `WebsocketSink::print_json` (+ default, override), `JsonPrinter_WebsocketSink`,
+  16d's `JsonPrinter_WebsocketSinkImpl`, and the internal header
+  `webserver_json.hpp` (empty).  Survey first: one real sink type
+  (`WebsocketSinkImpl`) and a test double in xo-reactor2websock that
+  neither overrides nor is printed; the base printer was unreachable once
+  pointers resolve to the most-derived type.  Golden: exactly the sink's
+  `_name_` (`WebsocketSinkImpl`), dropped keys (`refcount`, `stream`,
+  `sub_id`, `seq`, `sender`) and renames (ids unchanged; checked by script).
+  Page's "astray" check reads the sink's `sender`.  Consequence: another
+  sink type now needs its own reflection to show anything.
 
