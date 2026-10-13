@@ -41,7 +41,8 @@ TEST_CASE("probe-repeated-var-shifts-later-vars", "[probe]")
 //  FAILED: CHECK( got == "1,3" )  with expansion: "1,2" == "1,3"
 ```
 
-Only `http_response` reads captures (`grep -n 'match\[' xo-websock/src/websock/*.cpp`).
+Only `http_response` reads a URI's captures (`grep -n 'match\[' xo-websock/src/websock/*.cpp`:
+the other hits, `DynamicEndpoint.cpp:47-66`, are `compile_pattern` parsing the pattern itself).
 
 ## Proposed fix
 
