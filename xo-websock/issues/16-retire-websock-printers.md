@@ -135,4 +135,12 @@ property) before 16 ends.
   `sub_id`, `seq`, `sender`) and renames (ids unchanged; checked by script).
   Page's "astray" check reads the sink's `sender`.  Consequence: another
   sink type now needs its own reflection to show anything.
+- **DynamicEndpoint -- split (RC, 2026-10-12).**  Its three `std::function`
+  members (`http_handler_`, `subscribe_fn_`, `unsubscribe_fn_`) wait on
+  `.xo-backlog/xo-reflect/issues/09` (reflect `std::function`: its
+  signature; RC: teach xo-reflect rather than a leaf printer).  Its
+  `uri_regex_` (`std::regex`, summarised `"N captures"`) still needs a
+  decision -- leaf printer, reflection, or drop.  Meanwhile 16g: drop its
+  view-model keys and the inline receiver; the printer stays only for those
+  four summaries.
 
