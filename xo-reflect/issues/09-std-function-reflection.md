@@ -1,7 +1,8 @@
 # 09 -- reflect std::function: its signature, and what a value can show
 
-Status: open (spec written 2026-10-13, under review)
+Status: open (spec approved 2026-10-13; plan written, under review)
 Spec: `.xo-backlog/std-function-reflection/spec.md`
+Plan: `.xo-backlog/std-function-reflection/plan.md`
 Type: feature
 Milestone: reflection-driven-json
 Raised: 2026-10-12 (RC), from `.xo-backlog/xo-websock/issues/16` (DynamicEndpoint)
