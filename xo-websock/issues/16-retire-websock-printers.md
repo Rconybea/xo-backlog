@@ -1,6 +1,6 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a-16c done -- umbrella `860776d8`, `81b650de`, `80b20c45`; 4 printers left)
+Status: open (16a-16d done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`; 3 printers left)
 Type: task
 Milestone: reflection-driven-json
 Blocked by: none (`xo-printjson/issues/07` done; `xo-websock/issues/15` done 2026-10-11)
@@ -91,4 +91,19 @@ property) before 16 ends.
   `session_id`, `open`) and the sender's move into the session's `sender`
   member (checked by script).  `output_buf` stays redacted (renamed in the
   list).  A session's id now comes from its sender's `session_id`.
+- **16d -- done, umbrella `e774091a`.**  `JsonPrinter_Subscription` retired;
+  reflection adds `endpoint`, `sink` (shared `rp`s).  **Found:** a reflected
+  `rp<WebsocketSink>` resolves to its most-derived type first
+  (`WebsocketSinkImpl`, self-tagging), which had no printer -- so the
+  generic printer took the sink, dropping its `sender_` / `pjson_` refs
+  (the page's "astray" check reads the sink's `sender_`) and its keys.
+  RC chose option A: `JsonPrinter_WebsocketSinkImpl` (`WebsocketSink.cpp`,
+  `provide_websocket_sink_json_printers`) -- the same virtual
+  `print_json`, so the sink prints as before; WebsocketSink's own
+  retirement stays a separate decision.  Golden: exactly the dropped keys,
+  renames, and the sink's move into `sink` (ids unchanged; checked by
+  script).  Behaviour change outside server prints: a subscription printed
+  ALONE now places its endpoint in full (shared, first encounter) where
+  the hand-written ref did not; `WsSessionRouter.test.cpp` checks the new
+  shape.
 
