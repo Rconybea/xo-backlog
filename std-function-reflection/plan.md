@@ -37,9 +37,19 @@ The inputs most likely to bite that the spec implies but does not name, most lik
 
 ---
 
-### Task 1: xo-reflect -- `FunctionRepr`, `std::function` reflection, `fn_is_set`
+### Task 1: xo-reflect -- reference types; `FunctionRepr`, `std::function` reflection, `fn_is_set`
+
+(Widened 2026-10-14, RC: spec section 1b, reference types -- found
+implementing; they come first, since the `std::function` signatures need
+them.)
 
 **Files:**
+- Create: `xo-reflect/include/xo/reflect/pointer/PointerRepr.hpp` (the enum only)
+- Create: `xo-reflect/include/xo/reflect/pointer/ReferenceTdx.hpp` (a `PointerTdx`, beside `RawPointerTdx`)
+- Modify: `xo-reflect/include/xo/reflect/pointer/PointerTdx.hpp` (`pointer_repr()` on each existing class)
+- Modify: `xo-reflect/include/xo/reflect/EstablishTypeDescr.hpp` (`establish<T>` at :41-45: a reference branch)
+- Modify: `xo-reflect/include/xo/reflect/Reflect.hpp` (`EstablishTdx<T &>`, `EstablishTdx<T &&>`, beside `EstablishTdx<T *>` at :558-571)
+- Test: `xo-reflect/utest/ReferenceTdx.test.cpp` (new; add to `xo-reflect/utest/CMakeLists.txt`)
 - Create: `xo-reflect/include/xo/reflect/function/FunctionRepr.hpp` (the enum only)
 - Modify: `xo-reflect/include/xo/reflect/TypeDescr.hpp` (`FunctionTdxInfo` at :164-207; its `std::hash` at :682; `TypeDescr` pass-throughs beside :444-451)
 - Modify: `xo-reflect/src/reflect/TypeDescr.cpp` (`FunctionTdxInfo::make_canonical_name` at :31; `require_by_fn_info` at :202)
@@ -50,6 +60,8 @@ The inputs most likely to bite that the spec implies but does not name, most lik
 
 **Interfaces:**
 - Produces:
+  - `enum class PointerRepr { raw, smart, lvalue_reference, rvalue_reference };` in `xo::reflect`; `virtual PointerRepr TypeDescrExtra::pointer_repr() const` (default `raw`), `TypeDescrBase::pointer_repr()` pass-through; `RawPointerTdx` -> `raw`, `RefPointerTdx` -> `smart`, `ReferenceTdx` -> its kind.
+  - `Reflect::require<T &>()` / `<T &&>()`: `mt_pointer`, a `ReferenceTdx`, no native typeinfo, keyed by `type_name<T &>()`.
   - `enum class FunctionRepr { pointer, std_function };` in namespace `xo::reflect`.
   - `FunctionTdxInfo` gains a `FunctionRepr repr_` member, defaulting to `pointer`; its existing 3-argument constructor `(TypeDescr retval_td, const std::vector<TypeDescr> & arg_td_v, bool is_noexcept)` keeps working unchanged (callers: `xo-expression/src/expression/Lambda.cpp:40`, `xo-expression2/src/expression2/DLambdaExpr.cpp:113`); a 4-argument form adds `repr`.  `operator==` and the hash include `repr_`.
   - `virtual FunctionRepr TypeDescrExtra::fn_repr() const` (default `pointer`); `virtual bool TypeDescrExtra::fn_is_set(void * object) const` (default `false`); `FunctionTdx` overrides both.
@@ -58,12 +70,14 @@ The inputs most likely to bite that the spec implies but does not name, most lik
 - Consumes: nothing new.
 
 **Behaviour and invariants:**
+- **References first** (spec 1b): `ReferenceTdx` -- pointee the cv-stripped referent (`fixed_child_td(0)`), `child_edge_ownership()` `borrowed`, value operations (`n_child`, `child_tp`) throw ("references are described, not traversed").  `establish<T &>` / `establish<T &&>` pass no `&typeid` and no invoker, so the entry never collides with the referent's (`typeid(T&) == typeid(T)`).
 - `make_canonical_name()`: `pointer` unchanged (`R (*)(A,..)`); `std_function` spelled `std::function<R (A,..)>`.
 - `require_by_fn_info(info)` asserts `info.repr_ == FunctionRepr::pointer`: a `std::function` type enters only through `Reflect::require<T>` (spec section 1).
 - `EstablishTdx<std::function<R(Args...)>>` builds a `FunctionTdx` with repr `std_function`, `noexcept` false, return/argument types as the function-pointer specialisation computes them (reuse `detail::AssembleArgv<Args...>`), and a `bool (*)(void *)` that answers `static_cast<bool>(*static_cast<std::function<R(Args...)> const *>(object))`.
 - `FunctionTdx::fn_is_set(object)`: `pointer` -- read `*reinterpret_cast<void (* const *)()>(object)`, compare with `nullptr`, no helper (works for ingredient-built types); `std_function` -- call the helper.  A `FunctionTdx` of repr `std_function` with no helper is a construction bug: assert.
 - `std::function`'s metatype is `mt_function`; `n_child` stays 0.
 
+- [ ] **Step 0: references, test first** in `ReferenceTdx.test.cpp` (tag `[reflect][reference]`): `const std::string &` -- `mt_pointer`, `pointer_repr() == lvalue_reference`, `fixed_child_td(0) == require<std::string>()`, canonical name `== type_name<const std::string &>()`, `native_typeinfo() == nullptr`; `std::string &&` -- `rvalue_reference`; required twice -> same `TypeDescr`; differs from `require<std::string>()` and `require<std::string *>()`, and `require<std::string>()` is unchanged afterwards (still its own `typeid`); `pointer_repr()` of `int *` -- `raw`, of `std::unique_ptr<int>` -- `smart`; `n_child` on a reference type throws.  Run (`.build/xo-reflect/utest/utest.reflect "[reference]"`), see it fail, implement the reference half, see it pass.
 - [ ] **Step 1: Write the failing tests** in `FunctionTdx.test.cpp` (beside the existing function-pointer case at :25-35).  Each is its own `TEST_CASE`:
   - *std-function-reflects-as-mt-function:* `Reflect::require<std::function<int (double)>>()` -- `metatype() == mt_function`, `fn_repr() == FunctionRepr::std_function`, `fn_retval() == Reflect::require<int>()`, `n_fn_arg() == 1`, `fn_arg(0) == Reflect::require<double>()`, `fn_is_noexcept()` false.
   - *std-function-and-pointer-intern-separately (pointer first)* **[RF 2]**: require `long (*)(short)`, then `std::function<long (short)>`; the two `TypeDescr`s differ; `require_by_fn_info(FunctionTdxInfo(require<long>, {require<short>}, false))` returns the POINTER's.

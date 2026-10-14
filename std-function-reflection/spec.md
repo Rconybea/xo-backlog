@@ -101,6 +101,49 @@ summarise its three `std::function` members -- retires
   ingredients first, then reflected natively, gets a second entry, since the
   native path looks up by `typeid` -- exists today and is unchanged here.)
 
+### 1b. Reference types (RC, 2026-10-14)
+
+Found implementing section 1: a signature with a reference argument
+(`HttpResponse (const HttpRequest&)` -- all three of DynamicEndpoint's) does
+not compile.  `detail::AssembleArgv` reflects each argument with
+`Reflect::require<Arg>()`, and xo-reflect cannot describe a reference type at
+all (`TypeDescr.hpp:107-117`: the `Invoker` forms `T *`, `sizeof(T)`, a
+destructor) -- for function POINTERS too, an existing limitation.  RC chose
+to teach xo-reflect references, following the pointer patterns (over
+decaying arguments, which would merge `void (std::string)` and
+`void (const std::string&)` into one interning key).
+
+- **`mt_pointer`, a new `ReferenceTdx`.**  xo-reflect already tells pointer
+  kinds apart by class under one metatype: `RawPointerTdx` (`T *`),
+  `RefPointerTdx` (`rp<T>`, shared; `std::unique_ptr<T, D>`, owning)
+  (`pointer/PointerTdx.hpp:53, 126`; `Reflect.hpp:483, 570, 608`).
+  `ReferenceTdx` is a third `PointerTdx`: pointee the referent, cv-stripped
+  and shared with `T *`'s (as `EstablishTdx<T *>`, `Reflect.hpp:558-571`);
+  edge ownership `borrowed`.  Consumers seeing a reference as `mt_pointer`
+  treat it as a pointer -- ABI-correct for xo-jit (references pass as
+  pointers).
+- **`PointerRepr { raw, smart, lvalue_reference, rvalue_reference }`** and
+  one `mt_pointer`-only accessor `pointer_repr()` -- mirroring `fn_repr()`;
+  `smart` is `RefPointerTdx` (ownership already tells `rp` from
+  `unique_ptr`).  No consumer needs it today.
+- **Registration bypasses `typeid`.**  `typeid(T&)` is `typeid(T)` (and
+  ignores top-level cv), so `EstablishTypeDescr::establish<T&>`
+  (`EstablishTypeDescr.hpp:41-45`) registers a reference with NO native
+  typeinfo and NO `Invoker`, keyed by its canonical name `type_name<T&>()`
+  (`TypeDescrBase::require` already supports name-keyed types,
+  `TypeDescr.cpp:110-117`): one entry per reference type, found again by
+  name, never colliding with its referent's.
+- **Type-level only, for now.**  A reference is not an object; nothing builds
+  a `TaggedPtr` OF reference type yet.  `fixed_child_td(0)` is the referent;
+  value operations (`n_child`, `child_tp` on an object) throw, saying
+  references are described, not traversed.  Reference MEMBERS stay
+  unreflectable (no member pointer -- why `xo-websock/issues/16` 16e made
+  `url_router_` a pointer).
+- **Effect on section 1:** `fn_arg(i)` of `std::function<void (const
+  std::string&)>` is the `const std::string&` description; the interning key
+  needs no qualifier field -- distinct argument `TypeDescr`s keep distinct
+  keys.  Function pointers with reference arguments become reflectable too.
+
 ### 2. Values: set or empty; printing
 
 - **`bool FunctionTdx::fn_is_set(void * object) const`**:
@@ -151,6 +194,14 @@ Unaffected: xo-pyreflect (the metatype is unchanged); other printjson code.
 
 ## Tests
 
+- **xo-reflect, references** (`utest/PointerTdx.test.cpp` or a new
+  `utest/ReferenceTdx.test.cpp`): `const std::string&` is `mt_pointer`,
+  `pointer_repr() == lvalue_reference`, pointee `std::string`, canonical name
+  `type_name<const std::string&>()`; `std::string&&` is `rvalue_reference`;
+  required twice -> the same `TypeDescr`; a DIFFERENT entry from
+  `std::string` and from `std::string *` (the `typeid` collision);
+  `pointer_repr()` of `T *` is `raw`, of `rp<T>` / `std::unique_ptr<T>` is
+  `smart`; value operations throw.
 - **xo-reflect** (`utest/FunctionTdx.test.cpp`):
   - `std::function<int(double)>`: `mt_function`, `fn_repr() ==
     std_function`, `fn_retval()` `int`, `n_fn_arg()` 1, `fn_arg(0)` `double`;
