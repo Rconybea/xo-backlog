@@ -73,11 +73,22 @@ summarise its three `std::function` members -- retires
 - **`FunctionRepr { pointer, std_function }`** -- a new field of
   `FunctionTdxInfo`.  Both are `mt_function`.
   - It joins `FunctionTdxInfo::operator==`, the `std::hash` specialisation
-    (`TypeDescr.hpp:682`) and `make_canonical_name()` -- so a
-    `std::function<R(Args...)>` and an `R (*)(Args...)`, same signature,
-    different C++ types, intern SEPARATELY.  Without it the second
-    registered would overwrite the first's `s_function_type_map` entry, and
-    `require_by_fn_info` would return the wrong type.
+    (`TypeDescr.hpp:682`) and `make_canonical_name()` -- two infos that
+    differ only in representation are different keys, and spell different
+    names.
+  - **Corrected 2026-10-14 (implementing; CONVENTIONS rule 6).**  This
+    section first said: "Without it the second registered would overwrite
+    the first's `s_function_type_map` entry, and `require_by_fn_info` would
+    return the wrong type."  Wrong for NATIVE types: `require` files a type
+    in `s_function_type_map` only when it has its `tdextra` at creation
+    (`TypeDescr.cpp:194`), and `establish<T>()` creates native types with
+    none (assigned later) -- so native function types never enter that map;
+    only ingredient-built ones do, found otherwise by typeid or canonical
+    name.  Plausible because the map is keyed by signature alone.  Found by
+    mutation: dropping `repr_` from the key left the "intern separately"
+    test green.  Keeping `repr_` in the key is still right -- it is where a
+    `FunctionTdx` stores its representation -- and is now tested directly
+    (`function-repr-is-part-of-the-key`).
   - `pointer` is today's `R (*)(Args...)`; existing function types default
     to it.  `make_canonical_name()` spells `std_function` as
     `std::function<R (A,..)>` (used only on the ingredient path; natively
