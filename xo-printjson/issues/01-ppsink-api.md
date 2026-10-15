@@ -172,6 +172,11 @@ the right shape -- it puts the choice where the other presentation choices
 already live, and it is the only one of the three options that leaves
 `put_with_escape` usable by printjson at all.
 
+**Update 2026-10-15:** `.xo-backlog/xo-printjson/issues/04` now builds
+this policy -- the escape vocabulary on `PpStyle`, a policy-aware `Escape`
+(sizing included), and a `PpStyle::json()` preset -- so 04 lands first and
+makes this ticket easier, not harder.  `JsonPpSink` below stays here.
+
 ### Preferred shape: a JsonPpSink, and JsonPrinter takes only that (RC, 2026-09-20)
 
 Rather than printjson validating a sink it was handed, make the constraint a
