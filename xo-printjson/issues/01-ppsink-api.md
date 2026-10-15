@@ -59,6 +59,15 @@ xo-kalmanfilter's `EigenUtil.cpp`, and `AsStringJsonPrinter` in
 `JsonPrinter.hpp`. NB they declare `virtual void print_json(...)` without the
 `override` keyword, so a grep for `override` finds none of them.
 
+**Update 2026-10-15:** `AsStringJsonPrinter` is deleted (unused, and it
+wrote `operator<<` output unescaped -- `.xo-backlog/xo-printjson/issues/04`),
+so one fewer subclass to convert.  The count above is not re-measured here:
+the printers retired since (`xo-websock/issues/16`) moved it too.
+
+```bash
+cd "$(xo-sdlc --umbrella2)" && grep -rn ': public JsonPrinter' xo-*/src xo-*/include
+```
+
 The awkward consumer is **`xo-reactor/include/xo/reactor/EventStore.hpp:67`**,
 where an `HttpEndpointDescr`'s endpoint fn calls `http_snapshot(pjson, p_os)`
 with the ostream that carries the HTTP response body:
