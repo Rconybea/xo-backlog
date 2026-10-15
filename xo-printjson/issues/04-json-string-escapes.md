@@ -273,5 +273,4 @@ grep -rn 'AsStringJsonPrinter' xo-*/src xo-*/include xo-*/utest   # only its own
 
 Delete it, or route it through `json_quot`, before anything adopts it.
 
-**Deleted 2026-10-15 (RC: "yes, delete it")**, uncommitted in the umbrella
-at the time of writing.
+**Deleted 2026-10-15 (RC: "yes, delete it")**, umbrella `6c0e44f1`.
