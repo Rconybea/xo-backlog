@@ -1,6 +1,6 @@
 # 04 — string rendering escapes with ppsink's vocabulary, not JSON's
 
-Status: open (design revised 2026-10-15 -- see "Design"; supersedes "What the fix is not")
+Status: done (2026-10-15; umbrella `9a26f95a`, `7e311eb0`)
 Type: bug
 
 `JsonPrinter_string` renders through `quot()`, which escapes for *display* via
@@ -217,3 +217,58 @@ added):
 Found 2026-09-13 while implementing `AReflectable` for `DString`
 (`.xo-backlog/reflectable2/issues/05-per-type-opt-in.md`). Not fixed there:
 the rendering defect belongs to every string printjson emits, not to DString.
+
+## Resolution (2026-10-15)
+
+Built to "Design" above, umbrella `9a26f95a` (include-order nit
+`7e311eb0`):
+
+- **xo-ppsink:** `escapestyle { display, json }` (`escape.hpp`);
+  `Escape::str_size` / `str_copy` take it (default display);
+  `fallback_expand(style)` is 4 or 6; `c_max_char_expand` now means the
+  longest expansion under ANY vocabulary (6), `static_assert`-tied to both,
+  so `FlatSink`'s buffer reserve covers json.  `PpStyle::escape` (default
+  display) and `PpStyle::json()` (json escapes, no colour); `plain()` keeps
+  display.  `FlatSink::put_with_escape` follows `style_.escape`.
+- **xo-indentlog2:** `PpState::put_with_escape` takes the vocabulary (it
+  holds no `PpStyle`); `PrettySink` passes its own.  New `tojsonstr(args...)`
+  beside `tostr()` (`print/tostr.hpp`), sharing `detail::tostr_styled`:
+  `tojsonstr(quot(s))` is `s` as a JSON string literal.
+- **xo-printjson:** `json_quot(s)` (`include/xo/printjson/json_quoted.hpp`),
+  a `FlatSink(PpStyle::json(), os.rdbuf())` bridge, at every `os << ...`
+  site; `map_key_string` uses `tojsonstr(quot(s))` (RC: rather than a
+  stringstream).  The stale TODO is gone.  `json_quot` goes when
+  `issues/01` makes printjson write into a json-styled sink.
+- **xo-stringtable2:** `DString-json-uses-size-not-nul` expects `\u0000`.
+
+Verified: tests watched failing first in ppsink (`escape-json-control-chars`,
+`flatsink-put-with-escape-json`, `...-json-spans-buffer`,
+`quot-follows-sink-style`, `PpStyle-json`), indentlog2
+(`ppstate-put-with-escape-json`, `tojsonstr.test.cpp`) and printjson
+(`utest/PrintJsonEscape.test.cpp`: control chars, short forms, the string
+printers, map keys).  Mutation: `PpState` sizing without the vocabulary
+aborts the json test on its size assertion.  Every pinned output parses with
+python `json.loads`; the old `"a\x00b"` fails (`Invalid \escape`).  ctest
+49/49 gcc and clang; 21/21 introspect browser tests; `xo-build --sweep` ok,
+73/47/26.
+
+```bash
+cd "$(xo-sdlc --umbrella2)"
+grep -rnE '(^|[^_[:alnum:]])quot\(' xo-printjson/src   # nothing: only json_quot / tojsonstr(quot(..))
+```
+
+Deviation from "Done when": `put_with_escape.test.cpp` was not left
+untouched.  It and `escape.test.cpp` used `c_max_char_expand` to mean
+display's width; with its meaning widened to all vocabularies, those three
+sites now read `fallback_expand(escapestyle::display)` -- same checks, same
+expected strings.
+
+**Left open (found here):** `AsStringJsonPrinter`
+(`xo-printjson/include/xo/printjson/JsonPrinter.hpp:68-91`) writes `"` +
+`operator<<` + `"` with NO escaping.  It has no users:
+
+```bash
+grep -rn 'AsStringJsonPrinter' xo-*/src xo-*/include xo-*/utest   # only its own definition
+```
+
+Delete it, or route it through `json_quot`, before anything adopts it.
