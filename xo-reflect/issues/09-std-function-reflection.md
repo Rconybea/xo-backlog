@@ -1,6 +1,6 @@
 # 09 -- reflect std::function: its signature, and what a value can show
 
-Status: open (spec approved 2026-10-13; plan written, under review)
+Status: done (2026-10-14; umbrella `29c09de7`, `6dcbff91`, `fb7ecf47`, `d9fd6540`)
 Spec: `.xo-backlog/std-function-reflection/spec.md`
 Plan: `.xo-backlog/std-function-reflection/plan.md`
 Type: feature
@@ -86,3 +86,32 @@ DynamicEndpoint's three function members do (`xo-websock/issues/16`).
   `"empty"`; (3) `std::function` only; (4) the signature through the
   declared type and the existing `fn_*` accessors.
 
+## Resolution (2026-10-14)
+
+Built to the spec, in four umbrella commits:
+
+- `29c09de7` (xo-reflect): `EstablishTdx<std::function<R(Args...)>>`
+  reflects as `mt_function`, `fn_repr() == FunctionRepr::std_function`,
+  with `fn_is_set` for a value.  Reference argument types (spec 1b)
+  reflect as `mt_pointer` via `ReferenceTdx`, `pointer_repr()` telling
+  them apart; described, not traversed.  11 new tests, each checked by
+  mutation.
+- `6dcbff91` (xo-printjson): a function value -- `std::function` or
+  function pointer -- prints `"set"` / `"empty"`, as a member
+  (`JsonMembers::printable` accepts `is_function()`) and as an element
+  (`utest/PrintJsonFunction.test.cpp`).
+- `fb7ecf47` (xo-expression, xo-jit): their `mt_function` consumers
+  reject a `std::function` repr.
+- `d9fd6540` (xo-websock): DynamicEndpoint reflects its three
+  `std::function`s; `JsonPrinter_DynamicEndpoint`,
+  `provide_websock_json_printers` and `websock_json.{hpp,cpp}` deleted
+  (closes `.xo-backlog/xo-websock/issues/16`).
+
+Verified: `ctest --test-dir .build` 49/49 (gcc) and `.build-clang` 49/49
+(clang 18.1.8); `utest.websock.live` against both golden files (diff
+audited by script: exactly the 14 endpoint member renames); the 21
+introspect browser tests; `xo-build --sweep` ok.
+
+Correction to the spec (rule 6, backlog `2930ff9`): native function types
+never enter `s_function_type_map`, so the overwrite hazard it described
+was not real; `FunctionRepr` stays in the key and is tested directly.

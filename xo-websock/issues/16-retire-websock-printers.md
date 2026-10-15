@@ -1,9 +1,9 @@
 # 16 -- retire the websock struct printers, one type at a time
 
-Status: open (16a-16g done -- umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`, `1033f293`, `3c3a38f4`; blocked on `xo-reflect/issues/09` for DynamicEndpoint's three std::functions)
+Status: done (2026-10-14; 16a-16g umbrella `860776d8`, `81b650de`, `80b20c45`, `e774091a`, `4752e002`, `836900de`, `1033f293`, `3c3a38f4`; DynamicEndpoint `d9fd6540`)
 Type: task
 Milestone: reflection-driven-json
-Blocked by: `.xo-backlog/xo-reflect/issues/09` (`xo-printjson/issues/07`, `xo-websock/issues/15` done)
+Blocked by: none (`xo-reflect/issues/09`, `xo-printjson/issues/07`, `xo-websock/issues/15` done)
 
 Move each websock type onto the generic printer and delete its
 `JsonPrinter_*`, simplest first:
@@ -162,4 +162,27 @@ property) before 16 ends.
   `uri_regex_`, checked by script); DynamicEndpoint's
   printer now exists only for its three `std::function`s
   (`.xo-backlog/xo-reflect/issues/09`).  Found reading it: `issues/20`.
+- **DynamicEndpoint -- done, umbrella `d9fd6540`.**  With `std::function`
+  reflected (`.xo-backlog/xo-reflect/issues/09`), DynamicEndpoint reflects
+  `http_handler`, `subscribe_fn`, `unsubscribe_fn`, which print
+  `"set"` / `"empty"` through the generic `mt_function` path.  Deleted:
+  `JsonPrinter_DynamicEndpoint` (and its `friend`), `provide_websock_json_printers`,
+  `src/websock/websock_json.cpp`, `include/xo/websock/websock_json.hpp`;
+  `WebsockAppcx` now only reflects.  Golden: exactly each endpoint's seven
+  member names losing their `_` (`kind`, `uri_pattern`, `var_v`,
+  `receiver`, `http_handler`, `subscribe_fn`, `unsubscribe_fn`; ids
+  unchanged; checked by script, both compilers).  The page and
+  `receiver.mjs`, `endpoint_expand.mjs`, `edge_kinds.mjs` read the new
+  names; 21/21 browser tests.
 
+## Resolution (2026-10-14)
+
+No websock `JsonPrinter_*` remains, and no recorded exception:
+
+```bash
+cd "$(xo-sdlc --umbrella2)" && grep -rn 'JsonPrinter_' xo-websock --include=*.cpp --include=*.hpp   # nothing
+```
+
+Every websock type prints from reflection through the generic printer.
+Open beyond this ticket: `refcount` is no longer visible anywhere (see
+above); restoring it would need a reflected computed property.

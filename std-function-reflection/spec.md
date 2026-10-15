@@ -1,6 +1,6 @@
 # std-function-reflection — reflect std::function as a function type
 
-Status: open
+Status: done (2026-10-14; see the ticket's Resolution)
 Type: spec
 Milestone: reflection-driven-json
 Ticket: `.xo-backlog/xo-reflect/issues/09-std-function-reflection.md`
