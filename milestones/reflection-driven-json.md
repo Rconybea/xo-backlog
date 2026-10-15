@@ -1,6 +1,6 @@
 # reflection-driven-json -- one generic struct printer, driven by reflection
 
-Status: open
+Status: done (2026-10-14, RC)
 Type: milestone
 
 Retire the per-type json printers in favour of one generic struct printer in
@@ -91,3 +91,28 @@ printers share.
 - the flywheel frame is upgraded to members-style (done, `97730b40`);
 - `JsonMembers::member_as` / `member_ref` survive only at recorded
   exceptions.
+
+## Done (2026-10-14, RC)
+
+All 14 contributing tickets done; the last, `xo-reflect/issues/09` and
+`xo-websock/issues/16`, closed with umbrella `d9fd6540`.  Against the
+criteria above:
+
+- every websock struct prints through the generic printer; no bespoke
+  struct printer remains, and none is recorded as an exception:
+
+  ```bash
+  cd "$(xo-sdlc --umbrella2)" && grep -rn 'JsonPrinter_' xo-websock --include=*.cpp --include=*.hpp   # nothing
+  ```
+
+  (`xo-printjson/src/printjson/PrintJson.cpp` keeps its leaf printers --
+  `TaggedPtr`, `bool`, integers -- which are not struct printers);
+- introspect reads only `_members_` (`xo-websock/issues/17`); the
+  view-model keys are gone (`issues/15`, `issues/16`);
+- the flywheel frame is members-style (`97730b40`);
+- `JsonMembers::member_as` / `member_ref` have no callers outside
+  xo-printjson's own API and tests:
+
+  ```bash
+  cd "$(xo-sdlc --umbrella2)" && grep -rn 'member_as\|member_ref' xo-*/src xo-*/include xo-*/utest | grep -v '^xo-printjson/'   # nothing
+  ```
