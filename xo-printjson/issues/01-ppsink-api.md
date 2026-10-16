@@ -82,6 +82,37 @@ The shape:
 Questions 2 and 3 are answered too (2026-10-16), under "Questions to settle
 first" below.
 
+### Scaffolding -- built to unwind (RC, 2026-10-16)
+
+Step 1 (`JsonPrintState` takes a `PpSink *`) adds pieces that exist only to
+make the migration incremental.  Each goes once nothing needs it:
+
+| piece | goes when |
+|---|---|
+| `detail::SinkStreambuf` and `JsonPrintState::p_os()` | the last printer writes through `state.sink()` |
+| `PrintJson::print_tp(TaggedPtr, std::ostream *)`, and the `print` / `print_obj` ostream overloads that reach it | no caller passes an ostream |
+| `json_quot` (`include/xo/printjson/json_quoted.hpp`) | its `os << ..` sites are sink calls (`quot()` through a json sink) |
+| tests building `JsonPrintState` from `FlatSink(PpStyle::json(), ss.rdbuf())` over a `std::stringstream` | see below |
+
+**Tests follow the pattern production code should (RC).**  Not for the
+tests' own sake: a test is also an example, so it should get its scratch
+memory the way regular code would -- from the scratch facilities
+(`TempArena`; `tostr()` / `tojsonstr()` build on it,
+`xo-indentlog2/include/xo/indentlog2/print/tostr.hpp`), not a heap
+`std::stringstream`.  Today there is no facility for "a json sink over
+scratch memory whose text I read afterwards" -- `tostr`'s body is one, but
+not exposed as a sink.  Proposed (not built): a RAII scratch sink beside
+`tostr()`, owning `ArenaReset` + `LogBufferAdapter` + `LogStreambuf` +
+`FlatSink(style)`, exposing `sink()` and `output()`; `tostr_styled` becomes
+its user.  Nesting on `TempArena` is safe when LIFO -- `LogBufferAdapter`
+takes all available space, an inner `tostr` lands beyond it and is reset
+before the outer writes again (`xo-indentlog2/src/indentlog2/LogBuffer.cpp`,
+`char_expand_to`) -- which a json print is: `map_key_string`'s `tojsonstr`
+runs and finishes inside it.
+
+Also found here: `.xo-backlog/xo-printjson/issues/10` -- doubles print at 6
+significant digits.
+
 ### Re-measured 2026-10-16: the API surface below is stale
 
 Printers take `JsonPrintState &`, not `std::ostream *` (above).  There are
