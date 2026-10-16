@@ -79,8 +79,8 @@ The shape:
   a `PrettySink`, output emerges when the outermost group closes -- once
   printers emit `begin`/`end` around objects, the closing `end()` flushes.
 
-What remains open: question 2 (does this ticket build prettified json, or
-stop at the plumbing) and question 3 (`jsonp_impl` / `operator<<`).
+Questions 2 and 3 are answered too (2026-10-16), under "Questions to settle
+first" below.
 
 ### Re-measured 2026-10-16: the API surface below is stale
 
@@ -332,9 +332,34 @@ streambuf").
    without emitting `begin`/`split`/`end` around objects and arrays, moving to
    PpSink buys nothing observable — a FlatSink renders identically to the
    ostream it wraps. **The structure emission is the actual feature.**
+
+   *Answered 2026-10-16 (RC): this ticket builds prettified json, but
+   incrementally comes first -- so it is fine for pretty output to appear
+   only at the end, once every printer writes through the sink and emits
+   `begin`/`split`/`end`.  Each step before that keeps flat output
+   byte-identical.*
 3. **What about `jsonp_impl` / `operator<<`** (`PrintJson.hpp:100,115`)? Under
    the pattern used elsewhere these belong in a `printjson_ostream.hpp`, as the
    opt-in paved road for external users.
+
+   *Answered 2026-10-16: there was nothing to rehome.  `jsonp` / `jsonp_impl`
+   / its `operator<<` sat in legacy `namespace xo::print` inside
+   `#ifdef NOT_USING` -- never compiled, already so at the 2026-06-06
+   subrepo import, no users anywhere in the tree:*
+
+   ```bash
+   cd "$(xo-sdlc --umbrella2)"
+   git log --format='%h %ad %s' --date=short -S'NOT_USING' -- xo-printjson/include/xo/printjson/PrintJson.hpp
+   grep -rn 'jsonp' xo-*/src xo-*/include xo-*/utest xo-*/example   # nothing, after the delete
+   ```
+
+   *Deleted (RC).  RC: `operator<<` is wanted only for legacy support, and
+   there is no legacy here.  If inline json is wanted later -- json inside a
+   log line, `xtag("snapshot", jsonp(x, pjson))` -- the shape is a value
+   wrapper with a `Prettifier`, not an `operator<<`.  Under "Decision" a
+   diagnostic sink (display escaping) is refused by `JsonPrintState`, so that
+   Prettifier renders through a temporary json-styled `FlatSink` (as
+   `tojsonstr` does) and `put()`s the result.  Not built: no user.*
 
 ## Suggested sequencing
 
