@@ -1,6 +1,6 @@
 # 01 — PrintJson API: take a PpSink instead of a std::ostream
 
-Status: open
+Status: open (design decided 2026-10-16, RC -- see "Decision"; supersedes "Preferred shape: a JsonPpSink")
 Type: task
 Milestone: ppsink-migration
 
@@ -17,7 +17,90 @@ throws that structure away as it writes.
 Deferred out of the xo-webutil PpSink refactor (2026-08-06), which was scoped to
 diagnostic printing only.
 
-## Current API surface
+## Decision (RC, 2026-10-16)
+
+**`JsonPrintState` holds a `PpSink *`, and its constructor throws unless that
+sink's style selects json escaping.  `PrintJson::print_tp()` forwards to the
+same interface.**  No `JsonPpSink` type.
+
+Why this rather than the 2026-09-20 `JsonPpSink`: since then printers stopped
+taking an ostream -- they take `JsonPrintState &` (`issues/02`, done
+2026-10-05), and `PrintJson` builds that state itself.  So `JsonPrintState`
+already stands between every printer and the output; it is the natural gate,
+and a separate sink type would duplicate it.
+
+```bash
+cd "$(xo-sdlc --umbrella2)"
+grep -n 'virtual void print_json' -A1 xo-printjson/include/xo/printjson/JsonPrinter.hpp
+#   :33  virtual void print_json(TaggedPtr tp, JsonPrintState & state) const = 0;
+grep -n 'JsonPrintState(PrintJson' xo-printjson/include/xo/printjson/JsonPrintState.hpp
+#   :86  JsonPrintState(PrintJson const * pjson, std::ostream * p_os);
+grep -n 'JsonPrintState state' xo-printjson/src/printjson/PrintJson.cpp
+#   print_tp builds it
+```
+
+The shape:
+
+- **`JsonPrintState(PrintJson const *, PpSink *)`** throws unless
+  `sink->style().escape == escapestyle::json` (`.xo-backlog/xo-printjson/issues/04`).
+  The message says what was wrong.  `PpStyle` is const once a sink exists,
+  so the state cannot fix a sink, only refuse it.
+- **Colour is NOT checked (RC).**  Coloured json has a modest use: json for
+  a human to read.  A coloured sink's output is not parseable json -- that is
+  the caller's choice to make, not printjson's to forbid.  `PpStyle::json()`
+  stays colourless, so the default is parseable; a reader-oriented sink is
+  `PpStyle::json()` with `color_enabled` turned back on.  (Supersedes the
+  "colour" row of the constraint table under "Preferred shape" below.)
+- **`print_tp(TaggedPtr, PpSink *)`** builds the state from the sink.  The
+  `std::ostream *` entry points (`print`, `print_tp`, `print_obj`,
+  `PrintJson.hpp:72,80,85,101`) stay, as thin wrappers: each builds
+  `FlatSink(PpStyle::json(), os.rdbuf())` on the stack and forwards.  No
+  ostream caller changes -- websock, `EventStore::http_snapshot`
+  (`xo-reactor/include/xo/reactor/EventStore.hpp:67`), the python bindings,
+  the tests.  `FlatSink` does not buffer -- it `sputn`s straight through
+  (`xo-ppsink/src/ppsink/FlatSink.cpp:55,84`) -- so the wrapper has nothing
+  to flush.  The throw is safe there: the state is built after
+  `print_tp`'s `EntryGuard`, which unwinds.
+- **`p_os()` stays during the migration (RC)**, backed by a small streambuf
+  whose writes call `sink->put(..)`.  Everything then reaches the sink, in
+  order -- which matters for a `PrettySink`: it buffers tokens to decide
+  layout, so a write that bypassed the sink to the underlying streambuf
+  would come out reordered.  `json_quot` keeps working (it writes
+  already-escaped bytes through `os.rdbuf()`, i.e. the adapter).  Printers
+  then move to the sink one at a time; the adapter and `p_os()` go at the
+  end.  Nothing in the tree provides this adapter today:
+  `PpSink::stream_open()` (`xo-ppsink/include/xo/ppsink/PpSink.hpp:221`)
+  hands out a streambuf per TOKEN, not a long-lived one.
+
+  This answers question 1 below ("replace, or add?"): add, then retire,
+  one printer at a time.
+- **`print_tp` does not call `complete()`** (it writes `"\n"`,
+  `PpSink.hpp:201`): the sink is the caller's, and so is finishing it.  With
+  a `PrettySink`, output emerges when the outermost group closes -- once
+  printers emit `begin`/`end` around objects, the closing `end()` flushes.
+
+What remains open: question 2 (does this ticket build prettified json, or
+stop at the plumbing) and question 3 (`jsonp_impl` / `operator<<`).
+
+### Re-measured 2026-10-16: the API surface below is stale
+
+Printers take `JsonPrintState &`, not `std::ostream *` (above).  There are
+**14** `JsonPrinter` subclasses, not 9 -- 11 in `PrintJson.cpp`, 2 in
+xo-kalmanfilter's `EigenUtil.cpp`, 1 in xo-stringtable2's
+`SetupStringtable2.cpp` -- and 19 `p_os()` reads, which is what the
+migration converts:
+
+```bash
+cd "$(xo-sdlc --umbrella2)"
+grep -rn ': public JsonPrinter' xo-*/src xo-*/include | awk -F: '{print $1}' | sort | uniq -c
+grep -rn 'p_os()' xo-*/src xo-*/include | awk -F: '{print $1}' | sort | uniq -c
+#   PrintJson.cpp 11, JsonObject.cpp 3, EigenUtil.cpp 2, JsonMembers.cpp 1,
+#   JsonPrintState.cpp 1, JsonPrintState.hpp 1  (19)
+```
+
+`print_aux` no longer exists.  Kept below as first written.
+
+## Current API surface (as first written -- stale, see above)
 
 `xo-printjson/include/xo/printjson/PrintJson.hpp`:
 
@@ -186,7 +269,13 @@ this policy -- the escape vocabulary on `PpStyle`, a policy-aware `Escape`
 (sizing included), and a `PpStyle::json()` preset -- so 04 lands first and
 makes this ticket easier, not harder.  `JsonPpSink` below stays here.
 
-### Preferred shape: a JsonPpSink, and JsonPrinter takes only that (RC, 2026-09-20)
+### Preferred shape: a JsonPpSink, and JsonPrinter takes only that (RC, 2026-09-20 -- SUPERSEDED 2026-10-16)
+
+*Superseded by "Decision" above: `JsonPrintState` is the gate, with a runtime
+check, not a separate sink type.  Kept per CONVENTIONS rule 6.  Its constraint
+table still stands for escaping and `complete()`; its colour row is revised --
+colour is the caller's choice (RC, 2026-10-16).*
+
 
 Rather than printjson validating a sink it was handed, make the constraint a
 TYPE: `JsonPpSink` enforces at construction, and `JsonPrinter::print_json`
@@ -233,7 +322,7 @@ streambuf").
 
 ## Questions to settle first
 
-1. **Replace, or add?** `print(x, PpSink&)` alongside the ostream overloads,
+1. **Replace, or add?** *(Answered 2026-10-16: add, then retire one printer at a time, with `p_os()` kept on an adapter meanwhile -- see "Decision".)* `print(x, PpSink&)` alongside the ostream overloads,
    or a hard swap? With 9 pure-virtual subclasses, "add" means every subclass
    implements both, or a default that bridges one to the other. A hard swap
    is more churn at once but leaves one code path.
