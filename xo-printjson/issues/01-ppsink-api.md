@@ -110,6 +110,20 @@ before the outer writes again (`xo-indentlog2/src/indentlog2/LogBuffer.cpp`,
 `char_expand_to`) -- which a json print is: `map_key_string`'s `tojsonstr`
 runs and finishes inside it.
 
+**Corrected 2026-10-16: that nesting claim is WRONG** (kept above per
+CONVENTIONS rule 6).  It was reasoned from the code, not run.  Running it
+(`TempFlatSink`'s first tests): a `tostr()`, or a second scratch sink, made
+while one is alive writes NOTHING -- `""`.  Cause:
+`DArena::expand(target_z)` takes an ABSOLUTE size from the arena's start
+(`xo-arena/src/arena/DArena.cpp:665`, `target_z <= committed_z_`), but
+`LogBufferAdapter::char_expand_to` passes its buffer's own size
+(`xo-indentlog2/src/indentlog2/LogBuffer.cpp:113-118`).  Right only for a
+buffer at offset 0.  An inner buffer starts where the outer one -- which
+took all committed space -- ends, so its request reads as already
+satisfied, nothing is committed, and it allocates 0 bytes.  This is a
+pre-existing defect of `tostr()` itself: any `tostr` nested in another's
+rendering gets `""` today.
+
 Also found here: `.xo-backlog/xo-printjson/issues/10` -- doubles print at 6
 significant digits.
 
