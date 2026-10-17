@@ -88,6 +88,28 @@ well.  Two requirements hold either way:
   new state, which the "no new state" decision above avoided -- so
   header-less support and that decision pull against each other.
 
+**Resolved (RC, 2026-10-17): no tension -- a header-less arena has a
+trivial, zero-size header.**  An allocation has two addresses, its header
+and its payload, a fixed header size apart, so either gives the other.
+`realloc_last()` has two jobs:
+
+1. **Find the payload address**, since the requested size is measured from
+   it: `payload = last_header_ + header size`.  The same code serves both
+   kinds of arena if `last_header_` always records the last allocation's
+   header address, and a header-less arena's header is zero bytes -- there
+   `last_header_` IS the last payload address.
+2. **Update the header's size** when the header is non-trivial, so arena
+   iteration still works.  Does not apply to a header-less arena.
+
+So `last_header_` (retained unconditionally, per the alternative above) is
+all the state needed, for every arena.  The config already speaks this
+way: `ArenaConfig::alloc_header_z()` is `store_header_flag_ ?
+sizeof(AllocHeader) : 0` (`xo-arena/include/xo/arena/ArenaConfig.hpp:48`).
+Not yet so: `DArena::obj2hdr()` asserts `store_header_flag_` and steps back
+`sizeof(header_type)` (`xo-arena/src/arena/DArena.cpp:283-296`) -- a
+`realloc_last()` written on the zero-size framing would use
+`alloc_header_z()` instead.
+
 ## Design questions
 
 1. **API shape.**  *(Answered: `DArena::realloc_last()`.)*  `resize_last(mem, new_z) -> bool`, taking the address
