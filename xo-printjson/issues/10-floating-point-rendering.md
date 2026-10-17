@@ -124,6 +124,44 @@ Where it lands: `JsonPpSink::number(double)` and `number(float)`
 Changes pinned output: xo-kalmanfilter's `json_eigen.test.cpp` pins `NaN` /
 `Infinity`, and any golden or pin holding a lossy double.
 
+## Direction (RC, 2026-10-17): non-finite values, multiple pathways
+
+Revises recommendation 2 above (which stays, per rule 6).  Official json
+cannot encode NaN / Infinity ("absurd" -- RC), but there are wider uses for
+the extension, so support more than one rendering, chosen by the consumer:
+
+- **strict json: `null`** -- what `JSON.parse` accepts.
+- **the extension: bare `NaN`, `Infinity`, `-Infinity`** (today's output).
+  Accepted by:
+  - JSON5 -- its spec allows numbers to be IEEE 754 positive infinity,
+    negative infinity and NaN (https://spec.json5.org/);
+  - a JavaScript *literal* (a `<script>`, `eval`) -- `NaN` and `Infinity`
+    are globals.  RC has had a browser accept bare NaN this way;
+  - python's `json.loads` (accepts all three by default).
+
+Measured (2026-10-17, node 22.19, python 3.12):
+
+```
+JS literal  [NaN, Infinity, -Infinity]   -> accepted
+JSON.parse  [NaN, Infinity, -Infinity]   -> throws
+python json.loads('[NaN, Infinity, -Infinity]') -> [nan, inf, -inf]
+python ast.literal_eval('nan' / 'NaN' / "float('nan')") -> ValueError
+python ast.literal_eval('1e999') -> inf
+python ast.literal_eval('true' / 'null') -> ValueError
+```
+
+On "json is acceptable as a python literal": not in general, and not for
+NaN.  A python literal has no spelling for NaN at all; infinity only by
+overflow (`1e999`); and json's own `true` / `false` / `null` are not python
+literals either (`True` / `False` / `None`).  The python pathway that works is
+`json.loads`, which takes the extension.
+
+So: a setting -- on `JsonPpSink`, or `PrintJson` passing it down -- selecting
+how non-finite numbers render.  At least `null` and bare-extension; a third
+(e.g. `1e999` / `-1e999` for infinities, which is valid json AND a python
+literal, though not for NaN) only if a consumer wants it.  Default: to
+decide -- the extension keeps today's output; `null` is strict.
+
 ## Interaction with issues/01
 
 Step 1 of `issues/01` made the printer write into `JsonPrintState`'s own

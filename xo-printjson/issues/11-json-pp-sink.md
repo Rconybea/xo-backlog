@@ -156,7 +156,14 @@ Verified: flat output byte-identical (websock golden snapshots, kalmanfilter
 pins, all printjson pins), pretty tests unchanged, `ctest` 49/49 gcc and
 clang, 21/21 introspect browser tests, `xo-build --sweep` 73/47/26.
 
-Open for RC:
+Answered (RC, 2026-10-17):
+- misuse: **exception** (`std::logic_error`, as built).
+- frame stack (and `JsonPrintState`'s cycle-detection map): arena-backed,
+  in a separate ticket -- `.xo-backlog/xo-printjson/issues/12`.
+- `open_list(sep_spaces)`: **dropped** -- xo-kalmanfilter's lists now print
+  `[1, 2]` like every other list; `json_eigen.test.cpp` pins updated.
+
+Open for RC (as first written):
 - misuse throws `std::logic_error`; elsewhere printjson aborts on printer
   misuse (`JsonPrintState::abort_misuse`).  Which?
 - the frame stack is a `std::vector` -- heap, unbounded in principle (bounded
