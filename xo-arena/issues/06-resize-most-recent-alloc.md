@@ -71,6 +71,23 @@ Consequences, to resolve when building (not decided here):
   `obj<AAllocator>`) would need to reach the `DArena` directly, or stay
   out of scope for now.
 
+**Alternative (RC, 2026-10-17): retain `last_header_` unconditionally**,
+for every alloc mode, not only `super_alloc`.  Then a plain `alloc()`
+qualifies too -- LogBufferAdapter would not need to switch to
+`super_alloc()`.  And `realloc_last()` could support header-less arenas as
+well.  Two requirements hold either way:
+
+- **Consistency:** when the arena stores headers, `realloc_last()` updates
+  the header's size, as `super_alloc` / `sub_alloc` already do, so that
+  iterating the arena's allocations (header to header) still works.
+- **Origin:** `realloc_last()` must know the start of the allocation it is
+  resizing -- the origin the new size is measured from.  With headers,
+  `last_header_` gives it.  Without headers there is no header to point at,
+  so the origin has to come from somewhere else: passed by the caller (the
+  address `alloc` returned), or recorded by the arena.  Recording it is
+  new state, which the "no new state" decision above avoided -- so
+  header-less support and that decision pull against each other.
+
 ## Design questions
 
 1. **API shape.**  *(Answered: `DArena::realloc_last()`.)*  `resize_last(mem, new_z) -> bool`, taking the address
