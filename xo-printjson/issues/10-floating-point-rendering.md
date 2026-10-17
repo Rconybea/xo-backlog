@@ -71,6 +71,59 @@ standalone `std::ostringstream << double` (2026-10-16, gcc 14.3):
    separator would corrupt the document).  `std::to_chars` does not consult
    a locale, which settles this if (1) chooses it.
 
+## Evidence and recommendations (2026-10-17, prepared while RC away -- decisions are RC's)
+
+Measured: `std::to_chars(first, last, x)` (shortest round-trip) vs today's
+`%.6g` (gcc 14.3), and two real consumers (node 22.19 -- the same engine
+family as the introspect page's browser -- and python 3.12).
+
+| value | shortest | today | round-trips (shortest) |
+|---|---|---|---|
+| `1.5` | `1.5` | `1.5` | yes |
+| `1.23456789` | `1.23456789` | `1.23457` | yes |
+| `123456789.0` | `123456789` | `1.23457e+08` | yes |
+| `0.1` | `0.1` | `0.1` | yes |
+| `2.0/3.0` | `0.6666666666666666` | `0.666667` | yes |
+| `9007199254740992.0` | `9007199254740992` | `9.0072e+15` | yes |
+| `5e-324` | `5e-324` | `4.94066e-324` | yes |
+| `0.1f` (float) | `0.1` | `0.1` | yes -- but widened to double first: `0.10000000149011612` |
+
+Consumers:
+
+```
+node:   JSON.parse("NaN")      -> throws: "NaN" is not valid JSON   (same for "Infinity")
+        JSON.stringify(NaN)    -> null ;  JSON.stringify([Infinity]) -> [null]
+        JSON.parse("3.0")      -> 3      (indistinguishable from "3")
+python: json.loads("NaN")      -> nan    (accepts by default)
+        json.dumps(nan, allow_nan=False) -> ValueError: not JSON compliant
+```
+
+Recommendations, one per choice:
+
+1. **Precision: shortest round-trip, `std::to_chars(first, last, x)` with
+   no format or precision.**  Every value above round-trips; values that
+   were already short (`0.1`, `1.5`) print exactly as today, so only the
+   lossy ones change.  **`float` formatted as `float`**, not widened: the
+   `to_chars(float)` overload gives `0.1`.
+2. **Non-finite: `null`.**  It is what JavaScript's own `JSON.stringify`
+   writes for NaN and +-Infinity, and it parses everywhere.  The cost: a
+   consumer cannot tell NaN from Infinity from a real null.  Today's
+   `NaN` / `Infinity` make the introspect page's `JSON.parse` throw on any
+   frame containing one -- the whole frame is lost, not just the value.
+   If a consumer needs the distinction (python, which accepts the
+   extension), a `PrintJson` setting could select the extension -- but only
+   if someone asks.
+3. **Integral-valued doubles: `3`**, what `to_chars` and `JSON.stringify`
+   both write.  `JSON.parse` cannot tell `3` from `3.0` anyway, and the
+   declared type travels separately (a member's `_canonical_type_`).
+4. **Locale: settled by (1)** -- `to_chars` does not consult a locale.
+
+Where it lands: `JsonPpSink::number(double)` and `number(float)`
+(`.xo-backlog/xo-printjson/issues/11`) -- one place, plus
+`JsonPrinter_floatingpoint`'s non-finite branch, which today calls `raw()`.
+Changes pinned output: xo-kalmanfilter's `json_eigen.test.cpp` pins `NaN` /
+`Infinity`, and any golden or pin holding a lossy double.
+
 ## Interaction with issues/01
 
 Step 1 of `issues/01` made the printer write into `JsonPrintState`'s own
