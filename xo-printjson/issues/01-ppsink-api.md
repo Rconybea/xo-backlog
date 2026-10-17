@@ -1,6 +1,6 @@
 # 01 — PrintJson API: take a PpSink instead of a std::ostream
 
-Status: open (design decided 2026-10-16, RC -- see "Decision"; supersedes "Preferred shape: a JsonPpSink")
+Status: done (2026-10-17; umbrella `152cb5aa`..`538e9a63` -- see Resolution)
 Type: task
 Milestone: ppsink-migration
 
@@ -511,3 +511,36 @@ grep -rln 'iso8601' .xo-backlog/          # would have found this ticket
 
 Measure flat output before and after. Two separate incidents on this migration
 came from predicting rendering rather than observing it.
+
+## Resolution (2026-10-17)
+
+All three done-when items met; every scaffolding piece is gone.
+
+Umbrella commits, in order:
+
+| commit | step |
+|---|---|
+| `152cb5aa` | `JsonPrintState` takes a `PpSink *` and throws unless it escapes for json; `print_tp(tp, PpSink *)`; `p_os()` kept on `SinkStreambuf` |
+| `b40390f6` | `TempFlatSink`; `LogBufferAdapter` nested use (`DArena::allocated_before`); 19 test sites onto `TempFlatSink` |
+| `af9bf130` | printjson's own writers (`JsonPrintState`, `JsonMembers`, `JsonObject`, `type_keys` as a `Prettifier`) write through the sink |
+| `136f8b49` | the `PrintJson.cpp` printers; `JsonObject::key_open` returns the `PpSink &`; `json_quot` deleted |
+| `20fe55c3` | xo-kalmanfilter's two printers, pinned byte-identical by a new `utest/json_eigen.test.cpp` |
+| `ef886e21` | `p_os()` and `SinkStreambuf` deleted |
+| `d3b554cb` | the `std::ostream` entry points deleted; their callers (websock, reactor's `http_snapshot`, pyobject2, pyprintjson, ~60 test sites) onto sinks.  Also `LogBufferAdapter` takes what it needs rather than all of `available()` (a nested `tostr()` returned `""` once the arena's reserve was fully committed); object2's utest configures the scratch arena up front; websock utest main and the introspect example reserve 1 MB |
+| `538e9a63` | pretty output: `json_open` / `json_sep` / `json_close` (`include/xo/printjson/json_layout.hpp`) in every object and array writer; `utest/PrintJsonPretty.test.cpp` |
+
+Verified at each step: flat output byte-identical (websock golden
+snapshots, every pinned test), `ctest` 49/49 gcc and clang, the 21
+introspect browser tests, `xo-build --sweep` 73/47/26.
+
+Done-when:
+- JSON serialisation writes into a `PpSink` -- the only entry points take one
+- flat output is byte-identical -- pinned before structure was added
+- a prettified rendering is available -- a json-styled `PrettySink`; objects
+  and arrays break at the margin, one item per line, indent 2
+
+Found along the way, filed separately:
+- `.xo-backlog/xo-printjson/issues/10` -- doubles print at 6 significant
+  digits; NaN / Infinity are not json
+- `.xo-backlog/xo-arena/issues/06` -- resize the most recent allocation in
+  place (`DArena::realloc_last`)
