@@ -146,6 +146,10 @@ throws.  So every writer converts at once.
 | `JsonPrintState::print_node` | `<error-json-printer-not-found ...>`, `<error-null-tp>` | diagnostics, not json |
 | `JsonPrinter_floatingpoint` | `NaN`, `Infinity`, `-Infinity` | json extension; `issues/10` decides |
 
+*Update 2026-10-17: the last row is gone -- `JsonPpSink::number` renders
+non-finite values itself (`issues/10`).  `raw()` now has only the three
+diagnostics.*
+
 Tests: `utest/JsonPpSink.test.cpp` (9 cases, two mutation-checked).
 `JsonMembers.test.cpp`'s 15 cases now open an object around their members
 list -- the old fragment `, "_members_": [..]` cannot be written outside an

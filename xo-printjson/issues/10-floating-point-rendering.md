@@ -1,6 +1,6 @@
 # 10 — floating-point json: lossy precision, and undeliberate choices
 
-Status: diagnosed
+Status: open (precision done 2026-10-17, uncommitted; non-finite setting pending RC's default)
 Type: bug
 Raised: 2026-10-16 (RC: "choices made there weren't particularly deliberate"),
 found while landing step 1 of `.xo-backlog/xo-printjson/issues/01`
@@ -179,3 +179,20 @@ stream configuration.  Once the printer writes through `state.sink()`
   and `2.0/3.0`
 - float prints as float (`0.1f` -> `0.1`, not `0.10000000149011612`)
 - the non-finite cases pinned to whatever (2) decides
+
+## Progress (2026-10-17)
+
+**Precision -- done** (uncommitted in the umbrella at the time of writing).
+`JsonPpSink::number(double)` and `number(float)` write the shortest text
+that reads back as the same value (`std::to_chars`, no format or precision;
+locale-free) -- a float as a float.  A value in key position gets the same
+text.  Tests (`xo-printjson/utest/JsonPpSink.test.cpp`, `[float]`), each
+watched failing against the old `%.6g` first: the table above; `0.1f` ->
+`0.1`; every written double reads back equal (`std::from_chars`).
+
+No existing pin or golden changed: none held a value `%.6g` had truncated.
+
+**Non-finite -- moved, not changed.**  `JsonPrinter_floatingpoint` no longer
+special-cases them; `JsonPpSink::number` renders NaN / Infinity / -Infinity
+(today's tokens), so the coming setting has one place to act.  Still open:
+the setting itself, and its default (Direction above).
