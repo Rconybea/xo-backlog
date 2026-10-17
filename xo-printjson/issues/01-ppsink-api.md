@@ -89,7 +89,7 @@ make the migration incremental.  Each goes once nothing needs it:
 
 | piece | goes when |
 |---|---|
-| `detail::SinkStreambuf` and `JsonPrintState::p_os()` | the last printer writes through `state.sink()` |
+| ~~`detail::SinkStreambuf` and `JsonPrintState::p_os()`~~ | **gone 2026-10-17**: every printer writes through `state.sink()` (xo-kalmanfilter's last, umbrella `20fe55c3`) |
 | `PrintJson::print_tp(TaggedPtr, std::ostream *)`, and the `print` / `print_obj` ostream overloads that reach it | no caller passes an ostream |
 | ~~`json_quot` (`include/xo/printjson/json_quoted.hpp`)~~ | **gone 2026-10-16**: every site is a sink call, `quot()` through the json sink |
 | tests building `JsonPrintState` from `FlatSink(PpStyle::json(), ss.rdbuf())` over a `std::stringstream` | see below |
