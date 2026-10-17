@@ -19,6 +19,13 @@ diagnostic printing only.
 
 ## Decision (RC, 2026-10-16)
 
+**Superseded 2026-10-17 (RC): see `.xo-backlog/xo-printjson/issues/11`.**  RC
+reverses the "no `JsonPpSink` type" part below: the `PpSink` api is too
+low-level to carry json meaning (`put()` is verbatim text), so printers get a
+`JsonPpSink` with semantic entry points.  Kept as written, per CONVENTIONS
+rule 6.
+
+
 **`JsonPrintState` holds a `PpSink *`, and its constructor throws unless that
 sink's style selects json escaping.  `PrintJson::print_tp()` forwards to the
 same interface.**  No `JsonPpSink` type.
