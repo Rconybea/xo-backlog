@@ -91,7 +91,7 @@ make the migration incremental.  Each goes once nothing needs it:
 |---|---|
 | `detail::SinkStreambuf` and `JsonPrintState::p_os()` | the last printer writes through `state.sink()` |
 | `PrintJson::print_tp(TaggedPtr, std::ostream *)`, and the `print` / `print_obj` ostream overloads that reach it | no caller passes an ostream |
-| `json_quot` (`include/xo/printjson/json_quoted.hpp`) | its `os << ..` sites are sink calls (`quot()` through a json sink) |
+| ~~`json_quot` (`include/xo/printjson/json_quoted.hpp`)~~ | **gone 2026-10-16**: every site is a sink call, `quot()` through the json sink |
 | tests building `JsonPrintState` from `FlatSink(PpStyle::json(), ss.rdbuf())` over a `std::stringstream` | see below |
 
 **Tests follow the pattern production code should (RC).**  Not for the
@@ -136,6 +136,12 @@ the ostream entry points stay on `std::stringstream` until those go.
 
 Also found here: `.xo-backlog/xo-printjson/issues/10` -- doubles print at 6
 significant digits.
+
+Progress (2026-10-16): printjson's own writers (`JsonPrintState`,
+`JsonMembers`, `JsonObject`, `type_keys` -- now a `Prettifier`) and the
+`PrintJson.cpp` printers write through the sink; `JsonObject::key_open`
+returns the `PpSink &`.  `p_os()` users left: xo-kalmanfilter's two printers
+(`EigenUtil.cpp`).
 
 ### Re-measured 2026-10-16: the API surface below is stale
 
