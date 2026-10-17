@@ -124,6 +124,16 @@ satisfied, nothing is committed, and it allocates 0 bytes.  This is a
 pre-existing defect of `tostr()` itself: any `tostr` nested in another's
 rendering gets `""` today.
 
+**Built 2026-10-16** (uncommitted in the umbrella at the time of writing):
+`xo::pp::TempFlatSink` (`xo-indentlog2/include/xo/indentlog2/print/TempFlatSink.hpp`),
+and the nesting defect fixed -- `LogBufferAdapter::char_expand_to` now
+passes `expand()` the buffer's offset plus its size, the offset from
+`DArena::allocated_before(buf_ckp_)` (new; RC's shape).  Pinned by
+`xo-indentlog2/utest/TempFlatSink.test.cpp` (`...-survives-nested-tostr`,
+`...-uses-its-style`), which failed before the fix.  The 19 test sites that
+built a `JsonPrintState` now take a `TempFlatSink`; tests that print through
+the ostream entry points stay on `std::stringstream` until those go.
+
 Also found here: `.xo-backlog/xo-printjson/issues/10` -- doubles print at 6
 significant digits.
 
