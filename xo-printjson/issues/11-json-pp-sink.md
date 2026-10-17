@@ -1,6 +1,6 @@
 # 11 -- JsonPpSink: a json writer with semantic entry points
 
-Status: open
+Status: open (implemented 2026-10-17, uncommitted in the umbrella -- awaiting RC review; see Progress)
 Type: refactor
 Raised: 2026-10-17 (RC), after `.xo-backlog/xo-printjson/issues/01` landed
 
@@ -113,3 +113,54 @@ ticket: its fix is `JsonPpSink::number(double)`.
 - no printer keeps its own first-item flag
 - flat and pretty output unchanged (all existing pins and goldens green)
 - `raw()`'s remaining uses are listed here, each with why
+
+## Progress (2026-10-17, implemented while RC was away; uncommitted)
+
+All four sequencing steps done, in the umbrella working tree (base `1705ffc7`).
+Steps 2-4 landed together, not one by one: once `JsonPrintState`'s own
+writers track keys and values through `JsonPpSink`, a printer still writing
+raw text after a key leaves that key's value pending, and the next key
+throws.  So every writer converts at once.
+
+- `JsonPpSink` (`include/xo/printjson/JsonPpSink.hpp`, `src/printjson/JsonPpSink.cpp`)
+  as proposed: wrapper, automatic separators, `open/close_object`,
+  `open/close_list(sep_spaces = 1)`, `key`, `string`, `number` (integers per
+  `xo::pp::pp_number_integral`, `double`, `float`), `boolean`, `null`, `raw`.
+  Misuse throws `std::logic_error`.  Bottom frame: any number of top-level
+  values, unseparated.
+- `JsonPrintState` holds it (`json()`); `sink()`, `write()` and
+  `map_key_string` are gone -- a map key prints in key position.
+  `JsonObject::key_open` returns `JsonPpSink &`.  `type_keys` has `write(json)`
+  instead of a `Prettifier`.
+- Every printer converted: printjson's 10 writing printers, xo-kalmanfilter's
+  2 (via `open_list(0)`, keeping `[1,2]` byte-identical).  Delegating printers
+  (`TaggedPtr`, `DFloat`, `DString`) unchanged.
+- `json_layout.hpp` is private (`src/printjson/`), used only by `JsonPpSink.cpp`.
+- No first-item flag remains outside `JsonPpSink`.
+
+`raw()` uses (done-when: listed, each with why):
+
+| where | text | why |
+|---|---|---|
+| `JsonPrinter::report_internal_type_consistency_error` (`PrintJson.cpp`) | `<internal-error: type mismatch ...>` | a diagnostic, not json |
+| `JsonPrintState::print_node` | `<error-json-printer-not-found ...>`, `<error-null-tp>` | diagnostics, not json |
+| `JsonPrinter_floatingpoint` | `NaN`, `Infinity`, `-Infinity` | json extension; `issues/10` decides |
+
+Tests: `utest/JsonPpSink.test.cpp` (9 cases, two mutation-checked).
+`JsonMembers.test.cpp`'s 15 cases now open an object around their members
+list -- the old fragment `, "_members_": [..]` cannot be written outside an
+object any more -- and compare through a `members_of()` helper, so each
+entry's bytes stay pinned.
+
+Verified: flat output byte-identical (websock golden snapshots, kalmanfilter
+pins, all printjson pins), pretty tests unchanged, `ctest` 49/49 gcc and
+clang, 21/21 introspect browser tests, `xo-build --sweep` 73/47/26.
+
+Open for RC:
+- misuse throws `std::logic_error`; elsewhere printjson aborts on printer
+  misuse (`JsonPrintState::abort_misuse`).  Which?
+- the frame stack is a `std::vector` -- heap, unbounded in principle (bounded
+  in practice by `PrintJson::max_depth`).  Under the fixed-reserve principle,
+  a fixed-capacity stack sized from `max_depth` may be preferred.
+- `open_list(sep_spaces)` exists only to keep xo-kalmanfilter's `[1,2]`
+  byte-identical; dropping it would change that output to `[1, 2]`.
