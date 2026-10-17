@@ -53,13 +53,32 @@ grep -n 'missing DArena::realloc' xo-indentlog2/src/indentlog2/LogBuffer.cpp
   is how `DUniqueString` reaches an arena (`mm.super_alloc(..)`), so use
   case 2 needs the capability at the facet as well as on `DArena`.
 
+## Decisions (RC, 2026-10-17)
+
+- **`DArena::realloc_last()`** -- a `DArena` method, NOT exposed through
+  `AAllocator`.
+- **No new state for "the last allocation".**  `last_header_`, retained for
+  a `super_alloc`, already is the last allocation; `realloc_last()` works
+  from it.
+
+Consequences, to resolve when building (not decided here):
+- `last_header_` is retained only for `super_alloc` (`retain_header_v`), and
+  only when `store_header_flag_` is set.  So either `realloc_last()` applies
+  to an allocation made with `super_alloc`, or a header-less arena (and a
+  plain `alloc`) is out of scope.  LogBufferAdapter today makes its buffer
+  with plain `alloc()` -- it would switch to `super_alloc()` to qualify.
+- Not on `AAllocator`: use case 2 (`DUniqueString`, which allocates through
+  `obj<AAllocator>`) would need to reach the `DArena` directly, or stay
+  out of scope for now.
+
 ## Design questions
 
-1. **API shape.**  `resize_last(mem, new_z) -> bool`, taking the address
+1. **API shape.**  *(Answered: `DArena::realloc_last()`.)*  `resize_last(mem, new_z) -> bool`, taking the address
    `alloc` returned; or a handle `alloc` returns; or separate
    `shrink_last` / `grow_last`.  Growth beyond committed space would go
    through `expand()` and is bounded by the reserve.
-2. **How "last" is established.**  `mem` is last iff its end -- size,
+2. **How "last" is established.**  *(Answered: from `last_header_`, no new
+   state -- see Decisions.)*  `mem` is last iff its end -- size,
    padding, trailing guard -- is `free_`.  Checkable without new state; or
    track the last allocation explicitly (generalising `last_header_`).  A
    call on anything but the last allocation must refuse, not corrupt.
@@ -72,7 +91,7 @@ grep -n 'missing DArena::realloc' xo-indentlog2/src/indentlog2/LogBuffer.cpp
    the parent when it hands control away (it cannot tell)?  The parent's
    `epptr_` must follow, so it cannot be done behind its back.  May be
    simplest as an explicit step in `TempFlatSink` / `tostr()` nesting.
-5. **Facet exposure.**  Whether `AAllocator` gains the method, and what
+5. **Facet exposure.**  *(Answered: not exposed through `AAllocator`.)*  Whether `AAllocator` gains the method, and what
    allocators that cannot do it (non-bump) answer.
 
 **Done when:**
