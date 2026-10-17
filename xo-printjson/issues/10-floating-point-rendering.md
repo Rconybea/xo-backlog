@@ -1,6 +1,6 @@
 # 10 — floating-point json: lossy precision, and undeliberate choices
 
-Status: open (precision done 2026-10-17, uncommitted; non-finite setting pending RC's default)
+Status: open (precision done 2026-10-17, umbrella `cee0d39f`; non-finite setting pending RC's default)
 Type: bug
 Raised: 2026-10-16 (RC: "choices made there weren't particularly deliberate"),
 found while landing step 1 of `.xo-backlog/xo-printjson/issues/01`
@@ -182,7 +182,7 @@ stream configuration.  Once the printer writes through `state.sink()`
 
 ## Progress (2026-10-17)
 
-**Precision -- done** (uncommitted in the umbrella at the time of writing).
+**Precision -- done**, umbrella `cee0d39f`.
 `JsonPpSink::number(double)` and `number(float)` write the shortest text
 that reads back as the same value (`std::to_chars`, no format or precision;
 locale-free) -- a float as a float.  A value in key position gets the same

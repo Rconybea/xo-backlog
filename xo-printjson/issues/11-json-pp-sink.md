@@ -1,6 +1,6 @@
 # 11 -- JsonPpSink: a json writer with semantic entry points
 
-Status: open (implemented 2026-10-17, uncommitted in the umbrella -- awaiting RC review; see Progress)
+Status: done (2026-10-17; umbrella `b6383c08`, with `ad648670` and `cee0d39f` -- see Progress)
 Type: refactor
 Raised: 2026-10-17 (RC), after `.xo-backlog/xo-printjson/issues/01` landed
 
