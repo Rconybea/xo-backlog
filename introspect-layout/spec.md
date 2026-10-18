@@ -1,6 +1,7 @@
 # introspect-layout — place boxes by ownership; route member edges around them
 
-Status: approved 2026-10-17 (RC); plan: `plan.md`
+Status: done 2026-10-17 (umbrella `efceddcd`, `cda4ee0a`, `4e046512`, and the spacing
+settings once RC commits them); plan: `plan.md`.  Follow-up: `.xo-backlog/xo-websock/issues/21`
 Type: spec
 Raised: 2026-10-17 (RC): "the biggest problem with the current layout
 algorithm is that it has no hysteresis, so expanding / collapsing children
@@ -241,11 +242,24 @@ cover them where they run.
 
 ## Done when
 
-- `place_boxes` and `route_edges` exist as the two seams above; ELK sees no
-  member edge and no member port
-- member edges route through libavoid, each router freed after its redraw
-- `hysteresis.mjs` fails before the change and passes after; `routes.mjs`
-  passes
-- all existing introspect browser tests green (`run.sh`), and
-  `xo-build --sweep` unchanged (the page is not C++, but the example ships
-  with xo-websock)
+- [x] `place_boxes` and `route_edges` exist as the two seams above; ELK sees no
+  member edge and no member port.  `grep -c '#in' xo-websock/example/introspect/mount-origin/introspect.js`
+  prints 0.
+- [x] member edges route through libavoid, each router freed after its redraw.
+  `Avoid.destroy` frees the router and each temporary.  Over 2000 calls the
+  wasm heap stayed at 16777216 bytes; an unfreed control grew it to 34930688.
+- [x] `hysteresis.mjs` fails before the change (8 of 13 boxes moved, 2
+  swaps) and passes after (shift (0,0), 0 moved, 0 swaps); `routes.mjs`
+  passes (17 of 17 member edges)
+- [x] all existing introspect browser tests green: `run.sh` 25 passed, 0
+  failed (21 existing + `hysteresis`, `routes`, `route_edges`, `avoid_load`).
+  `anchor.mjs` needed a Fit before its first step: the new layout puts its
+  subscription box past the viewport's right edge.  `xo-build --sweep`
+  unchanged: `73 attempted: 73 ok`; `47 ok, 26 with no tests`, `--sweep ok`
+  (2026-10-17)
+
+Spacing (RC, 2026-10-17): `idealNudgingDistance` 10 and
+`nodeNodeBetweenLayers` 70, chosen from screenshots.  `shapeBufferDistance`
+stays at 8: 12 failed `routes` in every variant, because two boxes in one
+group sit closer than twice the clearance, so libavoid finds no path and
+falls back to a diagonal.
