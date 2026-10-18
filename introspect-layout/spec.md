@@ -1,6 +1,6 @@
 # introspect-layout — place boxes by ownership; route member edges around them
 
-Status: draft 2026-10-17 (awaiting RC review)
+Status: draft 2026-10-17 (licence and load failure settled by RC; awaiting approval)
 Type: spec
 Raised: 2026-10-17 (RC): "the biggest problem with the current layout
 algorithm is that it has no hysteresis, so expanding / collapsing children
@@ -131,7 +131,7 @@ lets a test call it.
   loaded from jsDelivr, the same CDN as ELK (`mount-origin/index.html:8`).
   Licence: **LGPL-2.1-or-later**.  The page loads it as a separate,
   unmodified module, which is how ELK (EPL-2.0) and d3 (ISC) arrive already.
-  RC to confirm that is acceptable.
+  Accepted (RC, 2026-10-17): "LGPL via CDN is fine".
 - **Loading**: `await AvoidLib.load(wasm_url)` once, then
   `AvoidLib.getInstance()`.  The page loads it before the first draw.
 - **Per redraw**: a `Router(OrthogonalRouting)`; one `ShapeRef` per box
@@ -170,8 +170,8 @@ merge.
 - **libavoid fails to load** (offline, CDN down): the page cannot lay out
   member edges.  It shows the same kind of failure a failed ELK load causes
   today, plus an error in the status line.  No straight-line fallback: a
-  silent degradation would hide that the router is missing.  (RC may prefer
-  a fallback; say so in review.)
+  silent degradation would hide that the router is missing.  Accepted (RC,
+  2026-10-17): "fail visibly is fine".
 - **A route libavoid cannot find**: it returns a straight segment between
   the ends.  `route_edges` passes it through, so the edge stays visible.  A
   diagonal in the drawing is the visible sign of a routing defect, which is
@@ -235,5 +235,3 @@ cover them where they run.
 - all existing introspect browser tests green (`run.sh`), and
   `xo-build --sweep` unchanged (the page is not C++, but the example ships
   with xo-websock)
-- the remaining open questions answered by RC: the licence, and the
-  load-failure behaviour
