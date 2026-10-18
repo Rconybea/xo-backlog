@@ -112,7 +112,12 @@ the only caller-visible seam for its stage:
   - `in_x`: the entry point's offset from the target's left (`in_port_x`).
 
   It is synchronous, and frees the router and every temporary wasm object
-  before it returns.  `load_router()` (same file) loads libavoid once, and
+  before it returns.
+
+  *Changed 2026-10-18 (RC, umbrella `853f364c`):* edges enter a box at the
+  midpoint of its top edge, not at `in_port_x` = 24 from its left.  `in_x`
+  is now a function of the target box, `in_x(b)`; the page passes
+  `in_port_x(b) = b.w / 2`.  `load_router()` (same file) loads libavoid once, and
   the page awaits it at the top of every draw.
 
 Neither function reads the DOM or global page state.  Each takes its inputs
