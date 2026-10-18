@@ -98,6 +98,23 @@ the only caller-visible seam for its stage:
   implementation: libavoid.  A hand-written router, or a different library,
   replaces this function and nothing else.
 
+*As built (2026-10-18; rule 6 keeps the signatures above):*
+- **`place_boxes(nodes, edges) -> Promise<{at, groups, size, own_routes}>`**.
+  `own_routes` maps an edge key to ELK's route for each ownership edge: the
+  rare ownership edge that is drawn (the wanted fallback) keeps ELK's route.
+  Everything it returns is in ELK's frame, before the drawing's pad.
+- **`route_edges(avoid, boxes, edges, in_x) -> Map(key -> [{x, y}])`**, in
+  `mount-origin/route_edges.js`.
+  - `avoid`: the libavoid instance, passed in rather than read from page
+    state;
+  - `boxes`: `Map(id -> {x, y, w, h})`;
+  - `edges`: `[{key, from, out_x, to}]`;
+  - `in_x`: the entry point's offset from the target's left (`in_port_x`).
+
+  It is synchronous, and frees the router and every temporary wasm object
+  before it returns.  `load_router()` (same file) loads libavoid once, and
+  the page awaits it at the top of every draw.
+
 Neither function reads the DOM or global page state.  Each takes its inputs
 as arguments and returns plain data.  That keeps each one swappable, and
 lets a test call it.
@@ -176,6 +193,14 @@ merge.
   the ends.  `route_edges` passes it through, so the edge stays visible.  A
   diagonal in the drawing is the visible sign of a routing defect, which is
   how the spike found the pin problem.
+- **`route_edges` fails** (a bug, or a wasm abort): added 2026-10-18 after
+  the final review.  Before then, the draw stopped with the boxes moved and
+  the old edges faded out, and the status line said nothing.  A wasm abort
+  then repeats on every draw.  Now the status line reads
+  `error: edge routing failed: <message>`, like the load failure.
+  `route_edges` also guards its own cleanup, so a `destroy()` that throws
+  after an abort cannot replace the original error.  Test:
+  `test/route_fail.mjs`, which swaps in a `route_edges` that throws.
 
 ## Tests
 
@@ -251,7 +276,8 @@ cover them where they run.
   swaps) and passes after (shift (0,0), 0 moved, 0 swaps); `routes.mjs`
   passes (17 of 17 member edges)
 - [x] all existing introspect browser tests green: `run.sh` 25 passed, 0
-  failed (21 existing + `hysteresis`, `routes`, `route_edges`, `avoid_load`).
+  failed (21 existing + `hysteresis`, `routes`, `route_edges`, `avoid_load`);
+  26 passed with `route_fail`, 2026-10-18.
   `anchor.mjs` needed a Fit before its first step: the new layout puts its
   subscription box past the viewport's right edge.  `xo-build --sweep`
   unchanged: `73 attempted: 73 ok`; `47 ok, 26 with no tests`, `--sweep ok`
