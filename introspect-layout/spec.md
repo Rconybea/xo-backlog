@@ -1,7 +1,6 @@
 # introspect-layout — place boxes by ownership; route member edges around them
 
-Status: done 2026-10-17 (umbrella `efceddcd`, `cda4ee0a`, `4e046512`, and the spacing
-settings once RC commits them); plan: `plan.md`.  Follow-up: `.xo-backlog/xo-websock/issues/21`
+Status: done 2026-10-17 (umbrella `efceddcd`, `cda4ee0a`, `4e046512`, `8cdf503b`); plan: `plan.md`.  Follow-up: `.xo-backlog/xo-websock/issues/21`
 Type: spec
 Raised: 2026-10-17 (RC): "the biggest problem with the current layout
 algorithm is that it has no hysteresis, so expanding / collapsing children
