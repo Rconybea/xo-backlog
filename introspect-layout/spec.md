@@ -215,6 +215,20 @@ cover them where they run.
   the session table) still changes ELK's input, and may still rearrange
   things.  Unverified.  If it does, option A goes behind `place_boxes`, a
   separate ticket.
+
+  *Measured 2026-10-17 (umbrella `4e046512`, fresh server, one session):
+  it does.*  Starting from Show all, I hid a box's owned children and showed
+  them again (`toggle_children`), then compared the boxes present in both
+  views, with `hysteresis.mjs`'s method:
+
+  | children toggled | boxes moved >20px beyond the shared shift | same-row swaps |
+  |---|---|---|
+  | `server/session_table`'s 5 (session 1 and below) | 5 of 9 | 3, all among the server's nested boxes: `url_router`, `ws_config`, `session_table` change order |
+  | `session:1`'s 4 (sender, router, sub, sink) | 3 of 10 | 0 |
+
+  The numbers are the same in both directions (hide, then show).  The
+  throwaway script was `owned.mjs`, in a job's scratch directory; it is not
+  kept.  Follow-up: `.xo-backlog/xo-websock/issues/21`.
 - **Pretty routes.**  The spike's back edges (upward ones, e.g. Subscription
   → `/introspect`) take long detours under the drawing and up the side.
   Some parallel routes run close together.  Tuning (`idealNudgingDistance`,
