@@ -1,6 +1,6 @@
 # introspect-layout — place boxes by ownership; route member edges around them
 
-Status: draft 2026-10-17 (licence and load failure settled by RC; awaiting approval)
+Status: approved 2026-10-17 (RC); plan: `plan.md`
 Type: spec
 Raised: 2026-10-17 (RC): "the biggest problem with the current layout
 algorithm is that it has no hysteresis, so expanding / collapsing children
